@@ -1,0 +1,47 @@
+{
+  "name": "qa-radar",
+  "version": "2.2.0",
+  "description": "Scanner de qualidade para detectar erros JavaScript, HTTP e de rede em aplicações web.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "qa-radar": "dist/index.js",
+    "qa-radar-web": "dist/web.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "web": "tsx src/web.ts",
+    "web:start": "node dist/web.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --import tsx --test tests/cli.test.ts tests/quality.test.ts tests/reporters.test.ts tests/server.test.ts",
+    "test:integration": "node --import tsx --test tests/scanner.integration.test.ts tests/web.integration.test.ts",
+    "check": "npm run typecheck && npm test && npm run build",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "qa",
+    "playwright",
+    "smoke-test",
+    "web-testing",
+    "quality-gate"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "playwright": "^1.61.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  }
+}

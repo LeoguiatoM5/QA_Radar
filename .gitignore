@@ -1,0 +1,7 @@
+node_modules/
+dist/
+qa-radar-report/
+qa-radar-results/
+qa-radar-report-test/
+*.log
+.DS_Store
