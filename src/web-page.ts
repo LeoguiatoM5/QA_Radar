@@ -13,7 +13,7 @@ export function createWebPage(): string {
 <body><main class="shell">
   <nav><div class="logo"><i class="radar"></i> QA RADAR</div><span class="pill">Scanner local</span></nav>
   <section class="hero">
-    <div><div class="eyebrow">Quality intelligence</div><h1>Encontre falhas antes que o <span>usuário encontre.</span></h1><p class="lead">Analise qualquer aplicação web em segundos. O QA Radar detecta erros JavaScript, respostas HTTP problemáticas e falhas de rede, gerando evidências prontas para seu time.</p><div class="features"><span>Sem criar testes</span><span>Relatório visual</span><span>Quality gate</span></div></div>
+    <div><div class="eyebrow">Quality intelligence · Beta</div><h1>Encontre falhas antes que o <span>usuário encontre.</span></h1><p class="lead">O QA Radar inspeciona os elementos da página, detecta falhas de JavaScript, HTTP e rede, explica o impacto para o usuário e gera evidências visuais prontas para investigação.</p><div class="features"><span>Inspeção do DOM</span><span>Evidências anotadas</span><span>Diagnóstico em linguagem de QA</span></div></div>
     <form class="panel" id="scan-form">
       <h2>Nova análise</h2><p class="sub">Informe o ambiente que deseja inspecionar.</p>
       <label for="url">URL da aplicação</label><div class="url-row"><span>⌁</span><input id="url" name="url" type="url" placeholder="https://staging.sua-aplicacao.com" required autofocus></div>
