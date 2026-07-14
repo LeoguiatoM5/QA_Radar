@@ -23,7 +23,7 @@ export function createWebPage(): string {
     </form>
   </section>
   <section class="results" id="results"><div class="result-head"><div><div class="eyebrow">Resultado da análise</div><h2 id="result-title">Analisando aplicação</h2></div><span class="status running" id="status"><i class="loader"></i>Executando</span></div><div class="metrics"><div class="metric"><small>Erros</small><strong id="errors">—</strong></div><div class="metric"><small>Avisos</small><strong id="warnings">—</strong></div><div class="metric"><small>HTTP principal</small><strong id="http">—</strong></div><div class="metric"><small>Duração</small><strong id="duration">—</strong></div></div><div class="issues" id="issues"><div class="issue"><div class="message">O Chromium está carregando e observando a página…</div></div></div><div class="actions" id="actions"></div><iframe id="report-frame" title="Relatório completo" hidden></iframe></section>
-  <footer>QA Radar · execução local · os dados não saem desta máquina</footer>
+  <footer>&copy; 2026 QA Radar · Todos os direitos reservados.</footer>
 </main>
 <script>
 const form=document.querySelector('#scan-form'),button=document.querySelector('#submit'),errorBox=document.querySelector('#error'),results=document.querySelector('#results');
