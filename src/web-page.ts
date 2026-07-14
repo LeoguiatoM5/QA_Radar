@@ -11,7 +11,7 @@ export function createWebPage(): string {
   </style>
 </head>
 <body><main class="shell">
-  <nav><div class="logo"><i class="radar"></i> QA RADAR</div><span class="pill">Scanner local</span></nav>
+  <nav><div class="logo"><i class="radar"></i> QA RADAR</div><span class="pill">Beta pública</span></nav>
   <section class="hero">
     <div><div class="eyebrow">Quality intelligence · Beta</div><h1>Encontre falhas antes que o <span>usuário encontre.</span></h1><p class="lead">O QA Radar inspeciona os elementos da página, detecta falhas de JavaScript, HTTP e rede, explica o impacto para o usuário e gera evidências visuais prontas para investigação.</p><div class="features"><span>Inspeção do DOM</span><span>Evidências anotadas</span><span>Diagnóstico em linguagem de QA</span></div></div>
     <form class="panel" id="scan-form">
