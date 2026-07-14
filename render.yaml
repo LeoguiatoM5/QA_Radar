@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: qa-radar
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: QA_RADAR_CONCURRENCY
+        value: 1
+      - key: QA_RADAR_MAX_QUEUE_SIZE
+        value: 5
+      - key: QA_RADAR_RATE_LIMIT_MAX
+        value: 5
+      - key: QA_RADAR_RETENTION_MS
+        value: 3600000
+      - key: QA_RADAR_TRUST_PROXY
+        value: true

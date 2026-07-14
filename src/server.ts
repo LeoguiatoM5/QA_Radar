@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseCli } from "./cli.js";
@@ -7,6 +7,7 @@ import { writeReports } from "./reporters.js";
 import { scan } from "./scanner.js";
 import type { ScanOptions, ScanReport } from "./types.js";
 import { createWebPage } from "./web-page.js";
+import { assertPublicUrl } from "./security.js";
 
 type JobStatus = "queued" | "running" | "completed" | "failed";
 
@@ -22,12 +23,31 @@ interface ScanJob {
 export interface ServerOptions {
   resultsDir: string;
   concurrency: number;
+  maxQueueSize: number;
+  allowPrivateTargets: boolean;
+  allowCustomIgnorePatterns: boolean;
+  rateLimitMax: number;
+  rateLimitWindowMs: number;
+  retentionMs: number;
+  trustProxy: boolean;
 }
 
 const DEFAULT_OPTIONS: ServerOptions = {
   resultsDir: join(process.cwd(), "qa-radar-results"),
   concurrency: 2,
+  maxQueueSize: 20,
+  allowPrivateTargets: false,
+  allowCustomIgnorePatterns: false,
+  rateLimitMax: 10,
+  rateLimitWindowMs: 60_000,
+  retentionMs: 60 * 60_000,
+  trustProxy: false,
 };
+
+interface RateEntry {
+  count: number;
+  resetAt: number;
+}
 
 function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
@@ -83,7 +103,10 @@ function scanOptions(body: Record<string, unknown>, outputDir: string): ScanOpti
   }
   const parsed = parseCli(args);
   if (!parsed.options) throw new Error("Não foi possível preparar a análise.");
-  return parsed.options;
+  const options = parsed.options;
+  if (options.timeoutMs > 120_000) throw new Error("O timeout máximo é 120000 ms.");
+  if (options.settleMs > 30_000) throw new Error("O tempo de observação máximo é 30000 ms.");
+  return options;
 }
 
 function publicJob(job: ScanJob): Record<string, unknown> {
@@ -103,8 +126,51 @@ function publicJob(job: ScanJob): Record<string, unknown> {
 export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Server {
   const config = { ...DEFAULT_OPTIONS, ...overrides };
   const jobs = new Map<string, ScanJob>();
+  const rateLimits = new Map<string, RateEntry>();
   const queue: string[] = [];
   let active = 0;
+
+  const clientAddress = (request: IncomingMessage): string => {
+    if (config.trustProxy) {
+      const forwarded = request.headers["x-forwarded-for"];
+      const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+      const first = value?.split(",")[0]?.trim();
+      if (first) return first;
+    }
+    return request.socket.remoteAddress ?? "unknown";
+  };
+
+  const consumeRateLimit = (request: IncomingMessage, response: ServerResponse): boolean => {
+    const now = Date.now();
+    if (rateLimits.size > 10_000) {
+      for (const [address, candidate] of rateLimits) {
+        if (candidate.resetAt <= now) rateLimits.delete(address);
+      }
+    }
+    const key = clientAddress(request);
+    let entry = rateLimits.get(key);
+    if (!entry || entry.resetAt <= now) {
+      entry = { count: 0, resetAt: now + config.rateLimitWindowMs };
+      rateLimits.set(key, entry);
+    }
+    entry.count += 1;
+    const remaining = Math.max(config.rateLimitMax - entry.count, 0);
+    response.setHeader("x-ratelimit-limit", config.rateLimitMax);
+    response.setHeader("x-ratelimit-remaining", remaining);
+    response.setHeader("x-ratelimit-reset", Math.ceil(entry.resetAt / 1000));
+    if (entry.count <= config.rateLimitMax) return true;
+    response.setHeader("retry-after", Math.max(Math.ceil((entry.resetAt - now) / 1000), 1));
+    json(response, 429, { error: "Muitas análises solicitadas. Aguarde antes de tentar novamente." });
+    return false;
+  };
+
+  const expireJob = (job: ScanJob): void => {
+    const timer = setTimeout(() => {
+      jobs.delete(job.id);
+      void rm(job.options.outputDir, { recursive: true, force: true });
+    }, config.retentionMs);
+    timer.unref();
+  };
 
   const schedule = (): void => {
     while (active < config.concurrency) {
@@ -124,6 +190,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           job.error = error instanceof Error ? error.message : String(error);
         } finally {
           active -= 1;
+          expireJob(job);
           schedule();
         }
       })();
@@ -133,6 +200,15 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://localhost");
+      if (request.method === "GET" && url.pathname === "/health") {
+        json(response, 200, {
+          status: "ok",
+          active,
+          queued: queue.length,
+          jobs: jobs.size,
+        });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, {
           "content-type": "text/html; charset=utf-8",
@@ -145,9 +221,21 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       }
 
       if (request.method === "POST" && url.pathname === "/api/scans") {
+        if (!consumeRateLimit(request, response)) return;
+        if (queue.length + active >= config.maxQueueSize) {
+          json(response, 429, { error: "O serviço está ocupado. Tente novamente em alguns instantes." });
+          return;
+        }
         const body = await readJson(request);
+        if (!config.allowCustomIgnorePatterns && textField(body, "ignoredUrl")) {
+          throw new Error("Filtros regex personalizados estão desabilitados neste servidor.");
+        }
         const id = randomUUID();
         const options = scanOptions(body, join(config.resultsDir, id));
+        if (!config.allowPrivateTargets) {
+          await assertPublicUrl(options.url);
+          options.publicNetworkOnly = true;
+        }
         const job: ScanJob = {
           id,
           status: "queued",

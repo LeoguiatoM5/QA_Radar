@@ -30,6 +30,13 @@ describe("web server", () => {
     assert.match(html, /Executar scanner/);
   });
 
+  it("expõe o estado de saúde sem iniciar uma análise", async () => {
+    const response = await fetch(`${baseUrl}/health`);
+    const body = (await response.json()) as { status: string; active: number; queued: number };
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, { status: "ok", active: 0, queued: 0, jobs: 0 });
+  });
+
   it("valida entradas antes de criar uma análise", async () => {
     const response = await fetch(`${baseUrl}/api/scans`, {
       method: "POST",
@@ -39,6 +46,22 @@ describe("web server", () => {
     const body = (await response.json()) as { error: string };
     assert.equal(response.status, 400);
     assert.match(body.error, /HTTP ou HTTPS/);
+  });
+
+  it("bloqueia destinos privados e limites abusivos", async () => {
+    for (const payload of [
+      { url: "http://127.0.0.1:8080" },
+      { url: "http://10.0.0.1" },
+      { url: "https://example.com", timeoutMs: 120001 },
+      { url: "https://example.com", settleMs: 30001 },
+    ]) {
+      const response = await fetch(`${baseUrl}/api/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      assert.equal(response.status, 400);
+    }
   });
 
   it("responde 404 para rotas desconhecidas", async () => {

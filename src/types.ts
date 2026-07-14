@@ -24,6 +24,7 @@ export interface ScanOptions {
   failOn: FailOn;
   ignoredStatuses: Set<number>;
   ignoredUrlPatterns: RegExp[];
+  publicNetworkOnly?: boolean;
 }
 
 export interface Issue {

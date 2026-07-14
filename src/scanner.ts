@@ -14,6 +14,7 @@ import {
 import { deduplicateIssues, passesQualityGate, summarizeIssues } from "./quality.js";
 import type { Issue, IssueEvidence, ScanOptions, ScanReport } from "./types.js";
 import { VERSION } from "./version.js";
+import { assertPublicUrl } from "./security.js";
 
 function browserType(name: ScanOptions["browser"]): BrowserType {
   return { chromium, firefox, webkit }[name];
@@ -579,6 +580,16 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       ignoreHTTPSErrors: false,
     });
     page = await context.newPage();
+    if (options.publicNetworkOnly) {
+      await page.route("**/*", async (route) => {
+        try {
+          await assertPublicUrl(route.request().url());
+          await route.continue();
+        } catch {
+          await route.abort("blockedbyclient");
+        }
+      });
+    }
     attachListeners(page, issues, options);
 
     try {

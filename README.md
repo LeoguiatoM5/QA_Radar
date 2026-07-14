@@ -238,9 +238,18 @@ As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeit
 
 ## Segurança e publicação
 
-Por padrão, o dashboard escuta somente em `127.0.0.1` e fica acessível apenas na própria máquina. Isso também permite analisar aplicações locais e ambientes internos.
+Por padrão, o dashboard escuta somente em `127.0.0.1` e aceita apenas destinos públicos. Endereços locais, redes privadas, credenciais em URLs e recursos privados carregados por redirecionamentos são bloqueados.
 
-Não exponha a versão Beta diretamente na internet. Antes de uma implantação compartilhada serão necessários autenticação, HTTPS, rate limit, persistência e uma política de destinos permitidos para reduzir riscos de SSRF.
+Para uma execução local controlada que precise analisar `localhost` ou a rede interna, habilite explicitamente:
+
+```powershell
+$env:QA_RADAR_ALLOW_PRIVATE_TARGETS="true"
+npm run web
+```
+
+Ainda são necessários autenticação, HTTPS e persistência antes de uma implantação aberta ao público. A API já aplica política de destinos públicos, rate limit, limite de fila e tetos de duração como primeiras camadas de proteção.
+
+O servidor limita por padrão cada endereço a 10 novas análises por minuto, mantém resultados por uma hora e expõe `GET /health` para monitoramento. Em uma hospedagem com proxy reverso conhecido, configure `QA_RADAR_TRUST_PROXY=true` para considerar `X-Forwarded-For`. Não habilite essa opção ao expor o processo Node diretamente.
 
 Para alterar host ou porta conscientemente:
 
@@ -255,6 +264,30 @@ $env:HOST="0.0.0.0"
 $env:PORT="8080"
 npm run web
 ```
+
+## Docker
+
+A imagem inclui o Chromium e as dependências de sistema exigidas pelo Playwright, executa com usuário sem privilégios e utiliza `/health` para verificar a disponibilidade:
+
+```bash
+docker build -t qa-radar .
+docker run --rm -p 4173:4173 qa-radar
+```
+
+Acesse `http://localhost:4173`. O armazenamento dentro do contêiner é temporário; em produção, os resultados expiram automaticamente após uma hora.
+
+Não habilite `QA_RADAR_ALLOW_PRIVATE_TARGETS` em uma implantação pública. Quando a plataforma utilizar um proxy reverso confiável, configure `QA_RADAR_TRUST_PROXY=true` para o rate limit considerar o IP original.
+
+## Deploy gratuito no Render
+
+O arquivo `render.yaml` prepara um Web Service Docker gratuito com health check, uma análise simultânea e fila máxima de cinco jobs. Depois de publicar o repositório no GitHub:
+
+1. No Render, escolha **New > Blueprint**.
+2. Conecte o repositório do QA Radar.
+3. Confirme o plano **Free** e aplique o Blueprint.
+4. Ao final, use o endereço HTTPS `qa-radar-....onrender.com` fornecido pela plataforma.
+
+O plano gratuito possui recursos limitados, armazenamento efêmero e suspensão por inatividade. Ele é adequado para demonstração e validação da Beta, não para uma operação com garantia de disponibilidade.
 
 ## Desenvolvimento
 

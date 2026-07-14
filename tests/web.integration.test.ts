@@ -32,7 +32,12 @@ describe("web scan integration", () => {
       response.end('<title>Alvo Web</title><h1>Catálogo</h1><img src="/broken" alt="Imagem do produto"><button></button><input id="email"><div id="repetido"></div><span id="repetido"></span>');
     });
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-"));
-    const app = createQaRadarServer({ resultsDir, concurrency: 1 });
+    const app = createQaRadarServer({
+      resultsDir,
+      concurrency: 1,
+      allowPrivateTargets: true,
+      allowCustomIgnorePatterns: true,
+    });
     const targetUrl = await listen(target);
     const appUrl = await listen(app);
     let browser: Browser | undefined;

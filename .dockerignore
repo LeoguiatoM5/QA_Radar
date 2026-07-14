@@ -1,0 +1,13 @@
+.git
+.gitignore
+.vscode
+node_modules
+dist
+qa-radar-report
+qa-radar-results
+qa-radar-report-test
+*.log
+Dockerfile*
+README.md
+tests
+tsconfig.test.json
