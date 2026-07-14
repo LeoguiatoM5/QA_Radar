@@ -67,6 +67,16 @@ describe("web scan integration", () => {
       const embeddedReport = page.frameLocator("#report-frame");
       assert.match(await embeddedReport.locator("body").innerText(), /Alvo Web/);
       assert.match(await embeddedReport.locator("body").innerText(), /503/);
+      const evidenceImage = embeddedReport.getByRole("img", { name: /Screenshot anotado/ });
+      await evidenceImage.waitFor();
+      assert.equal(await evidenceImage.evaluate((image) => (image as HTMLImageElement).naturalWidth > 0), true);
+      const [reportPage] = await Promise.all([page.waitForEvent("popup"), htmlLink.click()]);
+      await reportPage.waitForLoadState();
+      assert.match(await reportPage.locator("body").innerText(), /Alvo Web/);
+      const popupEvidence = reportPage.getByRole("img", { name: /Screenshot anotado/ });
+      await popupEvidence.waitFor();
+      assert.equal(await popupEvidence.evaluate((image) => (image as HTMLImageElement).naturalWidth > 0), true);
+      await reportPage.close();
 
       const jsonLink = page.getByRole("link", { name: /Baixar JSON/ });
       assert.match((await jsonLink.getAttribute("href")) ?? "", /^blob:/);

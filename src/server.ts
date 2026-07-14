@@ -246,7 +246,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
           "x-content-type-options": "nosniff",
-          "content-security-policy": `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data:; connect-src 'self'${turnstileSources}`,
+          "content-security-policy": `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
         });
         response.end(createWebPage(config.turnstileSiteKey));
         return;
