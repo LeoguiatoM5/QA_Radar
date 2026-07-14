@@ -30,6 +30,8 @@ try {
     maxQueueSize: positiveIntegerFromEnvironment("QA_RADAR_MAX_QUEUE_SIZE", 20),
     rateLimitMax: positiveIntegerFromEnvironment("QA_RADAR_RATE_LIMIT_MAX", 10),
     retentionMs: positiveIntegerFromEnvironment("QA_RADAR_RETENTION_MS", 60 * 60_000),
+    turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
+    turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
   });
   server.listen(port, host, () => {
     console.log(`\nQA Radar Web disponível em http://${host}:${port}`);

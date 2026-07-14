@@ -30,6 +30,8 @@ export interface ServerOptions {
   rateLimitWindowMs: number;
   retentionMs: number;
   trustProxy: boolean;
+  turnstileSiteKey: string | undefined;
+  turnstileSecretKey: string | undefined;
 }
 
 const DEFAULT_OPTIONS: ServerOptions = {
@@ -42,6 +44,8 @@ const DEFAULT_OPTIONS: ServerOptions = {
   rateLimitWindowMs: 60_000,
   retentionMs: 60 * 60_000,
   trustProxy: false,
+  turnstileSiteKey: undefined,
+  turnstileSecretKey: undefined,
 };
 
 interface RateEntry {
@@ -125,6 +129,9 @@ function publicJob(job: ScanJob): Record<string, unknown> {
 
 export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Server {
   const config = { ...DEFAULT_OPTIONS, ...overrides };
+  if (Boolean(config.turnstileSiteKey) !== Boolean(config.turnstileSecretKey)) {
+    throw new Error("Configure TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY em conjunto.");
+  }
   const jobs = new Map<string, ScanJob>();
   const rateLimits = new Map<string, RateEntry>();
   const queue: string[] = [];
@@ -210,13 +217,14 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         return;
       }
       if (request.method === "GET" && url.pathname === "/") {
+        const turnstileSources = config.turnstileSiteKey ? " https://challenges.cloudflare.com" : "";
         response.writeHead(200, {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
           "x-content-type-options": "nosniff",
-          "content-security-policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-src 'self'; img-src 'self' data:; connect-src 'self'",
+          "content-security-policy": `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data:; connect-src 'self'${turnstileSources}`,
         });
-        response.end(createWebPage());
+        response.end(createWebPage(config.turnstileSiteKey));
         return;
       }
 
@@ -227,6 +235,22 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           return;
         }
         const body = await readJson(request);
+        if (config.turnstileSecretKey) {
+          const token = textField(body, "cf-turnstile-response");
+          if (!token || token.length > 2048) throw new Error("Conclua a verificação de segurança.");
+          const verification = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              secret: config.turnstileSecretKey,
+              response: token,
+              remoteip: clientAddress(request),
+              idempotency_key: randomUUID(),
+            }),
+          });
+          const result = await verification.json() as { success?: boolean };
+          if (!verification.ok || !result.success) throw new Error("A verificação de segurança expirou ou é inválida. Tente novamente.");
+        }
         if (!config.allowCustomIgnorePatterns && textField(body, "ignoredUrl")) {
           throw new Error("Filtros regex personalizados estão desabilitados neste servidor.");
         }

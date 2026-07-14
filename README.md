@@ -289,6 +289,15 @@ O arquivo `render.yaml` prepara um Web Service Docker gratuito com health check,
 
 O plano gratuito possui recursos limitados, armazenamento efêmero e suspensão por inatividade. Ele é adequado para demonstração e validação da Beta, não para uma operação com garantia de disponibilidade.
 
+### Proteção contra automação
+
+O formulário suporta Cloudflare Turnstile com validação obrigatória no servidor. Crie um widget no painel da Cloudflare, autorize o domínio `qa-radar.onrender.com` e configure no Render:
+
+- `TURNSTILE_SITE_KEY`: chave pública do widget.
+- `TURNSTILE_SECRET_KEY`: chave secreta, disponível somente no backend.
+
+As duas variáveis devem ser configuradas juntas. Sem elas, o Turnstile permanece desativado para facilitar o desenvolvimento local. Nunca publique a chave secreta no repositório.
+
 ## Desenvolvimento
 
 ```bash
