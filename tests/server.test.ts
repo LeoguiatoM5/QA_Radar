@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import type { Server } from "node:http";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createQaRadarServer } from "../src/server.js";
 
 describe("web server", () => {
@@ -67,5 +70,35 @@ describe("web server", () => {
   it("responde 404 para rotas desconhecidas", async () => {
     const response = await fetch(`${baseUrl}/nao-existe`);
     assert.equal(response.status, 404);
+  });
+
+  it("recupera relatórios do disco quando o job não está mais na memória", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-recovery-"));
+    const id = "11111111-1111-4111-8111-111111111111";
+    const outputDir = join(resultsDir, id);
+    await mkdir(outputDir);
+    await writeFile(join(outputDir, "report.json"), JSON.stringify({
+      tool: "QA Radar",
+      version: "2.2.0",
+      startedAt: "2026-07-14T00:00:00.000Z",
+      targetUrl: "https://example.com/",
+      issues: [],
+    }));
+    await writeFile(join(outputDir, "report.html"), "<h1>Relatório recuperado</h1>");
+    const recoveryServer = createQaRadarServer({ resultsDir });
+    await new Promise<void>((resolve) => recoveryServer.listen(0, "127.0.0.1", resolve));
+    const address = recoveryServer.address() as AddressInfo;
+    const recoveryUrl = `http://127.0.0.1:${address.port}/api/scans/${id}`;
+    try {
+      const statusResponse = await fetch(recoveryUrl);
+      const status = (await statusResponse.json()) as { status: string };
+      assert.equal(status.status, "completed");
+      const htmlResponse = await fetch(`${recoveryUrl}/report.html`);
+      assert.equal(htmlResponse.status, 200);
+      assert.match(await htmlResponse.text(), /Relatório recuperado/);
+    } finally {
+      await new Promise<void>((resolve) => recoveryServer.close(() => resolve()));
+      await rm(resultsDir, { recursive: true, force: true });
+    }
   });
 });

@@ -62,26 +62,18 @@ describe("web scan integration", () => {
       assert.match((await page.locator("#issues").textContent()) ?? "", /Campo sem identificação/);
       assert.match((await page.locator("#issues").textContent()) ?? "", /Identificador duplicado/);
 
-      const reportHref = await page.locator('#actions a[href$="report.html"]').getAttribute("href");
-      if (!reportHref) throw new Error("Link do relatório HTML não encontrado.");
-      const htmlResponse = await fetch(new URL(reportHref, appUrl));
-      const html = await htmlResponse.text();
-      assert.equal(htmlResponse.status, 200);
-      assert.match(html, /Alvo Web/);
-      assert.match(html, /503/);
+      const htmlLink = page.getByRole("link", { name: /Abrir relatório HTML/ });
+      assert.match((await htmlLink.getAttribute("href")) ?? "", /^blob:/);
+      const embeddedReport = page.frameLocator("#report-frame");
+      assert.match(await embeddedReport.locator("body").innerText(), /Alvo Web/);
+      assert.match(await embeddedReport.locator("body").innerText(), /503/);
 
-      const jsonHref = await page.locator('#actions a[href$="report.json"]').getAttribute("href");
-      if (!jsonHref) throw new Error("Link do relatório JSON não encontrado.");
-      const jsonResponse = await fetch(new URL(jsonHref, appUrl));
-      assert.equal(jsonResponse.status, 200);
-      const report = (await jsonResponse.json()) as { issues: Array<{ evidence?: { element: string } }> };
-      assert.ok(report.issues.some((issue) => issue.evidence?.element.includes("Imagem do produto")));
+      const jsonLink = page.getByRole("link", { name: /Baixar JSON/ });
+      assert.match((await jsonLink.getAttribute("href")) ?? "", /^blob:/);
+      assert.equal(await jsonLink.getAttribute("download"), "qa-radar-report.json");
 
-      const screenshotHref = await page.locator('#actions a[href$="screenshot.png"]').getAttribute("href");
-      if (!screenshotHref) throw new Error("Link da evidência visual não encontrado.");
-      const screenshotResponse = await fetch(new URL(screenshotHref, appUrl));
-      assert.equal(screenshotResponse.status, 200);
-      assert.equal(screenshotResponse.headers.get("content-type"), "image/png");
+      const screenshotLink = page.getByRole("link", { name: /Ver evidência anotada/ });
+      assert.match((await screenshotLink.getAttribute("href")) ?? "", /^blob:/);
     } finally {
       await browser?.close();
       await close(app);

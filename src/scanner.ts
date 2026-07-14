@@ -531,19 +531,21 @@ async function annotateEvidence(page: Page, issues: Issue[]): Promise<void> {
         ? { x: rect.left + window.scrollX, y: rect.top + window.scrollY, width: rect.width, height: rect.height }
         : undefined;
       const label = `#${item.number} ${item.title.toUpperCase().slice(0, 34)}`;
+      const markerLabel = `#${item.number}`;
       located.push({ number: item.number, selector, element: `${element.tagName.toLowerCase()} · ${description}`, label, boundingBox: box });
 
       if (visible) {
         const existingBadge = marked.get(element);
         if (existingBadge) {
-          existingBadge.textContent = `${existingBadge.textContent} · ${label}`;
+          existingBadge.textContent = `${existingBadge.textContent} ${markerLabel}`;
           continue;
         }
         const marker = document.createElement("div");
         marker.style.cssText = `position:absolute;left:${box?.x ?? 0}px;top:${box?.y ?? 0}px;width:${Math.max(box?.width ?? 0, 28)}px;height:${Math.max(box?.height ?? 0, 28)}px;border:4px solid #ef4444;background:#ef444425;box-shadow:0 0 0 3px #fff,0 8px 25px #0009;border-radius:4px`;
         const badge = document.createElement("b");
-        badge.textContent = label;
-        badge.style.cssText = "position:absolute;left:-4px;bottom:calc(100% + 7px);white-space:nowrap;background:#dc2626;color:white;border:2px solid white;border-radius:6px;padding:5px 8px;font-size:11px;box-shadow:0 4px 12px #0009";
+        badge.textContent = markerLabel;
+        badge.title = item.title;
+        badge.style.cssText = "position:absolute;left:-13px;top:-13px;display:grid;place-items:center;min-width:28px;height:28px;white-space:nowrap;background:#dc2626;color:white;border:2px solid white;border-radius:999px;padding:0 5px;font-size:10px;line-height:1;font-weight:900;box-shadow:0 4px 12px #0009";
         marker.appendChild(badge);
         layer.appendChild(marker);
         marked.set(element, badge);

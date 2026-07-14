@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { readFile, rm } from "node:fs/promises";
+import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseCli } from "./cli.js";
@@ -125,6 +125,30 @@ function publicJob(job: ScanJob): Record<string, unknown> {
     error: job.error,
     screenshotAvailable: Boolean(job.report?.screenshotPath),
   };
+}
+
+async function recoveredJob(resultsDir: string, id: string): Promise<Record<string, unknown> | undefined> {
+  try {
+    const content = await readFile(join(resultsDir, id, "report.json"), "utf8");
+    const report = JSON.parse(content) as ScanReport;
+    let screenshotAvailable = false;
+    try {
+      await access(join(resultsDir, id, "screenshot.png"));
+      screenshotAvailable = true;
+    } catch {
+      screenshotAvailable = false;
+    }
+    return {
+      id,
+      status: "completed",
+      createdAt: report.startedAt,
+      report: { ...report, screenshotPath: screenshotAvailable ? "screenshot.png" : undefined },
+      error: undefined,
+      screenshotAvailable,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Server {
@@ -284,19 +308,25 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           return;
         }
         const job = jobs.get(id);
-        if (!job) {
-          json(response, 404, { error: "Análise não encontrada." });
-          return;
-        }
         if (!artifact) {
-          json(response, 200, publicJob(job));
+          if (job) {
+            json(response, 200, publicJob(job));
+            return;
+          }
+          const recovered = await recoveredJob(config.resultsDir, id);
+          if (recovered) {
+            json(response, 200, recovered);
+            return;
+          }
+          json(response, 404, { error: "Análise não encontrada ou já expirada." });
           return;
         }
-        if (job.status !== "completed") {
+        if (job && job.status !== "completed") {
           json(response, 409, { error: "A análise ainda não foi concluída." });
           return;
         }
-        const content = await readFile(join(job.options.outputDir, artifact));
+        const outputDir = job?.options.outputDir ?? join(config.resultsDir, id);
+        const content = await readFile(join(outputDir, artifact));
         const contentType = artifact.endsWith(".html")
           ? "text/html; charset=utf-8"
           : artifact.endsWith(".json")
