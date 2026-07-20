@@ -468,6 +468,14 @@ O arquivo `render.yaml` prepara um Web Service Docker gratuito com health check,
 
 O plano gratuito possui recursos limitados, armazenamento efêmero e suspensão por inatividade. Ele é adequado para demonstração e validação da Beta, não para uma operação com garantia de disponibilidade.
 
+Como as métricas de CPU e memória do painel podem exigir uma instância paga, o
+servidor também registra telemetria operacional em JSON no log padrão. Procure
+por `scan.started`, `scan.completed`, `scan.failed` e `scan.expired` nos Logs do
+serviço. Os eventos de conclusão informam duração, CPU de usuário e sistema,
+RSS, heap, memória externa, tamanho da fila e resultado do quality gate. Apenas
+a origem do alvo é registrada; caminhos e parâmetros da URL não aparecem no
+log.
+
 ### Proteção contra automação
 
 O formulário suporta Cloudflare Turnstile com validação obrigatória no servidor. Crie um widget no painel da Cloudflare, autorize o domínio `qa-radar.onrender.com` e configure no Render:
