@@ -34,7 +34,7 @@ describe("CI reporters", () => {
   const report: ScanReport = {
     tool: "QA Radar",
     schemaVersion: "1.0",
-    version: "3.0.0",
+    version: "3.0.1",
     startedAt: "2026-07-19T00:00:00.000Z",
     durationMs: 1250,
     scanStatus: "completed",

@@ -87,7 +87,7 @@ describe("web server", () => {
     await mkdir(outputDir);
     await writeFile(join(outputDir, "report.json"), JSON.stringify({
       tool: "QA Radar",
-      version: "3.0.0",
+      version: "3.0.1",
       startedAt: "2026-07-14T00:00:00.000Z",
       targetUrl: "https://example.com/",
       issues: [],
