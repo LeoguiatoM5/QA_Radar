@@ -1,0 +1,111 @@
+name: QA Radar
+description: Detecta regressões de JavaScript, HTTP, rede, elementos e acessibilidade em aplicações web.
+author: QA Radar
+
+inputs:
+  url:
+    description: URL pública que será analisada.
+    required: true
+  browser:
+    description: chromium, firefox ou webkit.
+    required: false
+    default: chromium
+  fail-on:
+    description: none, warning ou error.
+    required: false
+    default: error
+  project:
+    description: Identificador do projeto para o histórico local do job.
+    required: false
+    default: qa-radar
+  environment:
+    description: Ambiente analisado, como staging ou production.
+    required: false
+    default: staging
+  baseline:
+    description: Caminho opcional para um report.json anterior.
+    required: false
+    default: ""
+  regressions-only:
+    description: Considera somente problemas novos no quality gate.
+    required: false
+    default: "false"
+  output-dir:
+    description: Diretório onde os relatórios serão gravados.
+    required: false
+    default: qa-radar-report
+  sitemap:
+    description: Analisa as páginas publicadas em /sitemap.xml.
+    required: false
+    default: "false"
+  max-pages:
+    description: Número máximo de páginas do sitemap.
+    required: false
+    default: "20"
+
+outputs:
+  report-json:
+    description: Caminho do relatório JSON.
+    value: ${{ inputs.output-dir }}/report.json
+  report-html:
+    description: Caminho do relatório HTML.
+    value: ${{ inputs.output-dir }}/report.html
+  report-junit:
+    description: Caminho do relatório JUnit.
+    value: ${{ inputs.output-dir }}/report.junit.xml
+  report-sarif:
+    description: Caminho do relatório SARIF.
+    value: ${{ inputs.output-dir }}/report.sarif.json
+
+runs:
+  using: composite
+  steps:
+    - name: Configurar Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: "20"
+        cache: npm
+        cache-dependency-path: ${{ github.action_path }}/package-lock.json
+
+    - name: Preparar QA Radar
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        npm ci
+        npm run build
+
+    - name: Instalar navegador
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        QA_RADAR_BROWSER: ${{ inputs.browser }}
+      run: |
+        case "$QA_RADAR_BROWSER" in
+          chromium|firefox|webkit) ;;
+          *) echo "Browser inválido: $QA_RADAR_BROWSER" >&2; exit 2 ;;
+        esac
+        npx playwright install --with-deps "$QA_RADAR_BROWSER"
+
+    - name: Executar QA Radar
+      shell: bash
+      env:
+        QA_RADAR_URL: ${{ inputs.url }}
+        QA_RADAR_BROWSER: ${{ inputs.browser }}
+        QA_RADAR_FAIL_ON: ${{ inputs.fail-on }}
+        QA_RADAR_PROJECT: ${{ inputs.project }}
+        QA_RADAR_ENVIRONMENT: ${{ inputs.environment }}
+        QA_RADAR_BASELINE: ${{ inputs.baseline }}
+        QA_RADAR_REGRESSIONS_ONLY: ${{ inputs.regressions-only }}
+        QA_RADAR_OUTPUT: ${{ inputs.output-dir }}
+        QA_RADAR_SITEMAP: ${{ inputs.sitemap }}
+        QA_RADAR_MAX_PAGES: ${{ inputs.max-pages }}
+      run: |
+        args=("$QA_RADAR_URL" --browser "$QA_RADAR_BROWSER" --fail-on "$QA_RADAR_FAIL_ON" --project "$QA_RADAR_PROJECT" --environment "$QA_RADAR_ENVIRONMENT" --output "$QA_RADAR_OUTPUT" --format all --github-annotations)
+        if [[ -n "$QA_RADAR_BASELINE" ]]; then args+=(--baseline "$QA_RADAR_BASELINE"); fi
+        if [[ "$QA_RADAR_REGRESSIONS_ONLY" == "true" ]]; then args+=(--regressions-only); fi
+        if [[ "$QA_RADAR_SITEMAP" == "true" ]]; then args+=(--sitemap --max-pages "$QA_RADAR_MAX_PAGES"); fi
+        node "$GITHUB_ACTION_PATH/dist/index.js" "${args[@]}"
+
+branding:
+  icon: activity
+  color: blue

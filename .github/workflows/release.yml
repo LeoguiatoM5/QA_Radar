@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+
+      - name: Validar versão da tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          test "$RELEASE_TAG" = "v$PACKAGE_VERSION"
+
+      - name: Empacotar
+        id: pack
+        shell: bash
+        run: |
+          PACKAGE_FILE="$(npm pack --ignore-scripts --silent)"
+          echo "file=$PACKAGE_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar pacote como artefato
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-radar-npm-package
+          path: ${{ steps.pack.outputs.file }}
+          if-no-files-found: error
+
+      - name: Criar GitHub Release
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_FILE: ${{ steps.pack.outputs.file }}
+        run: gh release create "${{ github.ref_name }}" "$PACKAGE_FILE" --verify-tag --generate-notes --title "QA Radar ${{ github.ref_name }}"

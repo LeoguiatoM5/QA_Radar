@@ -1,0 +1,38 @@
+name: QA Radar
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Analisar aplicação
+        id: qa-radar
+        uses: ./
+        with:
+          url: ${{ secrets.STAGING_URL }}
+          project: loja-web
+          environment: staging
+          fail-on: error
+
+      - name: Publicar relatórios
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-radar-report
+          path: qa-radar-report/
+
+      - name: Enviar SARIF para Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.qa-radar.outputs.report-sarif }}
+          category: qa-radar-staging

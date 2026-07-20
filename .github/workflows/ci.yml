@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validar em ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+
+  integration:
+    name: Integração Playwright
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:integration
+
+  action-smoke:
+    name: Composite action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Executar action local
+        id: qa-radar
+        uses: ./
+        with:
+          url: https://example.com
+          fail-on: none
+          output-dir: qa-radar-action-smoke
+
+      - name: Validar artefatos
+        shell: bash
+        env:
+          REPORT_JSON: ${{ steps.qa-radar.outputs.report-json }}
+          REPORT_HTML: ${{ steps.qa-radar.outputs.report-html }}
+          REPORT_JUNIT: ${{ steps.qa-radar.outputs.report-junit }}
+          REPORT_SARIF: ${{ steps.qa-radar.outputs.report-sarif }}
+        run: |
+          test -s "$REPORT_JSON"
+          test -s "$REPORT_HTML"
+          test -s "$REPORT_JUNIT"
+          test -s "$REPORT_SARIF"
+          node -e "const r=require('./'+process.argv[1]);if(r.schemaVersion!=='1.0'||r.version!=='3.0.0')process.exit(1)" "$REPORT_JSON"
+
+      - name: Publicar smoke reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-radar-action-smoke
+          path: qa-radar-action-smoke/
+          if-no-files-found: error
+          retention-days: 7
