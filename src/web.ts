@@ -23,9 +23,11 @@ try {
   const host = process.env.HOST ?? "127.0.0.1";
   const allowPrivateTargets = process.env.QA_RADAR_ALLOW_PRIVATE_TARGETS === "true";
   const trustProxy = process.env.QA_RADAR_TRUST_PROXY === "true";
+  const allowHistory = process.env.QA_RADAR_ENABLE_HISTORY === "true";
   const server = createQaRadarServer({
     allowPrivateTargets,
     trustProxy,
+    allowHistory,
     concurrency: positiveIntegerFromEnvironment("QA_RADAR_CONCURRENCY", 2),
     maxQueueSize: positiveIntegerFromEnvironment("QA_RADAR_MAX_QUEUE_SIZE", 20),
     rateLimitMax: positiveIntegerFromEnvironment("QA_RADAR_RATE_LIMIT_MAX", 10),

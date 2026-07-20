@@ -17,17 +17,7 @@ export function deduplicateIssues(issues: Issue[]): Issue[] {
   const unique = new Map<string, Issue>();
 
   for (const issue of issues) {
-    const key = [
-      issue.category,
-      issue.severity,
-      issue.message,
-      issue.method,
-      issue.status,
-      issue.url,
-      issue.resourceType,
-      issue.source,
-      issue.evidence?.selector,
-    ].join("\u0000");
+    const key = issue.fingerprint;
     const existing = unique.get(key);
 
     if (existing) {

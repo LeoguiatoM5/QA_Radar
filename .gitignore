@@ -2,6 +2,7 @@ node_modules/
 dist/
 qa-radar-report/
 qa-radar-results/
+.qa-radar-history/
 qa-radar-report-test/
 *.log
 .DS_Store
