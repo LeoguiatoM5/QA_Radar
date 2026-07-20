@@ -1,6 +1,9 @@
 name: Published action smoke
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/consumer-smoke.yml
   workflow_dispatch:
 
 permissions:
