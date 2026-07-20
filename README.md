@@ -1,6 +1,6 @@
 # QA Radar
 
-> **Beta · versão 3.0.0**
+> **Beta · versão 3.0.1**
 > O projeto está em desenvolvimento ativo. Funcionalidades, formatos de relatório e regras de classificação podem evoluir entre versões.
 
 O QA Radar é uma ferramenta de diagnóstico para aplicações web. A partir de uma URL, ele combina smoke testing, observação do navegador e inspeção segura do DOM para encontrar problemas antes que eles cheguem ao usuário.
@@ -507,8 +507,8 @@ Para preparar uma versão, confirme que `package.json`, `package-lock.json`,
 as mudanças na branch `main`, crie e envie uma tag correspondente:
 
 ```bash
-git tag -a v3.0.0 -m "QA Radar 3.0.0"
-git push origin v3.0.0
+git tag -a v3.0.1 -m "QA Radar 3.0.1"
+git push origin v3.0.1
 ```
 
 O workflow de release rejeita tags que não correspondam ao `package.json`,

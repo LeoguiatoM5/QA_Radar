@@ -2,6 +2,19 @@
 
 Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
+## [3.0.1] - 2026-07-20
+
+### Corrigido
+
+- Remove o cache npm da composite action, pois o `actions/setup-node` não
+  resolve o lockfile quando uma action remota é instalada fora do workspace do
+  projeto consumidor.
+
+### Adicionado
+
+- Smoke test manual que consome `LeoguiatoM5/QA_Radar@v3`, cria um baseline e
+  valida uma segunda execução em modo `regressions-only`.
+
 ## [3.0.0] - 2026-07-20
 
 ### Adicionado

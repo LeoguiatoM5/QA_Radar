@@ -1,0 +1,59 @@
+name: Published action smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  published-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Criar baseline com a versão publicada
+        id: baseline
+        uses: LeoguiatoM5/QA_Radar@v3
+        with:
+          url: https://example.com
+          project: published-action-smoke
+          environment: github-actions
+          fail-on: none
+          output-dir: qa-radar-consumer/baseline
+
+      - name: Validar regressões com a versão publicada
+        id: regression
+        uses: LeoguiatoM5/QA_Radar@v3
+        with:
+          url: https://example.com
+          project: published-action-smoke
+          environment: github-actions
+          regressions-only: "true"
+          fail-on: error
+          output-dir: qa-radar-consumer/regression
+
+      - name: Validar contrato dos relatórios
+        shell: bash
+        env:
+          BASELINE_JSON: ${{ steps.baseline.outputs.report-json }}
+          REGRESSION_JSON: ${{ steps.regression.outputs.report-json }}
+          REGRESSION_HTML: ${{ steps.regression.outputs.report-html }}
+          REGRESSION_JUNIT: ${{ steps.regression.outputs.report-junit }}
+          REGRESSION_SARIF: ${{ steps.regression.outputs.report-sarif }}
+        run: |
+          test -s "$BASELINE_JSON"
+          test -s "$REGRESSION_JSON"
+          test -s "$REGRESSION_HTML"
+          test -s "$REGRESSION_JUNIT"
+          test -s "$REGRESSION_SARIF"
+          node -e "const r=require('./'+process.argv[1]);if(r.schemaVersion!=='1.0'||r.version!=='3.0.1'||r.gateScope!=='regressions'||r.comparison?.newIssues!==0)process.exit(1)" "$REGRESSION_JSON"
+
+      - name: Publicar relatórios do consumidor
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-radar-v3-consumer-smoke
+          path: qa-radar-consumer/
+          if-no-files-found: error
+          retention-days: 7

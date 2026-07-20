@@ -29,7 +29,7 @@ function report(startedAt: string, passed: boolean, scanStatus: ScanReport["scan
   return {
     tool: "QA Radar",
     schemaVersion: "1.0",
-    version: "3.0.0",
+    version: "3.0.1",
     startedAt,
     durationMs: 10,
     scanStatus,

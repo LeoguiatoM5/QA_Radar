@@ -60,19 +60,10 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Resolver caminhos da action
-      id: paths
-      shell: bash
-      env:
-        QA_RADAR_ACTION_PATH: ${{ github.action_path }}
-      run: echo "lockfile=$(realpath "$QA_RADAR_ACTION_PATH/package-lock.json")" >> "$GITHUB_OUTPUT"
-
     - name: Configurar Node.js
       uses: actions/setup-node@v6
       with:
         node-version: "20"
-        cache: npm
-        cache-dependency-path: ${{ steps.paths.outputs.lockfile }}
 
     - name: Preparar QA Radar
       shell: bash
