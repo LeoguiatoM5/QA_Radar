@@ -22,6 +22,27 @@ interface ScanJob {
   error: string | undefined;
 }
 
+export interface OperationalEvent {
+  event: "scan.started" | "scan.completed" | "scan.failed" | "scan.expired";
+  timestamp: string;
+  jobId: string;
+  targetOrigin: string;
+  active: number;
+  queued: number;
+  jobs: number;
+  durationMs?: number;
+  cpuUserMs?: number;
+  cpuSystemMs?: number;
+  rssMiB?: number;
+  heapUsedMiB?: number;
+  heapTotalMiB?: number;
+  externalMiB?: number;
+  passed?: boolean;
+  errors?: number;
+  warnings?: number;
+  error?: string;
+}
+
 export interface ServerOptions {
   resultsDir: string;
   concurrency: number;
@@ -37,6 +58,11 @@ export interface ServerOptions {
   allowHistory: boolean;
   historyDir: string;
   maxSitemapPages: number;
+  operationalLogger: (event: OperationalEvent) => void;
+}
+
+function defaultOperationalLogger(event: OperationalEvent): void {
+  console.log(JSON.stringify({ source: "qa-radar", ...event }));
 }
 
 const DEFAULT_OPTIONS: ServerOptions = {
@@ -54,6 +80,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   allowHistory: false,
   historyDir: join(process.cwd(), ".qa-radar-history"),
   maxSitemapPages: 20,
+  operationalLogger: defaultOperationalLogger,
 };
 
 interface RateEntry {
@@ -182,6 +209,31 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const queue: string[] = [];
   let active = 0;
 
+  const logOperational = (event: OperationalEvent): void => {
+    try {
+      config.operationalLogger(event);
+    } catch {
+      // Observability must never interrupt scanning or retention.
+    }
+  };
+
+  const targetOrigin = (job: ScanJob): string => new URL(job.options.url).origin;
+
+  const resourceUsage = (startedAt: number, cpuStart: NodeJS.CpuUsage) => {
+    const cpu = process.cpuUsage(cpuStart);
+    const memory = process.memoryUsage();
+    const toMiB = (bytes: number) => Math.round((bytes / 1024 / 1024) * 10) / 10;
+    return {
+      durationMs: Date.now() - startedAt,
+      cpuUserMs: Math.round(cpu.user / 1000),
+      cpuSystemMs: Math.round(cpu.system / 1000),
+      rssMiB: toMiB(memory.rss),
+      heapUsedMiB: toMiB(memory.heapUsed),
+      heapTotalMiB: toMiB(memory.heapTotal),
+      externalMiB: toMiB(memory.external),
+    };
+  };
+
   const clientAddress = (request: IncomingMessage): string => {
     if (config.trustProxy) {
       const forwarded = request.headers["x-forwarded-for"];
@@ -219,7 +271,17 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const expireJob = (job: ScanJob): void => {
     const timer = setTimeout(() => {
       jobs.delete(job.id);
-      void rm(job.options.outputDir, { recursive: true, force: true });
+      void rm(job.options.outputDir, { recursive: true, force: true }).finally(() => {
+        logOperational({
+          event: "scan.expired",
+          timestamp: new Date().toISOString(),
+          jobId: job.id,
+          targetOrigin: targetOrigin(job),
+          active,
+          queued: queue.length,
+          jobs: jobs.size,
+        });
+      });
     }, config.retentionMs);
     timer.unref();
   };
@@ -232,6 +294,17 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       if (!job) continue;
       active += 1;
       job.status = "running";
+      const startedAt = Date.now();
+      const cpuStart = process.cpuUsage();
+      logOperational({
+        event: "scan.started",
+        timestamp: new Date(startedAt).toISOString(),
+        jobId: job.id,
+        targetOrigin: targetOrigin(job),
+        active,
+        queued: queue.length,
+        jobs: jobs.size,
+      });
       void (async () => {
         try {
           const automaticBaseline = job.options.baselinePath ? undefined : await findHistoryBaseline(job.options);
@@ -244,6 +317,25 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           job.status = "failed";
           job.error = error instanceof Error ? error.message : String(error);
         } finally {
+          const usage = resourceUsage(startedAt, cpuStart);
+          logOperational({
+            event: job.status === "completed" ? "scan.completed" : "scan.failed",
+            timestamp: new Date().toISOString(),
+            jobId: job.id,
+            targetOrigin: targetOrigin(job),
+            active,
+            queued: queue.length,
+            jobs: jobs.size,
+            ...usage,
+            ...(job.report
+              ? {
+                  passed: job.report.passed,
+                  errors: job.report.summary.errors,
+                  warnings: job.report.summary.warnings,
+                }
+              : {}),
+            ...(job.error ? { error: job.error } : {}),
+          });
           active -= 1;
           expireJob(job);
           schedule();
