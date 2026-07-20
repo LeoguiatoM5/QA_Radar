@@ -17,7 +17,3 @@ services:
         value: 3600000
       - key: QA_RADAR_TRUST_PROXY
         value: true
-      - key: TURNSTILE_SITE_KEY
-        sync: false
-      - key: TURNSTILE_SECRET_KEY
-        sync: false
