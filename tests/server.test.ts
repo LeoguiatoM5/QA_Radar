@@ -31,6 +31,9 @@ describe("web server", () => {
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
     assert.match(html, /Nova análise/);
     assert.match(html, /Executar scanner/);
+    assert.match(html, /Cobrir sitemap\.xml/);
+    assert.match(html, /TTFB/);
+    assert.match(html, /Histórico desabilitado neste servidor/);
   });
 
   it("expõe o estado de saúde sem iniciar uma análise", async () => {
@@ -72,6 +75,11 @@ describe("web server", () => {
     assert.equal(response.status, 404);
   });
 
+  it("não expõe histórico quando o recurso está desabilitado", async () => {
+    const response = await fetch(`${baseUrl}/api/history?project=loja&environment=staging`);
+    assert.equal(response.status, 403);
+  });
+
   it("recupera relatórios do disco quando o job não está mais na memória", async () => {
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-recovery-"));
     const id = "11111111-1111-4111-8111-111111111111";
@@ -79,7 +87,7 @@ describe("web server", () => {
     await mkdir(outputDir);
     await writeFile(join(outputDir, "report.json"), JSON.stringify({
       tool: "QA Radar",
-      version: "2.2.0",
+      version: "3.0.0",
       startedAt: "2026-07-14T00:00:00.000Z",
       targetUrl: "https://example.com/",
       issues: [],

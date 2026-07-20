@@ -20,9 +20,18 @@ Opções:
   --timeout <ms>         Timeout de navegação (padrão: 30000)
   --settle <ms>          Tempo para observar erros após carregar (padrão: 2000)
   --output <diretório>   Diretório dos artefatos (padrão: qa-radar-report)
-  --format <formato>     console, json, html ou all (padrão: all)
+  --format <formato>     console, json, html, junit, sarif ou all (padrão: all)
   --screenshot <modo>    never, on-failure ou always (padrão: on-failure)
   --fail-on <nível>      none, warning ou error (padrão: error)
+  --baseline <arquivo>   Compara com um relatório JSON anterior
+  --regressions-only     Aplica o quality gate somente a problemas novos
+  --project <nome>       Mantém histórico e baseline automático do projeto
+  --environment <nome>   Isola o histórico por ambiente (padrão: default)
+  --history-dir <dir>    Diretório do histórico (padrão: .qa-radar-history)
+  --accept-baseline      Promove esta execução mesmo se o gate reprovar
+  --github-annotations   Emite erros e avisos no formato do GitHub Actions
+  --sitemap              Analisa URLs publicadas em /sitemap.xml
+  --max-pages <número>   Limite de páginas do sitemap (padrão: 20, máximo: 100)
   --ignore-status <lista> Status separados por vírgula, ex.: 401,404
   --ignore-url <regex>   Ignora URLs correspondentes; pode ser repetido
   -h, --help             Exibe esta ajuda
@@ -71,6 +80,13 @@ function normalizeUrl(raw: string): string {
   return url.toString();
 }
 
+function identifier(raw: string, option: string): string {
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(raw)) {
+    throw new Error(`${option} deve conter de 1 a 64 letras, números, ponto, hífen ou underscore.`);
+  }
+  return raw.toLowerCase();
+}
+
 export function parseCli(args: string[]): ParsedCli {
   if (args.includes("--help") || args.includes("-h")) return { action: "help", options: undefined };
   if (args.includes("--version") || args.includes("-v")) return { action: "version", options: undefined };
@@ -84,6 +100,15 @@ export function parseCli(args: string[]): ParsedCli {
   let format: ReportFormat = "all";
   let screenshot: ScreenshotMode = "on-failure";
   let failOn: FailOn = "error";
+  let baselinePath: string | undefined;
+  let regressionsOnly = false;
+  let project: string | undefined;
+  let environment: string | undefined;
+  let historyDir = resolve(".qa-radar-history");
+  let acceptBaseline = false;
+  let githubAnnotations = false;
+  let sitemap = false;
+  let maxPages = 20;
   const ignoredStatuses = new Set<number>();
   const ignoredUrlPatterns: RegExp[] = [];
   const optionsWithValue = new Set([
@@ -94,6 +119,11 @@ export function parseCli(args: string[]): ParsedCli {
     "--format",
     "--screenshot",
     "--fail-on",
+    "--baseline",
+    "--project",
+    "--environment",
+    "--history-dir",
+    "--max-pages",
     "--ignore-status",
     "--ignore-url",
   ]);
@@ -109,6 +139,22 @@ export function parseCli(args: string[]): ParsedCli {
 
     if (arg === "--headed") {
       headed = true;
+      continue;
+    }
+    if (arg === "--regressions-only") {
+      regressionsOnly = true;
+      continue;
+    }
+    if (arg === "--accept-baseline") {
+      acceptBaseline = true;
+      continue;
+    }
+    if (arg === "--github-annotations") {
+      githubAnnotations = true;
+      continue;
+    }
+    if (arg === "--sitemap") {
+      sitemap = true;
       continue;
     }
 
@@ -130,13 +176,29 @@ export function parseCli(args: string[]): ParsedCli {
         outputDir = resolve(value);
         break;
       case "--format":
-        format = oneOf(value, ["console", "json", "html", "all"] as const, arg);
+        format = oneOf(value, ["console", "json", "html", "junit", "sarif", "all"] as const, arg);
         break;
       case "--screenshot":
         screenshot = oneOf(value, ["never", "on-failure", "always"] as const, arg);
         break;
       case "--fail-on":
         failOn = oneOf(value, ["none", "warning", "error"] as const, arg);
+        break;
+      case "--baseline":
+        baselinePath = resolve(value);
+        break;
+      case "--project":
+        project = identifier(value, arg);
+        break;
+      case "--environment":
+        environment = identifier(value, arg);
+        break;
+      case "--history-dir":
+        historyDir = resolve(value);
+        break;
+      case "--max-pages":
+        maxPages = positiveInteger(value, arg);
+        if (maxPages > 100) throw new Error("--max-pages deve ser no máximo 100.");
         break;
       case "--ignore-status":
         for (const status of value.split(",")) {
@@ -154,6 +216,11 @@ export function parseCli(args: string[]): ParsedCli {
   }
 
   if (!rawUrl) throw new Error("Informe uma URL. Use --help para ver exemplos.");
+  if (regressionsOnly && !baselinePath && !project) {
+    throw new Error("--regressions-only exige --baseline ou --project.");
+  }
+  if (environment && !project) throw new Error("--environment exige a opção --project.");
+  if (acceptBaseline && !project) throw new Error("--accept-baseline exige a opção --project.");
 
   return {
     action: "scan",
@@ -169,6 +236,12 @@ export function parseCli(args: string[]): ParsedCli {
       failOn,
       ignoredStatuses,
       ignoredUrlPatterns,
+      ...(baselinePath ? { baselinePath } : {}),
+      regressionsOnly,
+      ...(project ? { project, environment: environment ?? "default", historyDir, acceptBaseline } : {}),
+      githubAnnotations,
+      sitemap,
+      maxPages,
     },
   };
 }

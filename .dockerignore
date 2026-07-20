@@ -10,4 +10,5 @@ qa-radar-report-test
 Dockerfile*
 README.md
 tests
+scripts
 tsconfig.test.json

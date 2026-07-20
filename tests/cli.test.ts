@@ -10,6 +10,7 @@ describe("parseCli", () => {
     assert.equal(result.options?.headed, false);
     assert.equal(result.options?.failOn, "error");
     assert.equal(result.options?.format, "all");
+    assert.equal(result.options?.regressionsOnly, false);
   });
 
   it("interpreta opções e filtros", () => {
@@ -42,5 +43,57 @@ describe("parseCli", () => {
 
   it("rejeita opções desconhecidas", () => {
     assert.throws(() => parseCli(["https://example.com", "--nao-existe"]), /Opção desconhecida/);
+  });
+
+  it("configura baseline e gate de regressões", () => {
+    const result = parseCli([
+      "https://example.com",
+      "--baseline",
+      "previous.json",
+      "--regressions-only",
+    ]);
+    assert.ok(result.options?.baselinePath?.endsWith("previous.json"));
+    assert.equal(result.options?.regressionsOnly, true);
+  });
+
+  it("exige baseline para o gate de regressões", () => {
+    assert.throws(
+      () => parseCli(["https://example.com", "--regressions-only"]),
+      /exige --baseline ou --project/,
+    );
+  });
+
+  it("configura histórico isolado por projeto e ambiente", () => {
+    const result = parseCli([
+      "https://example.com",
+      "--project", "Loja-Web",
+      "--environment", "Staging",
+      "--regressions-only",
+    ]);
+    assert.equal(result.options?.project, "loja-web");
+    assert.equal(result.options?.environment, "staging");
+    assert.ok(result.options?.historyDir?.endsWith(".qa-radar-history"));
+  });
+
+  it("rejeita ambiente sem projeto e identificadores inseguros", () => {
+    assert.throws(() => parseCli(["https://example.com", "--environment", "prod"]), /exige a opção --project/);
+    assert.throws(() => parseCli(["https://example.com", "--project", "../segredo"]), /deve conter/);
+  });
+
+  it("aceita formatos próprios para CI", () => {
+    assert.equal(parseCli(["https://example.com", "--format", "junit"]).options?.format, "junit");
+    assert.equal(parseCli(["https://example.com", "--format", "sarif"]).options?.format, "sarif");
+  });
+
+  it("habilita anotações do GitHub Actions explicitamente", () => {
+    const result = parseCli(["https://example.com", "--github-annotations"]);
+    assert.equal(result.options?.githubAnnotations, true);
+  });
+
+  it("configura cobertura por sitemap com limite seguro", () => {
+    const result = parseCli(["https://example.com", "--sitemap", "--max-pages", "35"]);
+    assert.equal(result.options?.sitemap, true);
+    assert.equal(result.options?.maxPages, 35);
+    assert.throws(() => parseCli(["https://example.com", "--max-pages", "101"]), /no máximo 100/);
   });
 });

@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   chromium,
@@ -12,9 +12,12 @@ import {
   type Response,
 } from "playwright";
 import { deduplicateIssues, passesQualityGate, summarizeIssues } from "./quality.js";
-import type { Issue, IssueEvidence, ScanOptions, ScanReport } from "./types.js";
+import { identifyIssue } from "./fingerprint.js";
+import type { Issue, IssueEvidence, IssueInput, PerformanceMetrics, ScanOptions, ScanReport } from "./types.js";
 import { VERSION } from "./version.js";
 import { assertPublicUrl } from "./security.js";
+import { compareWithBaseline, emptyBaseline, loadBaseline } from "./baseline.js";
+import { performanceIssues } from "./performance.js";
 
 function browserType(name: ScanOptions["browser"]): BrowserType {
   return { chromium, firefox, webkit }[name];
@@ -37,11 +40,12 @@ function cleanMessage(value: string): string {
   return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "").trim();
 }
 
-function requestIssue(request: Request): Issue {
+function requestIssue(request: Request): IssueInput {
   const resourceType = request.resourceType();
   const technicalMessage = request.failure()?.errorText ?? "Falha de rede desconhecida";
   const corruptedContent = /CORRUPTED_CONTENT|CONTENT_DECODING_FAILED/i.test(technicalMessage);
   return {
+    ruleId: "network.request.failed",
     category: "network",
     severity: "error",
     title: corruptedContent
@@ -65,7 +69,7 @@ function requestIssue(request: Request): Issue {
   };
 }
 
-function responseIssue(response: Response): Issue {
+function responseIssue(response: Response): IssueInput {
   const request = response.request();
   const status = response.status();
   const resourceType = request.resourceType();
@@ -81,6 +85,7 @@ function responseIssue(response: Response): Issue {
           ? "Serviço da aplicação respondeu com erro"
           : status === 404 ? "Recurso não encontrado" : "Servidor respondeu com erro";
   return {
+    ruleId: "http.response.error",
     category: "http",
     severity: isServerError || breaksPage ? "error" : "warning",
     title,
@@ -106,7 +111,7 @@ function responseIssue(response: Response): Issue {
   };
 }
 
-function attachListeners(page: Page, issues: Issue[], options: ScanOptions): void {
+function attachListeners(page: Page, issues: IssueInput[], options: ScanOptions): void {
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const location = message.location();
@@ -115,6 +120,9 @@ function attachListeners(page: Page, issues: Issue[], options: ScanOptions): voi
     const cookieBlocked = /Cookie .+ rejected.+cross-site context.+SameSite/is.test(technicalMessage);
     const mimeBlocked = /blocked due to MIME type|MIME type.+mismatch/is.test(technicalMessage);
     issues.push({
+      ruleId: cookieBlocked
+        ? "console.cookie.blocked"
+        : mimeBlocked ? "console.resource.mime-mismatch" : "console.error",
       category: "console",
       severity: cookieBlocked ? "warning" : "error",
       title: cookieBlocked
@@ -145,6 +153,7 @@ function attachListeners(page: Page, issues: Issue[], options: ScanOptions): voi
   page.on("pageerror", (error) => {
     const invalidSyntax = /unexpected (?:token|identifier)|syntaxerror/i.test(error.message);
     issues.push({
+      ruleId: invalidSyntax ? "javascript.syntax-error" : "javascript.uncaught-error",
       category: "javascript",
       severity: "error",
       title: invalidSyntax ? "Script retornou conteúdo que não pode ser executado" : "Falha na execução do JavaScript",
@@ -183,11 +192,91 @@ async function safeTitle(page: Page): Promise<string> {
   }
 }
 
-async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue[]> {
+async function installPerformanceObservers(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    type VitalsState = {
+      lcp: number | undefined;
+      cls: number;
+      clsWindow: number;
+      clsWindowStart: number;
+      clsWindowLast: number;
+    };
+    const state: VitalsState = { lcp: undefined, cls: 0, clsWindow: 0, clsWindowStart: 0, clsWindowLast: 0 };
+    (globalThis as typeof globalThis & { __qaRadarVitals?: VitalsState }).__qaRadarVitals = state;
+    try {
+      new PerformanceObserver((list) => {
+        const last = list.getEntries().at(-1);
+        if (last) state.lcp = last.startTime;
+      }).observe({ type: "largest-contentful-paint", buffered: true });
+    } catch {
+      // Métrica indisponível neste navegador.
+    }
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const shift = entry as PerformanceEntry & { value: number; hadRecentInput: boolean };
+          if (shift.hadRecentInput) continue;
+          const continuesWindow = state.clsWindowLast > 0 &&
+            shift.startTime - state.clsWindowLast < 1_000 &&
+            shift.startTime - state.clsWindowStart < 5_000;
+          if (continuesWindow) state.clsWindow += shift.value;
+          else {
+            state.clsWindow = shift.value;
+            state.clsWindowStart = shift.startTime;
+          }
+          state.clsWindowLast = shift.startTime;
+          state.cls = Math.max(state.cls, state.clsWindow);
+        }
+      }).observe({ type: "layout-shift", buffered: true });
+    } catch {
+      // Métrica indisponível neste navegador.
+    }
+  });
+}
+
+function rounded(value: number | undefined, digits = 0): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return undefined;
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+async function collectPerformanceMetrics(page: Page): Promise<PerformanceMetrics | undefined> {
+  try {
+    const raw = await page.evaluate(() => {
+      type VitalsState = { lcp?: number; cls?: number };
+      const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+      if (!navigation) return undefined;
+      const fcp = performance.getEntriesByName("first-contentful-paint")[0];
+      const vitals = (globalThis as typeof globalThis & { __qaRadarVitals?: VitalsState }).__qaRadarVitals;
+      return {
+        ttfbMs: navigation.responseStart - navigation.startTime,
+        fcpMs: fcp?.startTime,
+        lcpMs: vitals?.lcp,
+        cls: vitals?.cls,
+        domContentLoadedMs: navigation.domContentLoadedEventEnd - navigation.startTime,
+        loadMs: navigation.loadEventEnd > 0 ? navigation.loadEventEnd - navigation.startTime : undefined,
+      };
+    });
+    if (!raw) return undefined;
+    return {
+      ttfbMs: rounded(raw.ttfbMs),
+      fcpMs: rounded(raw.fcpMs),
+      lcpMs: rounded(raw.lcpMs),
+      cls: rounded(raw.cls, 3),
+      domContentLoadedMs: rounded(raw.domContentLoadedMs),
+      loadMs: rounded(raw.loadMs),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function inspectPageElements(page: Page, targetUrl: string): Promise<IssueInput[]> {
   // O transpiler nomeia funções internas; disponibilizamos o helper no contexto isolado da página.
   await page.evaluate("globalThis.__name ??= (target) => target");
   const findings = await page.evaluate(() => {
     type Finding = {
+      ruleId: string;
       category: "element" | "accessibility";
       severity: "warning" | "error";
       title: string;
@@ -275,6 +364,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
     for (const image of document.querySelectorAll<HTMLImageElement>("img")) {
       if (image.complete && image.naturalWidth === 0) {
         add({
+          ruleId: "element.image.broken",
           category: "element",
           severity: "error",
           title: "Imagem quebrada na página",
@@ -287,6 +377,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
       }
       if (!image.hasAttribute("alt") && visible(image)) {
         add({
+          ruleId: "accessibility.image.alt-missing",
           category: "accessibility",
           severity: "warning",
           title: "Imagem sem descrição alternativa",
@@ -303,6 +394,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
       if (visible(element) && !accessibleName(element)) {
         const isButton = element.tagName === "BUTTON";
         add({
+          ruleId: isButton ? "accessibility.button.name-missing" : "accessibility.link.name-missing",
           category: "accessibility",
           severity: "warning",
           title: isButton ? "Botão sem identificação" : "Link sem identificação",
@@ -318,6 +410,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
     for (const control of document.querySelectorAll<HTMLElement>("input:not([type=hidden]),select,textarea")) {
       if (visible(control) && !accessibleName(control)) {
         add({
+          ruleId: "accessibility.form-control.name-missing",
           category: "accessibility",
           severity: "warning",
           title: "Campo sem identificação",
@@ -333,6 +426,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
     for (const frame of document.querySelectorAll<HTMLIFrameElement>("iframe")) {
       if (visible(frame) && !frame.title.trim()) {
         add({
+          ruleId: "accessibility.iframe.title-missing",
           category: "accessibility",
           severity: "warning",
           title: "Conteúdo incorporado sem título",
@@ -357,6 +451,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
       const first = elements[0];
       if (!first) continue;
       add({
+        ruleId: "element.id.duplicate",
         category: "element",
         severity: "warning",
         title: "Identificador duplicado no HTML",
@@ -371,6 +466,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
   });
 
   return findings.map((finding) => ({
+    ruleId: finding.ruleId,
     category: finding.category,
     severity: finding.severity,
     title: finding.title,
@@ -392,7 +488,43 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
   }));
 }
 
-function correlateIssues(issues: Issue[]): Issue[] {
+function domInspectionIssue(page: Page, targetUrl: string, error: unknown): IssueInput {
+  return {
+    ruleId: "navigation.dom-inspection-failed",
+    category: "navigation",
+    severity: "error",
+    title: "A página não ficou estável para inspeção",
+    impact: "O scanner observou a navegação, mas não conseguiu validar os elementos da página com segurança.",
+    recommendation: "Verifique redirecionamentos contínuos, recarregamentos automáticos e falhas durante a inicialização.",
+    message: cleanMessage(error instanceof Error ? error.message : String(error)),
+    method: "GET",
+    status: undefined,
+    url: page.url() || targetUrl,
+    resourceType: "document",
+    source: undefined,
+    occurrences: 1,
+  };
+}
+
+async function inspectStablePage(page: Page, targetUrl: string): Promise<{ issues: IssueInput[]; partial: boolean }> {
+  try {
+    return { issues: await inspectPageElements(page, targetUrl), partial: false };
+  } catch (firstError) {
+    const contextChanged = /execution context was destroyed|cannot find context|most likely because of a navigation/i
+      .test(firstError instanceof Error ? firstError.message : String(firstError));
+    if (contextChanged && !page.isClosed()) {
+      try {
+        await page.waitForLoadState("domcontentloaded", { timeout: 2_000 });
+        return { issues: await inspectPageElements(page, targetUrl), partial: false };
+      } catch (retryError) {
+        return { issues: [domInspectionIssue(page, targetUrl, retryError)], partial: true };
+      }
+    }
+    return { issues: [domInspectionIssue(page, targetUrl, firstError)], partial: true };
+  }
+}
+
+function correlateIssues(issues: IssueInput[]): IssueInput[] {
   const correlated = issues.filter((issue) => {
     if (!issue.url) return true;
     const transportIssue = issues.some(
@@ -407,8 +539,8 @@ function correlateIssues(issues: Issue[]): Issue[] {
     return true;
   });
 
-  const grouped: Issue[] = [];
-  const cookieGroups = new Map<string, Issue>();
+  const grouped: IssueInput[] = [];
+  const cookieGroups = new Map<string, IssueInput>();
   for (const issue of correlated) {
     if (issue.title === "Cookie de terceiro bloqueado pelo navegador") {
       const cookieName = /Cookie [“"]([^”"]+)[”"]/i.exec(issue.message)?.[1] ?? "terceiro";
@@ -569,11 +701,13 @@ async function annotateEvidence(page: Page, issues: Issue[]): Promise<void> {
 
 export async function scan(options: ScanOptions): Promise<ScanReport> {
   const startedAt = new Date();
-  const issues: Issue[] = [];
+  const issues: IssueInput[] = [];
   let browser: Browser | undefined;
   let page: Page | undefined;
   let mainStatus: number | undefined;
   let screenshotPath: string | undefined;
+  let performance: PerformanceMetrics | undefined;
+  let scanStatus: ScanReport["scanStatus"] = "completed";
 
   try {
     browser = await browserType(options.browser).launch({ headless: !options.headed });
@@ -582,6 +716,7 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       ignoreHTTPSErrors: false,
     });
     page = await context.newPage();
+    await installPerformanceObservers(page);
     if (options.publicNetworkOnly) {
       await page.route("**/*", async (route) => {
         try {
@@ -602,7 +737,9 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       mainStatus = response?.status();
       if (options.settleMs > 0) await page.waitForTimeout(options.settleMs);
     } catch (error) {
+      scanStatus = "partial";
       issues.push({
+        ruleId: "navigation.failed",
         category: "navigation",
         severity: "error",
         title: "A página não pôde ser aberta",
@@ -618,13 +755,23 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       });
     }
 
-    issues.push(...await inspectPageElements(page, options.url));
+    const inspection = await inspectStablePage(page, options.url);
+    issues.push(...inspection.issues);
+    if (inspection.partial) scanStatus = "partial";
+    if (scanStatus === "completed") {
+      performance = await collectPerformanceMetrics(page);
+      if (performance) issues.push(...performanceIssues(performance, page.url() || options.url));
+    }
 
-    const uniqueIssues = deduplicateIssues(correlateIssues(issues));
+    const uniqueIssues = deduplicateIssues(correlateIssues(issues).map(identifyIssue));
     const summary = summarizeIssues(uniqueIssues);
-    const passed = passesQualityGate(summary, options.failOn);
-    const shouldCapture =
-      options.screenshot === "always" || (options.screenshot === "on-failure" && !passed);
+    const comparison = options.baselinePath
+      ? compareWithBaseline(uniqueIssues, await loadBaseline(options.baselinePath))
+      : options.regressionsOnly ? compareWithBaseline(uniqueIssues, emptyBaseline()) : undefined;
+    const gateSummary = options.regressionsOnly && comparison ? comparison.newSummary : summary;
+    const passed = passesQualityGate(gateSummary, options.failOn);
+    const shouldCapture = scanStatus === "completed" &&
+      (options.screenshot === "always" || (options.screenshot === "on-failure" && !passed));
 
     if (shouldCapture) {
       await mkdir(options.outputDir, { recursive: true });
@@ -635,21 +782,30 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       } catch {
         screenshotPath = undefined;
       }
+    } else {
+      await rm(join(options.outputDir, "screenshot.png"), { force: true });
     }
 
     return {
       tool: "QA Radar",
+      schemaVersion: "1.0",
       version: VERSION,
       startedAt: startedAt.toISOString(),
       durationMs: Date.now() - startedAt.getTime(),
+      scanStatus,
       targetUrl: options.url,
       finalUrl: page.url() || options.url,
       title: await safeTitle(page),
       mainStatus,
       browser: options.browser,
+      ...(options.project ? { project: options.project } : {}),
+      ...(options.environment ? { environment: options.environment } : {}),
       passed,
       failOn: options.failOn,
+      gateScope: options.regressionsOnly ? "regressions" : "all",
       summary,
+      ...(performance ? { performance } : {}),
+      ...(comparison ? { comparison } : {}),
       issues: uniqueIssues,
       screenshotPath,
     };

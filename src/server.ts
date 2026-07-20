@@ -8,6 +8,8 @@ import { scan } from "./scanner.js";
 import type { ScanOptions, ScanReport } from "./types.js";
 import { createWebPage } from "./web-page.js";
 import { assertPublicUrl } from "./security.js";
+import { findHistoryBaseline, listProjectHistory, storeRun } from "./history.js";
+import { scanSitemap } from "./suite.js";
 
 type JobStatus = "queued" | "running" | "completed" | "failed";
 
@@ -32,6 +34,9 @@ export interface ServerOptions {
   trustProxy: boolean;
   turnstileSiteKey: string | undefined;
   turnstileSecretKey: string | undefined;
+  allowHistory: boolean;
+  historyDir: string;
+  maxSitemapPages: number;
 }
 
 const DEFAULT_OPTIONS: ServerOptions = {
@@ -46,6 +51,9 @@ const DEFAULT_OPTIONS: ServerOptions = {
   trustProxy: false,
   turnstileSiteKey: undefined,
   turnstileSecretKey: undefined,
+  allowHistory: false,
+  historyDir: join(process.cwd(), ".qa-radar-history"),
+  maxSitemapPages: 20,
 };
 
 interface RateEntry {
@@ -89,7 +97,7 @@ function numberField(body: Record<string, unknown>, name: string): string | unde
   return typeof value === "number" && Number.isFinite(value) ? String(value) : undefined;
 }
 
-function scanOptions(body: Record<string, unknown>, outputDir: string): ScanOptions {
+function scanOptions(body: Record<string, unknown>, outputDir: string, config: ServerOptions): ScanOptions {
   const url = textField(body, "url");
   if (!url) throw new Error("Informe a URL da aplicação.");
   const args = [url, "--output", outputDir, "--format", "all"];
@@ -101,15 +109,28 @@ function scanOptions(body: Record<string, unknown>, outputDir: string): ScanOpti
     ["--screenshot", textField(body, "screenshot")],
     ["--ignore-status", textField(body, "ignoredStatuses")],
     ["--ignore-url", textField(body, "ignoredUrl")],
+    ["--project", textField(body, "project")],
+    ["--environment", textField(body, "environment")],
+    ["--max-pages", numberField(body, "maxPages")],
   ];
   for (const [name, value] of fields) {
     if (value) args.push(name, value);
   }
+  if (body.sitemap === true) args.push("--sitemap");
+  if (body.regressionsOnly === true) args.push("--regressions-only");
+  if (body.acceptBaseline === true) args.push("--accept-baseline");
+  if (textField(body, "project")) args.push("--history-dir", config.historyDir);
   const parsed = parseCli(args);
   if (!parsed.options) throw new Error("Não foi possível preparar a análise.");
   const options = parsed.options;
   if (options.timeoutMs > 120_000) throw new Error("O timeout máximo é 120000 ms.");
   if (options.settleMs > 30_000) throw new Error("O tempo de observação máximo é 30000 ms.");
+  if ((options.maxPages ?? 20) > config.maxSitemapPages) {
+    throw new Error(`O limite de páginas neste servidor é ${config.maxSitemapPages}.`);
+  }
+  if (options.project && !config.allowHistory) {
+    throw new Error("Histórico por projeto está desabilitado neste servidor.");
+  }
   return options;
 }
 
@@ -213,8 +234,11 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       job.status = "running";
       void (async () => {
         try {
-          job.report = await scan(job.options);
+          const automaticBaseline = job.options.baselinePath ? undefined : await findHistoryBaseline(job.options);
+          const effectiveOptions = automaticBaseline ? { ...job.options, baselinePath: automaticBaseline } : job.options;
+          job.report = effectiveOptions.sitemap ? await scanSitemap(effectiveOptions) : await scan(effectiveOptions);
           await writeReports(job.report, job.options);
+          await storeRun(job.report, effectiveOptions);
           job.status = "completed";
         } catch (error) {
           job.status = "failed";
@@ -240,6 +264,20 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         });
         return;
       }
+      if (request.method === "GET" && url.pathname === "/api/history") {
+        if (!config.allowHistory) {
+          json(response, 403, { error: "Histórico está desabilitado neste servidor." });
+          return;
+        }
+        const project = url.searchParams.get("project")?.trim();
+        const environment = url.searchParams.get("environment")?.trim();
+        if (!project || !environment) {
+          json(response, 400, { error: "Informe projeto e ambiente para consultar o histórico." });
+          return;
+        }
+        json(response, 200, await listProjectHistory(config.historyDir, project, environment));
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/") {
         const turnstileSources = config.turnstileSiteKey ? " https://challenges.cloudflare.com" : "";
         response.writeHead(200, {
@@ -248,7 +286,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           "x-content-type-options": "nosniff",
           "content-security-policy": `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
         });
-        response.end(createWebPage(config.turnstileSiteKey));
+        response.end(createWebPage(config.turnstileSiteKey, config.allowHistory, config.maxSitemapPages));
         return;
       }
 
@@ -279,7 +317,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           throw new Error("Filtros regex personalizados estão desabilitados neste servidor.");
         }
         const id = randomUUID();
-        const options = scanOptions(body, join(config.resultsDir, id));
+        const options = scanOptions(body, join(config.resultsDir, id), config);
         if (!config.allowPrivateTargets) {
           await assertPublicUrl(options.url);
           options.publicNetworkOnly = true;
@@ -299,7 +337,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         return;
       }
 
-      const match = /^\/api\/scans\/([0-9a-f-]+)(?:\/(report\.html|report\.json|screenshot\.png))?$/.exec(url.pathname);
+      const match = /^\/api\/scans\/([0-9a-f-]+)(?:\/((?:pages\/[a-z0-9-]+\/)?(?:report\.html|report\.json|report\.junit\.xml|report\.sarif\.json|screenshot\.png)))?$/.exec(url.pathname);
       if (request.method === "GET" && match) {
         const id = match[1];
         const artifact = match[2];
@@ -329,6 +367,8 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         const content = await readFile(join(outputDir, artifact));
         const contentType = artifact.endsWith(".html")
           ? "text/html; charset=utf-8"
+          : artifact.endsWith(".xml")
+            ? "application/xml; charset=utf-8"
           : artifact.endsWith(".json")
             ? "application/json; charset=utf-8"
             : "image/png";

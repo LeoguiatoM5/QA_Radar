@@ -1,6 +1,6 @@
 {
   "name": "qa-radar",
-  "version": "2.2.0",
+  "version": "3.0.0",
   "description": "Scanner de qualidade para detectar erros JavaScript, HTTP e de rede em aplicações web.",
   "type": "module",
   "main": "dist/index.js",
@@ -11,7 +11,10 @@
   },
   "files": [
     "dist",
+    "scripts",
     "README.md",
+    "CHANGELOG.md",
+    "BENCHMARKS.md",
     "LICENSE"
   ],
   "scripts": {
@@ -20,8 +23,9 @@
     "web:start": "node dist/web.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
-    "test": "node --import tsx --test tests/cli.test.ts tests/quality.test.ts tests/reporters.test.ts tests/server.test.ts",
-    "test:integration": "node --import tsx --test tests/scanner.integration.test.ts tests/web.integration.test.ts",
+    "test": "node --import tsx --test tests/cli.test.ts tests/history.test.ts tests/quality.test.ts tests/reporters.test.ts tests/server.test.ts tests/sitemap.test.ts",
+    "test:integration": "node --import tsx --test tests/scanner.integration.test.ts tests/suite.integration.test.ts tests/web.integration.test.ts",
+    "benchmark:sitemap": "node --import tsx scripts/benchmark-sitemap.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "start": "node dist/index.js"
   },
