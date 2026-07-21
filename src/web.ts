@@ -32,6 +32,7 @@ try {
     maxQueueSize: positiveIntegerFromEnvironment("QA_RADAR_MAX_QUEUE_SIZE", 20),
     rateLimitMax: positiveIntegerFromEnvironment("QA_RADAR_RATE_LIMIT_MAX", 10),
     retentionMs: positiveIntegerFromEnvironment("QA_RADAR_RETENTION_MS", 60 * 60_000),
+    maxSitemapPages: positiveIntegerFromEnvironment("QA_RADAR_MAX_SITEMAP_PAGES", 20),
     turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
     turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
   });

@@ -459,7 +459,10 @@ Não habilite `QA_RADAR_ALLOW_PRIVATE_TARGETS` em uma implantação pública. Qu
 
 ## Deploy gratuito no Render
 
-O arquivo `render.yaml` prepara um Web Service Docker gratuito com health check, uma análise simultânea e fila máxima de cinco jobs. Depois de publicar o repositório no GitHub:
+O arquivo `render.yaml` prepara um Web Service Docker gratuito com health check,
+uma análise simultânea, fila máxima de cinco jobs e cobertura limitada a cinco
+páginas por sitemap para reduzir picos de memória. Depois de publicar o
+repositório no GitHub:
 
 1. No Render, escolha **New > Blueprint**.
 2. Conecte o repositório do QA Radar.
@@ -471,7 +474,8 @@ O plano gratuito possui recursos limitados, armazenamento efêmero e suspensão 
 Como as métricas de CPU e memória do painel podem exigir uma instância paga, o
 servidor também registra telemetria operacional em JSON no log padrão. Procure
 por `scan.started`, `scan.completed`, `scan.failed` e `scan.expired` nos Logs do
-serviço. Os eventos de conclusão informam duração, CPU de usuário e sistema,
+serviço. O evento inicial registra navegador, cobertura, screenshot e limites
+da análise. Os eventos de conclusão informam duração, CPU de usuário e sistema,
 RSS, heap, memória externa, tamanho da fila e resultado do quality gate. Apenas
 a origem do alvo é registrada; caminhos e parâmetros da URL não aparecem no
 log.

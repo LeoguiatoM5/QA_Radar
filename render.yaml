@@ -15,5 +15,7 @@ services:
         value: 5
       - key: QA_RADAR_RETENTION_MS
         value: 3600000
+      - key: QA_RADAR_MAX_SITEMAP_PAGES
+        value: 5
       - key: QA_RADAR_TRUST_PROXY
         value: true
