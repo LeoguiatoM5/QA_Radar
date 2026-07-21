@@ -6,6 +6,15 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createQaRadarServer } from "../src/server.js";
+import type { OperationalEvent } from "../src/server.js";
+
+async function waitFor(predicate: () => boolean, timeoutMs = 1_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("A condição esperada não ocorreu no prazo.");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 describe("web server", () => {
   let server: Server;
@@ -107,6 +116,39 @@ describe("web server", () => {
     } finally {
       await new Promise<void>((resolve) => recoveryServer.close(() => resolve()));
       await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("expira jobs e registra a remoção depois da retenção", async () => {
+    const events: OperationalEvent[] = [];
+    const expirationServer = createQaRadarServer({
+      allowPrivateTargets: true,
+      retentionMs: 25,
+      operationalLogger: (event) => events.push(event),
+    });
+    await new Promise<void>((resolve) => expirationServer.listen(0, "127.0.0.1", resolve));
+    const address = expirationServer.address() as AddressInfo;
+    const expirationUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const createResponse = await fetch(`${expirationUrl}/api/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: expirationUrl, sitemap: true, maxPages: 1 }),
+      });
+      const created = (await createResponse.json()) as { id: string };
+      assert.equal(createResponse.status, 202);
+
+      await waitFor(() => events.some((event) => event.event === "scan.expired"));
+      const statusResponse = await fetch(`${expirationUrl}/api/scans/${created.id}`);
+      assert.equal(statusResponse.status, 404);
+      assert.deepEqual(events.map((event) => event.event), [
+        "scan.started",
+        "scan.failed",
+        "scan.expired",
+      ]);
+      assert.equal(events.at(-1)?.jobs, 0);
+    } finally {
+      await new Promise<void>((resolve) => expirationServer.close(() => resolve()));
     }
   });
 });
