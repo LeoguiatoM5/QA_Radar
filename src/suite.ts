@@ -5,7 +5,7 @@ import { deduplicateIssues, passesQualityGate, summarizeIssues } from "./quality
 import { writeReports } from "./reporters.js";
 import { scan } from "./scanner.js";
 import { discoverSitemapUrls } from "./sitemap.js";
-import type { ScanOptions, ScanPageResult, ScanReport } from "./types.js";
+import type { ScanControl, ScanOptions, ScanPageResult, ScanReport } from "./types.js";
 
 function pageDirectory(index: number, rawUrl: string): string {
   const url = new URL(rawUrl);
@@ -30,13 +30,30 @@ function pageResult(report: ScanReport, outputDir: string): ScanPageResult {
   };
 }
 
-export async function scanSitemap(options: ScanOptions): Promise<ScanReport> {
+export async function scanSitemap(
+  options: ScanOptions,
+  control: ScanControl = {},
+): Promise<ScanReport> {
   const startedAt = new Date();
+  control.signal?.throwIfAborted();
   const urls = await discoverSitemapUrls(options);
   const reports: ScanReport[] = [];
   const pages: ScanPageResult[] = [];
+  control.onProgress?.({
+    discoveredPages: urls.length,
+    completedPages: 0,
+    currentUrl: urls[0],
+    percent: 0,
+  });
 
   for (const [index, url] of urls.entries()) {
+    control.signal?.throwIfAborted();
+    control.onProgress?.({
+      discoveredPages: urls.length,
+      completedPages: index,
+      currentUrl: url,
+      percent: Math.floor((index / urls.length) * 100),
+    });
     const directoryName = pageDirectory(index, url);
     const outputDir = join(options.outputDir, "pages", directoryName);
     const childOptions: ScanOptions = {
@@ -48,10 +65,16 @@ export async function scanSitemap(options: ScanOptions): Promise<ScanReport> {
     };
     delete childOptions.baselinePath;
     delete childOptions.acceptBaseline;
-    const report = await scan(childOptions);
+    const report = await scan(childOptions, control);
     await writeReports(report, childOptions);
     reports.push(report);
     pages.push(pageResult(report, join("pages", directoryName)));
+    control.onProgress?.({
+      discoveredPages: urls.length,
+      completedPages: index + 1,
+      currentUrl: urls[index + 1],
+      percent: Math.floor(((index + 1) / urls.length) * 100),
+    });
   }
 
   const issues = deduplicateIssues(reports.flatMap((report) => report.issues.map((issue) => ({ ...issue }))));

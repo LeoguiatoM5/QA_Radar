@@ -10,7 +10,13 @@ import {
 } from "playwright";
 import { deduplicateIssues, passesQualityGate, summarizeIssues } from "./quality.js";
 import { identifyIssue } from "./fingerprint.js";
-import type { IssueInput, PerformanceMetrics, ScanOptions, ScanReport } from "./types.js";
+import type {
+  IssueInput,
+  PerformanceMetrics,
+  ScanControl,
+  ScanOptions,
+  ScanReport,
+} from "./types.js";
 import { VERSION } from "./version.js";
 import { assertPublicUrl } from "./security.js";
 import { compareWithBaseline, emptyBaseline, loadBaseline } from "./baseline.js";
@@ -32,7 +38,7 @@ async function safeTitle(page: Page): Promise<string> {
   }
 }
 
-export async function scan(options: ScanOptions): Promise<ScanReport> {
+export async function scan(options: ScanOptions, control: ScanControl = {}): Promise<ScanReport> {
   const startedAt = new Date();
   const issues: IssueInput[] = [];
   let browser: Browser | undefined;
@@ -41,9 +47,15 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
   let screenshotPath: string | undefined;
   let performance: PerformanceMetrics | undefined;
   let scanStatus: ScanReport["scanStatus"] = "completed";
+  const abort = (): void => {
+    void browser?.close();
+  };
 
   try {
+    control.signal?.throwIfAborted();
+    control.signal?.addEventListener("abort", abort, { once: true });
     browser = await browserType(options.browser).launch({ headless: !options.headed });
+    control.signal?.throwIfAborted();
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       ignoreHTTPSErrors: false,
@@ -70,6 +82,7 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       mainStatus = response?.status();
       if (options.settleMs > 0) await page.waitForTimeout(options.settleMs);
     } catch (error) {
+      control.signal?.throwIfAborted();
       scanStatus = "partial";
       issues.push({
         ruleId: "navigation.failed",
@@ -88,6 +101,7 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       });
     }
 
+    control.signal?.throwIfAborted();
     const inspection = await inspectStablePage(page, options.url);
     issues.push(...inspection.issues);
     if (inspection.partial) scanStatus = "partial";
@@ -107,6 +121,7 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       (options.screenshot === "always" || (options.screenshot === "on-failure" && !passed));
 
     if (shouldCapture) {
+      control.signal?.throwIfAborted();
       await mkdir(options.outputDir, { recursive: true });
       screenshotPath = join(options.outputDir, "screenshot.png");
       try {
@@ -143,6 +158,7 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
       screenshotPath,
     };
   } finally {
+    control.signal?.removeEventListener("abort", abort);
     await browser?.close();
   }
 }

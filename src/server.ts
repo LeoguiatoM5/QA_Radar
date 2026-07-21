@@ -5,13 +5,13 @@ import { randomUUID } from "node:crypto";
 import { parseCli } from "./cli.js";
 import { writeReports } from "./reporters.js";
 import { scan } from "./scanner.js";
-import type { ScanOptions, ScanReport } from "./types.js";
+import type { ScanOptions, ScanProgress, ScanReport } from "./types.js";
 import { createWebPage } from "./web-page.js";
 import { assertPublicUrl } from "./security.js";
 import { findHistoryBaseline, listProjectHistory, storeRun } from "./history.js";
 import { scanSitemap } from "./suite.js";
 
-type JobStatus = "queued" | "running" | "completed" | "failed";
+type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 interface ScanJob {
   id: string;
@@ -20,10 +20,13 @@ interface ScanJob {
   options: ScanOptions;
   report: ScanReport | undefined;
   error: string | undefined;
+  progress: ScanProgress;
+  controller: AbortController;
+  cancelRequested: boolean;
 }
 
 export interface OperationalEvent {
-  event: "scan.started" | "scan.completed" | "scan.failed" | "scan.expired";
+  event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
   timestamp: string;
   jobId: string;
   targetOrigin: string;
@@ -178,6 +181,7 @@ function publicJob(job: ScanJob): Record<string, unknown> {
     createdAt: job.createdAt,
     report,
     error: job.error,
+    progress: job.progress,
     screenshotAvailable: Boolean(job.report?.screenshotPath),
   };
 }
@@ -325,17 +329,43 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         try {
           const automaticBaseline = job.options.baselinePath ? undefined : await findHistoryBaseline(job.options);
           const effectiveOptions = automaticBaseline ? { ...job.options, baselinePath: automaticBaseline } : job.options;
-          job.report = effectiveOptions.sitemap ? await scanSitemap(effectiveOptions) : await scan(effectiveOptions);
+          const control = {
+            signal: job.controller.signal,
+            onProgress: (progress: ScanProgress): void => {
+              job.progress = progress;
+            },
+          };
+          if (!effectiveOptions.sitemap) {
+            job.progress = { discoveredPages: 1, completedPages: 0, currentUrl: effectiveOptions.url, percent: 0 };
+          }
+          job.report = effectiveOptions.sitemap
+            ? await scanSitemap(effectiveOptions, control)
+            : await scan(effectiveOptions, control);
+          job.controller.signal.throwIfAborted();
           await writeReports(job.report, job.options);
           await storeRun(job.report, effectiveOptions);
+          job.progress = {
+            discoveredPages: job.progress.discoveredPages || 1,
+            completedPages: job.progress.discoveredPages || 1,
+            currentUrl: undefined,
+            percent: 100,
+          };
           job.status = "completed";
         } catch (error) {
-          job.status = "failed";
-          job.error = error instanceof Error ? error.message : String(error);
+          if (job.cancelRequested || job.controller.signal.aborted) {
+            job.status = "cancelled";
+            job.error = undefined;
+            job.progress = { ...job.progress, currentUrl: undefined };
+          } else {
+            job.status = "failed";
+            job.error = error instanceof Error ? error.message : String(error);
+          }
         } finally {
           const usage = resourceUsage(startedAt, cpuStart);
           logOperational({
-            event: job.status === "completed" ? "scan.completed" : "scan.failed",
+            event: job.status === "completed"
+              ? "scan.completed"
+              : job.status === "cancelled" ? "scan.cancelled" : "scan.failed",
             timestamp: new Date().toISOString(),
             jobId: job.id,
             targetOrigin: targetOrigin(job),
@@ -437,10 +467,46 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           options,
           report: undefined,
           error: undefined,
+          progress: { discoveredPages: 0, completedPages: 0, currentUrl: undefined, percent: 0 },
+          controller: new AbortController(),
+          cancelRequested: false,
         };
         jobs.set(id, job);
         queue.push(id);
         schedule();
+        json(response, 202, publicJob(job));
+        return;
+      }
+
+      const cancelMatch = /^\/api\/scans\/([0-9a-f-]+)\/cancel$/.exec(url.pathname);
+      if (request.method === "POST" && cancelMatch) {
+        const id = cancelMatch[1];
+        const job = id ? jobs.get(id) : undefined;
+        if (!job) {
+          json(response, 404, { error: "Análise não encontrada ou já expirada." });
+          return;
+        }
+        if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
+          json(response, 409, { error: "A análise já foi finalizada." });
+          return;
+        }
+        job.cancelRequested = true;
+        job.controller.abort(new Error("Análise cancelada pelo usuário."));
+        if (job.status === "queued") {
+          const index = queue.indexOf(job.id);
+          if (index >= 0) queue.splice(index, 1);
+          job.status = "cancelled";
+          expireJob(job);
+          logOperational({
+            event: "scan.cancelled",
+            timestamp: new Date().toISOString(),
+            jobId: job.id,
+            targetOrigin: targetOrigin(job),
+            active,
+            queued: queue.length,
+            jobs: jobs.size,
+          });
+        }
         json(response, 202, publicJob(job));
         return;
       }

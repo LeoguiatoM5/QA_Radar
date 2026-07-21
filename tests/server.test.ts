@@ -42,6 +42,8 @@ describe("web server", () => {
     assert.match(html, /Executar scanner/);
     assert.match(html, /Cobrir sitemap\.xml/);
     assert.match(html, /TTFB/);
+    assert.match(html, /Cancelar/);
+    assert.match(html, /progress-bar/);
     assert.match(html, /Histórico desabilitado neste servidor/);
   });
 
@@ -82,6 +84,42 @@ describe("web server", () => {
   it("responde 404 para rotas desconhecidas", async () => {
     const response = await fetch(`${baseUrl}/nao-existe`);
     assert.equal(response.status, 404);
+  });
+
+  it("expõe progresso aditivo e cancela uma análise na fila", async () => {
+    const queuedServer = createQaRadarServer({ concurrency: 0, allowPrivateTargets: true });
+    await new Promise<void>((resolve) => queuedServer.listen(0, "127.0.0.1", resolve));
+    const address = queuedServer.address() as AddressInfo;
+    const queuedUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const createResponse = await fetch(`${queuedUrl}/api/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: queuedUrl }),
+      });
+      const created = (await createResponse.json()) as {
+        id: string;
+        status: string;
+        progress: { discoveredPages: number; completedPages: number; percent: number };
+      };
+      assert.equal(created.status, "queued");
+      assert.deepEqual(created.progress, {
+        discoveredPages: 0,
+        completedPages: 0,
+        percent: 0,
+      });
+
+      const cancelResponse = await fetch(`${queuedUrl}/api/scans/${created.id}/cancel`, { method: "POST" });
+      const cancelled = (await cancelResponse.json()) as { status: string };
+      assert.equal(cancelResponse.status, 202);
+      assert.equal(cancelled.status, "cancelled");
+
+      const statusResponse = await fetch(`${queuedUrl}/api/scans/${created.id}`);
+      const status = (await statusResponse.json()) as { status: string };
+      assert.equal(status.status, "cancelled");
+    } finally {
+      await new Promise<void>((resolve) => queuedServer.close(() => resolve()));
+    }
   });
 
   it("não expõe histórico quando o recurso está desabilitado", async () => {
