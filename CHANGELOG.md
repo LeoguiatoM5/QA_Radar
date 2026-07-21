@@ -10,6 +10,10 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   antigos.
 - Teste do ciclo de retenção, incluindo remoção do job e evento
   `scan.expired`.
+- Progresso de páginas na API e no dashboard, com total descoberto, página
+  atual, quantidade concluída e percentual monotônico.
+- Cancelamento de análises em fila ou em execução, com encerramento do
+  navegador, liberação da concorrência e telemetria `scan.cancelled`.
 
 ### Alterado
 

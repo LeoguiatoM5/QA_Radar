@@ -21,6 +21,60 @@ async function close(server: Server): Promise<void> {
 }
 
 describe("web scan integration", () => {
+  it("cancela uma análise em execução e libera a concorrência", async () => {
+    const target = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><title>Alvo lento</title><main>Conteúdo</main>");
+    });
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-cancel-"));
+    const app = createQaRadarServer({ resultsDir, concurrency: 1, allowPrivateTargets: true });
+    const targetUrl = await listen(target);
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(appUrl);
+      await page.locator("#url").fill(targetUrl);
+      await page.locator("summary").click();
+      await page.locator("#settleMs").fill("30000");
+      await page.locator("#submit").click();
+      await page.locator("#cancel").waitFor();
+
+      const queuedResponse = await page.request.post(`${appUrl}/api/scans`, {
+        data: { url: targetUrl, settleMs: 0, screenshot: "never" },
+      });
+      const queued = await queuedResponse.json() as { id: string; status: string };
+      assert.equal(queued.status, "queued");
+      await page.locator("#cancel").click();
+      await page.getByText("CANCELADA", { exact: true }).waitFor({ timeout: 15_000 });
+
+      await assert.doesNotReject(async () => {
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          const response = await page.request.get(`${appUrl}/api/scans/${queued.id}`);
+          const job = await response.json() as { status: string; error?: string };
+          if (job.status === "completed") return;
+          if (job.status === "failed") throw new Error(job.error);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        throw new Error("A próxima análise não iniciou após o cancelamento.");
+      });
+
+      const health = await (await page.request.get(`${appUrl}/health`)).json() as {
+        active: number;
+        queued: number;
+      };
+      assert.equal(health.active, 0);
+      assert.equal(health.queued, 0);
+    } finally {
+      await browser?.close();
+      await close(app);
+      await close(target);
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
   it("executa o scanner pelo dashboard e disponibiliza os artefatos", async () => {
     const target = createServer((request, response) => {
       if (request.url === "/broken") {

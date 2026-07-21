@@ -7,6 +7,45 @@ import { scanSitemap } from "../src/suite.js";
 import type { ScanOptions } from "../src/types.js";
 
 describe("sitemap suite integration", () => {
+  it("interrompe a descoberta do sitemap ao receber cancelamento", async () => {
+    const server = createServer((_request, response) => {
+      setTimeout(() => {
+        response.writeHead(200, { "content-type": "application/xml" });
+        response.end("<urlset></urlset>");
+      }, 5_000);
+    });
+    await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const origin = `http://127.0.0.1:${address.port}`;
+    const outputDir = resolve("qa-radar-results", `.suite-cancel-${process.pid}-${Date.now()}`);
+    const controller = new AbortController();
+    const options: ScanOptions = {
+      url: origin,
+      browser: "chromium",
+      headed: false,
+      timeoutMs: 10_000,
+      settleMs: 0,
+      outputDir,
+      format: "json",
+      screenshot: "never",
+      failOn: "error",
+      ignoredStatuses: new Set(),
+      ignoredUrlPatterns: [],
+      sitemap: true,
+      maxPages: 1,
+    };
+
+    try {
+      const pending = scanSitemap(options, { signal: controller.signal });
+      controller.abort(new Error("cancelamento de teste"));
+      await assert.rejects(pending, /cancelamento de teste/);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+    }
+  });
+
   it("analisa páginas do mesmo domínio e consolida o quality gate", async () => {
     let origin = "";
     const server = createServer((request, response) => {

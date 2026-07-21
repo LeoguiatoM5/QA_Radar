@@ -37,6 +37,18 @@ export interface ScanOptions {
   publicNetworkOnly?: boolean;
 }
 
+export interface ScanProgress {
+  discoveredPages: number;
+  completedPages: number;
+  currentUrl: string | undefined;
+  percent: number;
+}
+
+export interface ScanControl {
+  signal?: AbortSignal;
+  onProgress?: (progress: ScanProgress) => void;
+}
+
 export interface Issue {
   ruleId: string;
   fingerprint: string;
