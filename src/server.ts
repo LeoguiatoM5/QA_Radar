@@ -10,20 +10,7 @@ import { createWebPage } from "./web-page.js";
 import { assertPublicUrl } from "./security.js";
 import { findHistoryBaseline, listProjectHistory, storeRun } from "./history.js";
 import { scanSitemap } from "./suite.js";
-
-type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-
-interface ScanJob {
-  id: string;
-  status: JobStatus;
-  createdAt: string;
-  options: ScanOptions;
-  report: ScanReport | undefined;
-  error: string | undefined;
-  progress: ScanProgress;
-  controller: AbortController;
-  cancelRequested: boolean;
-}
+import { JobQueue, type ScanJob } from "./job-queue.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -171,7 +158,7 @@ function scanOptions(body: Record<string, unknown>, outputDir: string, config: S
   return options;
 }
 
-function publicJob(job: ScanJob): Record<string, unknown> {
+function publicJob(job: ScanJob, queuePosition?: number): Record<string, unknown> {
   const report = job.report
     ? { ...job.report, screenshotPath: job.report.screenshotPath ? "screenshot.png" : undefined }
     : undefined;
@@ -182,6 +169,7 @@ function publicJob(job: ScanJob): Record<string, unknown> {
     report,
     error: job.error,
     progress: job.progress,
+    ...(queuePosition !== undefined ? { queuePosition } : {}),
     screenshotAvailable: Boolean(job.report?.screenshotPath),
   };
 }
@@ -215,10 +203,8 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   if (Boolean(config.turnstileSiteKey) !== Boolean(config.turnstileSecretKey)) {
     throw new Error("Configure TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY em conjunto.");
   }
-  const jobs = new Map<string, ScanJob>();
+  const jobQueue = new JobQueue();
   const rateLimits = new Map<string, RateEntry>();
-  const queue: string[] = [];
-  let active = 0;
 
   const logOperational = (event: OperationalEvent): void => {
     try {
@@ -229,6 +215,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   };
 
   const targetOrigin = (job: ScanJob): string => new URL(job.options.url).origin;
+  const queueStats = () => jobQueue.stats();
 
   const resourceUsage = (startedAt: number, cpuStart: NodeJS.CpuUsage) => {
     const cpu = process.cpuUsage(cpuStart);
@@ -281,16 +268,14 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
 
   const expireJob = (job: ScanJob): void => {
     const timer = setTimeout(() => {
-      jobs.delete(job.id);
+      jobQueue.delete(job.id);
       void rm(job.options.outputDir, { recursive: true, force: true }).finally(() => {
         logOperational({
           event: "scan.expired",
           timestamp: new Date().toISOString(),
           jobId: job.id,
           targetOrigin: targetOrigin(job),
-          active,
-          queued: queue.length,
-          jobs: jobs.size,
+          ...queueStats(),
         });
       });
     }, config.retentionMs);
@@ -298,13 +283,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   };
 
   const schedule = (): void => {
-    while (active < config.concurrency) {
-      const id = queue.shift();
-      if (!id) return;
-      const job = jobs.get(id);
-      if (!job) continue;
-      active += 1;
-      job.status = "running";
+    for (;;) {
+      const job = jobQueue.takeNext(config.concurrency);
+      if (!job) return;
       const startedAt = Date.now();
       const cpuStart = process.cpuUsage();
       logOperational({
@@ -312,9 +293,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         timestamp: new Date(startedAt).toISOString(),
         jobId: job.id,
         targetOrigin: targetOrigin(job),
-        active,
-        queued: queue.length,
-        jobs: jobs.size,
+        ...queueStats(),
         browser: job.options.browser,
         sitemap: Boolean(job.options.sitemap),
         ...(job.options.sitemap && job.options.maxPages !== undefined
@@ -332,7 +311,13 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           const control = {
             signal: job.controller.signal,
             onProgress: (progress: ScanProgress): void => {
-              job.progress = progress;
+              job.progress = {
+                ...progress,
+                ...(job.progress.stage ? { stage: job.progress.stage } : {}),
+              };
+            },
+            onStage: (stage: NonNullable<ScanProgress["stage"]>): void => {
+              job.progress = { ...job.progress, stage };
             },
           };
           if (!effectiveOptions.sitemap) {
@@ -342,6 +327,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
             ? await scanSitemap(effectiveOptions, control)
             : await scan(effectiveOptions, control);
           job.controller.signal.throwIfAborted();
+          job.progress = { ...job.progress, stage: "writing-reports" };
           await writeReports(job.report, job.options);
           await storeRun(job.report, effectiveOptions);
           job.progress = {
@@ -349,13 +335,14 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
             completedPages: job.progress.discoveredPages || 1,
             currentUrl: undefined,
             percent: 100,
+            stage: "completed",
           };
           job.status = "completed";
         } catch (error) {
           if (job.cancelRequested || job.controller.signal.aborted) {
             job.status = "cancelled";
             job.error = undefined;
-            job.progress = { ...job.progress, currentUrl: undefined };
+            job.progress = { ...job.progress, currentUrl: undefined, stage: "cancelled" };
           } else {
             job.status = "failed";
             job.error = error instanceof Error ? error.message : String(error);
@@ -369,9 +356,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
             timestamp: new Date().toISOString(),
             jobId: job.id,
             targetOrigin: targetOrigin(job),
-            active,
-            queued: queue.length,
-            jobs: jobs.size,
+            ...queueStats(),
             ...usage,
             ...(job.report
               ? {
@@ -382,7 +367,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
               : {}),
             ...(job.error ? { error: job.error } : {}),
           });
-          active -= 1;
+          jobQueue.finish();
           expireJob(job);
           schedule();
         }
@@ -396,9 +381,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       if (request.method === "GET" && url.pathname === "/health") {
         json(response, 200, {
           status: "ok",
-          active,
-          queued: queue.length,
-          jobs: jobs.size,
+          ...queueStats(),
         });
         return;
       }
@@ -430,7 +413,8 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
 
       if (request.method === "POST" && url.pathname === "/api/scans") {
         if (!consumeRateLimit(request, response)) return;
-        if (queue.length + active >= config.maxQueueSize) {
+        const stats = queueStats();
+        if (stats.queued + stats.active >= config.maxQueueSize) {
           json(response, 429, { error: "O serviço está ocupado. Tente novamente em alguns instantes." });
           return;
         }
@@ -467,21 +451,26 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           options,
           report: undefined,
           error: undefined,
-          progress: { discoveredPages: 0, completedPages: 0, currentUrl: undefined, percent: 0 },
+          progress: {
+            discoveredPages: 0,
+            completedPages: 0,
+            currentUrl: undefined,
+            percent: 0,
+            stage: "queued",
+          },
           controller: new AbortController(),
           cancelRequested: false,
         };
-        jobs.set(id, job);
-        queue.push(id);
+        jobQueue.enqueue(job);
         schedule();
-        json(response, 202, publicJob(job));
+        json(response, 202, publicJob(job, jobQueue.position(job.id)));
         return;
       }
 
       const cancelMatch = /^\/api\/scans\/([0-9a-f-]+)\/cancel$/.exec(url.pathname);
       if (request.method === "POST" && cancelMatch) {
         const id = cancelMatch[1];
-        const job = id ? jobs.get(id) : undefined;
+        const job = id ? jobQueue.get(id) : undefined;
         if (!job) {
           json(response, 404, { error: "Análise não encontrada ou já expirada." });
           return;
@@ -492,22 +481,18 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         }
         job.cancelRequested = true;
         job.controller.abort(new Error("Análise cancelada pelo usuário."));
-        if (job.status === "queued") {
-          const index = queue.indexOf(job.id);
-          if (index >= 0) queue.splice(index, 1);
-          job.status = "cancelled";
+        if (jobQueue.cancelQueued(job.id)) {
+          job.progress = { ...job.progress, stage: "cancelled" };
           expireJob(job);
           logOperational({
             event: "scan.cancelled",
             timestamp: new Date().toISOString(),
             jobId: job.id,
             targetOrigin: targetOrigin(job),
-            active,
-            queued: queue.length,
-            jobs: jobs.size,
+            ...queueStats(),
           });
         }
-        json(response, 202, publicJob(job));
+        json(response, 202, publicJob(job, jobQueue.position(job.id)));
         return;
       }
 
@@ -519,10 +504,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           json(response, 404, { error: "Análise não encontrada." });
           return;
         }
-        const job = jobs.get(id);
+        const job = jobQueue.get(id);
         if (!artifact) {
           if (job) {
-            json(response, 200, publicJob(job));
+            json(response, 200, publicJob(job, jobQueue.position(job.id)));
             return;
           }
           const recovered = await recoveredJob(config.resultsDir, id);

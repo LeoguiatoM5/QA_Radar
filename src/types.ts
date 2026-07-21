@@ -42,11 +42,25 @@ export interface ScanProgress {
   completedPages: number;
   currentUrl: string | undefined;
   percent: number;
+  stage?: ScanStage;
 }
+
+export type ScanStage =
+  | "queued"
+  | "discovering-sitemap"
+  | "launching-browser"
+  | "navigating"
+  | "inspecting"
+  | "capturing-evidence"
+  | "consolidating"
+  | "writing-reports"
+  | "completed"
+  | "cancelled";
 
 export interface ScanControl {
   signal?: AbortSignal;
   onProgress?: (progress: ScanProgress) => void;
+  onStage?: (stage: ScanStage) => void;
 }
 
 export interface Issue {

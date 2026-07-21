@@ -12,6 +12,9 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   `scan.expired`.
 - Progresso de páginas na API e no dashboard, com total descoberto, página
   atual, quantidade concluída e percentual monotônico.
+- Posição atual na fila para jobs aguardando, exibida também no dashboard.
+- Etapa atual da execução na API e no dashboard, da descoberta do sitemap à
+  geração dos relatórios.
 - Cancelamento de análises em fila ou em execução, com encerramento do
   navegador, liberação da concorrência e telemetria `scan.cancelled`.
 
@@ -22,6 +25,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   sem mudança no comportamento do scanner.
 - Estrutura HTML, estilos e comportamento do dashboard extraídos de
   `web-page.ts` para módulos dedicados, com testes próprios dos componentes.
+- Estado, ordenação e transições da fila extraídos de `server.ts` para um
+  módulo dedicado e testável.
 
 ## [3.0.1] - 2026-07-20
 
