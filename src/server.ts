@@ -30,6 +30,13 @@ export interface OperationalEvent {
   active: number;
   queued: number;
   jobs: number;
+  browser?: ScanOptions["browser"];
+  sitemap?: boolean;
+  maxPages?: number;
+  screenshot?: ScanOptions["screenshot"];
+  failOn?: ScanOptions["failOn"];
+  timeoutMs?: number;
+  settleMs?: number;
   durationMs?: number;
   cpuUserMs?: number;
   cpuSystemMs?: number;
@@ -304,6 +311,15 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         active,
         queued: queue.length,
         jobs: jobs.size,
+        browser: job.options.browser,
+        sitemap: Boolean(job.options.sitemap),
+        ...(job.options.sitemap && job.options.maxPages !== undefined
+          ? { maxPages: job.options.maxPages }
+          : {}),
+        screenshot: job.options.screenshot,
+        failOn: job.options.failOn,
+        timeoutMs: job.options.timeoutMs,
+        settleMs: job.options.settleMs,
       });
       void (async () => {
         try {
