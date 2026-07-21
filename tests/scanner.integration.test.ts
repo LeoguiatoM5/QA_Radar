@@ -4,7 +4,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import { scan } from "../src/scanner.js";
-import type { ScanOptions } from "../src/types.js";
+import type { ScanOptions, ScanStage } from "../src/types.js";
 
 describe("scanner integration", () => {
   it("detecta erros reais do navegador e do backend", async () => {
@@ -38,9 +38,10 @@ describe("scanner integration", () => {
       regressionsOnly: false,
     };
     const baselinePath = resolve("qa-radar-results", `scanner-baseline-${process.pid}.json`);
+    const stages: ScanStage[] = [];
 
     try {
-      const report = await scan(options);
+      const report = await scan(options, { onStage: (stage) => stages.push(stage) });
       assert.equal(report.title, "Aplicação de teste");
       assert.equal(report.mainStatus, 200);
       assert.equal(report.passed, false);
@@ -49,6 +50,7 @@ describe("scanner integration", () => {
       assert.ok(report.performance);
       assert.equal(typeof report.performance.ttfbMs, "number");
       assert.equal(typeof report.performance.domContentLoadedMs, "number");
+      assert.deepEqual(stages, ["launching-browser", "navigating", "inspecting"]);
       await writeFile(baselinePath, JSON.stringify(report), "utf8");
 
       const compared = await scan({ ...options, baselinePath, regressionsOnly: true });

@@ -45,8 +45,9 @@ describe("web scan integration", () => {
       const queuedResponse = await page.request.post(`${appUrl}/api/scans`, {
         data: { url: targetUrl, settleMs: 0, screenshot: "never" },
       });
-      const queued = await queuedResponse.json() as { id: string; status: string };
+      const queued = await queuedResponse.json() as { id: string; status: string; queuePosition: number };
       assert.equal(queued.status, "queued");
+      assert.equal(queued.queuePosition, 1);
       await page.locator("#cancel").click();
       await page.getByText("CANCELADA", { exact: true }).waitFor({ timeout: 15_000 });
 

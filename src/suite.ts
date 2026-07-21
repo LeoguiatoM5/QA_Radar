@@ -36,6 +36,7 @@ export async function scanSitemap(
 ): Promise<ScanReport> {
   const startedAt = new Date();
   control.signal?.throwIfAborted();
+  control.onStage?.("discovering-sitemap");
   const urls = await discoverSitemapUrls(options, control);
   const reports: ScanReport[] = [];
   const pages: ScanPageResult[] = [];
@@ -77,6 +78,7 @@ export async function scanSitemap(
     });
   }
 
+  control.onStage?.("consolidating");
   const issues = deduplicateIssues(reports.flatMap((report) => report.issues.map((issue) => ({ ...issue }))));
   const summary = summarizeIssues(issues);
   const comparison = options.baselinePath

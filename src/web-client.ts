@@ -35,10 +35,12 @@ function running(){
   document.querySelector('#actions').innerHTML='';document.querySelector('#report-frame').hidden=true;
   document.querySelector('#progress').hidden=false;document.querySelector('#progress-text').textContent='Preparando análise…';document.querySelector('#progress-bar').style.width='0%';cancelButton.hidden=true;cancelButton.disabled=false;
 }
-function renderProgress(progress,status){
+function renderProgress(progress,status,queuePosition){
   if(!progress)return;const total=progress.discoveredPages,done=progress.completedPages,queued=status==='queued';
+  const stages={queued:'Aguardando na fila', 'discovering-sitemap':'Descobrindo páginas do sitemap', 'launching-browser':'Iniciando navegador', navigating:'Carregando página', inspecting:'Inspecionando página', 'capturing-evidence':'Gerando evidência visual', consolidating:'Consolidando resultados', 'writing-reports':'Gerando relatórios', completed:'Análise concluída', cancelled:'Análise cancelada'};
   document.querySelector('#progress-bar').style.width=Math.max(0,Math.min(100,progress.percent))+'%';
-  document.querySelector('#progress-text').textContent=queued?'Aguardando na fila…':total?(done+' de '+total+' página(s) concluída(s)'+(progress.currentUrl?' · '+progress.currentUrl:'')):'Descobrindo páginas…';
+  const stage=stages[progress.stage]||'Executando análise';
+  document.querySelector('#progress-text').textContent=queued?stage+(queuePosition?' · posição '+queuePosition:'')+'…':stage+(total?' · '+done+' de '+total+' página(s)'+(progress.currentUrl?' · '+progress.currentUrl:''):'…');
   if(total)document.querySelector('#pages').textContent=done+'/'+total;
 }
 let artifactUrls=[];
@@ -62,6 +64,6 @@ async function render(job){
   const frame=document.querySelector('#report-frame');frame.srcdoc=reportHtml;frame.hidden=false;
   if(historyButton&&r.project)await loadHistory();
 }
-async function poll(id){for(;;){const response=await fetch('/api/scans/'+id),job=await response.json();if(!response.ok)throw new Error(job.error||'Não foi possível consultar a análise.');renderProgress(job.progress,job.status);if(job.status==='completed'){await render(job);return}if(job.status==='cancelled')throw new Error('A análise foi cancelada.');if(job.status==='failed')throw new Error(job.error||'A análise falhou.');await sleep(800)}}
+async function poll(id){for(;;){const response=await fetch('/api/scans/'+id),job=await response.json();if(!response.ok)throw new Error(job.error||'Não foi possível consultar a análise.');renderProgress(job.progress,job.status,job.queuePosition);if(job.status==='completed'){await render(job);return}if(job.status==='cancelled')throw new Error('A análise foi cancelada.');if(job.status==='failed')throw new Error(job.error||'A análise falhou.');await sleep(800)}}
 cancelButton.addEventListener('click',async()=>{if(!currentJobId)return;cancelButton.disabled=true;cancelButton.textContent='Cancelando…';try{const response=await fetch('/api/scans/'+currentJobId+'/cancel',{method:'POST'}),job=await response.json();if(!response.ok)throw new Error(job.error||'Não foi possível cancelar a análise.')}catch(error){showError(error.message);cancelButton.disabled=false;cancelButton.textContent='Cancelar'}});
 form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;button.innerHTML='<i class="loader"></i>Iniciando';running();const formData=new FormData(form),data=Object.fromEntries(formData);data.timeoutMs=Number(data.timeoutMs);data.settleMs=Number(data.settleMs);data.maxPages=Number(data.maxPages);data.sitemap=formData.has('sitemap');data.regressionsOnly=formData.has('regressionsOnly');data.acceptBaseline=formData.has('acceptBaseline');try{const response=await fetch('/api/scans',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)}),job=await response.json();if(!response.ok)throw new Error(job.error||'Não foi possível iniciar a análise.');currentJobId=job.id;cancelButton.hidden=false;button.innerHTML='<i class="loader"></i>Analisando';await poll(job.id)}catch(error){showError(error.message);document.querySelector('#status').className='status fail';document.querySelector('#status').textContent=error.message.includes('cancelada')?'CANCELADA':'FALHA NA EXECUÇÃO'}finally{currentJobId=undefined;cancelButton.hidden=true;cancelButton.textContent='Cancelar';if(globalThis.turnstile)globalThis.turnstile.reset();if(turnstileBlock)turnstileBlock.hidden=false;button.disabled=false;button.textContent='Executar novo scanner'}});`;

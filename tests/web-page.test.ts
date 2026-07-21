@@ -14,6 +14,8 @@ describe("dashboard components", () => {
     assert.match(html, /^<!doctype html>/);
     assert.match(html, /\.progress-bar\{/);
     assert.match(html, /cancelButton\.addEventListener/);
+    assert.match(html, /queuePosition/);
+    assert.match(html, /Gerando relatórios/);
     assert.match(html, /Histórico desabilitado neste servidor/);
     assert.doesNotMatch(html, /id="history-button"/);
   });

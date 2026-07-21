@@ -100,13 +100,16 @@ describe("web server", () => {
       const created = (await createResponse.json()) as {
         id: string;
         status: string;
-        progress: { discoveredPages: number; completedPages: number; percent: number };
+        queuePosition: number;
+        progress: { discoveredPages: number; completedPages: number; percent: number; stage: string };
       };
       assert.equal(created.status, "queued");
+      assert.equal(created.queuePosition, 1);
       assert.deepEqual(created.progress, {
         discoveredPages: 0,
         completedPages: 0,
         percent: 0,
+        stage: "queued",
       });
 
       const cancelResponse = await fetch(`${queuedUrl}/api/scans/${created.id}/cancel`, { method: "POST" });

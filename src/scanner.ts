@@ -54,6 +54,7 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
   try {
     control.signal?.throwIfAborted();
     control.signal?.addEventListener("abort", abort, { once: true });
+    control.onStage?.("launching-browser");
     browser = await browserType(options.browser).launch({ headless: !options.headed });
     control.signal?.throwIfAborted();
     const context = await browser.newContext({
@@ -75,6 +76,7 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
     attachListeners(page, issues, options);
 
     try {
+      control.onStage?.("navigating");
       const response = await page.goto(options.url, {
         waitUntil: "domcontentloaded",
         timeout: options.timeoutMs,
@@ -102,6 +104,7 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
     }
 
     control.signal?.throwIfAborted();
+    control.onStage?.("inspecting");
     const inspection = await inspectStablePage(page, options.url);
     issues.push(...inspection.issues);
     if (inspection.partial) scanStatus = "partial";
@@ -122,6 +125,7 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
 
     if (shouldCapture) {
       control.signal?.throwIfAborted();
+      control.onStage?.("capturing-evidence");
       await mkdir(options.outputDir, { recursive: true });
       screenshotPath = join(options.outputDir, "screenshot.png");
       try {
