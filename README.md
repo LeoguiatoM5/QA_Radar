@@ -84,6 +84,8 @@ performance.
 - Exit codes próprios para aprovação, reprovação e erro de execução.
 - Filtros por status HTTP e expressão regular de URL.
 - Fila local com até duas análises simultâneas.
+- Progresso por página e por etapa, incluindo posição atual na fila.
+- Cancelamento de análises em fila, durante sitemap ou com o navegador aberto.
 - Diretório isolado para os artefatos de cada análise.
 
 ## Requisitos
@@ -113,7 +115,8 @@ No dashboard é possível:
 - configurar timeout e janela de observação;
 - definir quando o quality gate deve reprovar;
 - ignorar status ou serviços conhecidos;
-- acompanhar a execução;
+- acompanhar páginas concluídas, etapa atual e posição na fila;
+- cancelar uma análise longa sem aguardar o timeout;
 - consultar problema, impacto e ação recomendada;
 - abrir o relatório HTML completo;
 - baixar o relatório JSON;
@@ -428,7 +431,13 @@ Não habilite histórico compartilhado em uma implantação pública antes de ad
 
 Ainda são necessários autenticação, HTTPS e persistência antes de uma implantação aberta ao público. A API já aplica política de destinos públicos, rate limit, limite de fila e tetos de duração como primeiras camadas de proteção.
 
-O servidor limita por padrão cada endereço a 10 novas análises por minuto, mantém resultados por uma hora e expõe `GET /health` para monitoramento. Em uma hospedagem com proxy reverso conhecido, configure `QA_RADAR_TRUST_PROXY=true` para considerar `X-Forwarded-For`. Não habilite essa opção ao expor o processo Node diretamente.
+O servidor limita por padrão cada endereço a 10 novas análises por minuto,
+retorna os cabeçalhos `X-RateLimit-Limit`, `X-RateLimit-Remaining` e
+`X-RateLimit-Reset`, mantém resultados por uma hora e expõe `GET /health` para
+monitoramento. Quando o limite é excedido, a resposta `429` também informa
+`Retry-After`. Em uma hospedagem com proxy reverso conhecido, configure
+`QA_RADAR_TRUST_PROXY=true` para considerar `X-Forwarded-For`. Não habilite essa
+opção ao expor o processo Node diretamente.
 
 Para alterar host ou porta conscientemente:
 

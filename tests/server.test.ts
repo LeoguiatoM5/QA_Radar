@@ -86,6 +86,36 @@ describe("web server", () => {
     assert.equal(response.status, 404);
   });
 
+  it("aplica rate limit por cliente e publica os cabeçalhos da janela", async () => {
+    const limitedServer = createQaRadarServer({
+      allowPrivateTargets: true,
+      concurrency: 0,
+      rateLimitMax: 1,
+      rateLimitWindowMs: 60_000,
+    });
+    await new Promise<void>((resolve) => limitedServer.listen(0, "127.0.0.1", resolve));
+    const address = limitedServer.address() as AddressInfo;
+    const limitedUrl = `http://127.0.0.1:${address.port}`;
+    const request = () => fetch(`${limitedUrl}/api/scans`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: limitedUrl }),
+    });
+    try {
+      const accepted = await request();
+      assert.equal(accepted.status, 202);
+      assert.equal(accepted.headers.get("x-ratelimit-limit"), "1");
+      assert.equal(accepted.headers.get("x-ratelimit-remaining"), "0");
+
+      const blocked = await request();
+      assert.equal(blocked.status, 429);
+      assert.equal(blocked.headers.get("x-ratelimit-remaining"), "0");
+      assert.ok(Number(blocked.headers.get("retry-after")) >= 1);
+    } finally {
+      await new Promise<void>((resolve) => limitedServer.close(() => resolve()));
+    }
+  });
+
   it("expõe progresso aditivo e cancela uma análise na fila", async () => {
     const queuedServer = createQaRadarServer({ concurrency: 0, allowPrivateTargets: true });
     await new Promise<void>((resolve) => queuedServer.listen(0, "127.0.0.1", resolve));

@@ -11,6 +11,7 @@ import { assertPublicUrl } from "./security.js";
 import { findHistoryBaseline, listProjectHistory, storeRun } from "./history.js";
 import { scanSitemap } from "./suite.js";
 import { JobQueue, type ScanJob } from "./job-queue.js";
+import { RateLimiter } from "./rate-limit.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -79,11 +80,6 @@ const DEFAULT_OPTIONS: ServerOptions = {
   maxSitemapPages: 20,
   operationalLogger: defaultOperationalLogger,
 };
-
-interface RateEntry {
-  count: number;
-  resetAt: number;
-}
 
 function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
@@ -204,7 +200,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     throw new Error("Configure TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY em conjunto.");
   }
   const jobQueue = new JobQueue();
-  const rateLimits = new Map<string, RateEntry>();
+  const rateLimiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
 
   const logOperational = (event: OperationalEvent): void => {
     try {
@@ -243,25 +239,12 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   };
 
   const consumeRateLimit = (request: IncomingMessage, response: ServerResponse): boolean => {
-    const now = Date.now();
-    if (rateLimits.size > 10_000) {
-      for (const [address, candidate] of rateLimits) {
-        if (candidate.resetAt <= now) rateLimits.delete(address);
-      }
-    }
-    const key = clientAddress(request);
-    let entry = rateLimits.get(key);
-    if (!entry || entry.resetAt <= now) {
-      entry = { count: 0, resetAt: now + config.rateLimitWindowMs };
-      rateLimits.set(key, entry);
-    }
-    entry.count += 1;
-    const remaining = Math.max(config.rateLimitMax - entry.count, 0);
-    response.setHeader("x-ratelimit-limit", config.rateLimitMax);
-    response.setHeader("x-ratelimit-remaining", remaining);
-    response.setHeader("x-ratelimit-reset", Math.ceil(entry.resetAt / 1000));
-    if (entry.count <= config.rateLimitMax) return true;
-    response.setHeader("retry-after", Math.max(Math.ceil((entry.resetAt - now) / 1000), 1));
+    const decision = rateLimiter.consume(clientAddress(request));
+    response.setHeader("x-ratelimit-limit", decision.limit);
+    response.setHeader("x-ratelimit-remaining", decision.remaining);
+    response.setHeader("x-ratelimit-reset", Math.ceil(decision.resetAt / 1000));
+    if (decision.allowed) return true;
+    response.setHeader("retry-after", decision.retryAfterSeconds ?? 1);
     json(response, 429, { error: "Muitas análises solicitadas. Aguarde antes de tentar novamente." });
     return false;
   };

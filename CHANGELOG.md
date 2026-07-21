@@ -27,6 +27,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   `web-page.ts` para módulos dedicados, com testes próprios dos componentes.
 - Estado, ordenação e transições da fila extraídos de `server.ts` para um
   módulo dedicado e testável.
+- Política e estado do rate limit extraídos de `server.ts` para um módulo
+  dedicado, com testes de isolamento e renovação da janela.
 
 ## [3.0.1] - 2026-07-20
 

@@ -23,7 +23,7 @@
     "web:start": "node dist/web.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
-    "test": "node --import tsx --test tests/cli.test.ts tests/history.test.ts tests/job-queue.test.ts tests/quality.test.ts tests/reporters.test.ts tests/scanner-evidence.test.ts tests/schema.test.ts tests/server.test.ts tests/sitemap.test.ts tests/web-page.test.ts",
+    "test": "node --import tsx --test tests/cli.test.ts tests/history.test.ts tests/job-queue.test.ts tests/quality.test.ts tests/rate-limit.test.ts tests/reporters.test.ts tests/scanner-evidence.test.ts tests/schema.test.ts tests/server.test.ts tests/sitemap.test.ts tests/web-page.test.ts",
     "test:integration": "node --import tsx --test tests/scanner.integration.test.ts tests/suite.integration.test.ts tests/web.integration.test.ts",
     "benchmark:sitemap": "node --import tsx scripts/benchmark-sitemap.ts",
     "check": "npm run typecheck && npm test && npm run build",
