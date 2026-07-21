@@ -2,6 +2,21 @@
 
 Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
+## [Não publicado]
+
+### Adicionado
+
+- Testes de contrato do schema JSON `1.0` e de incompatibilidade de baselines
+  antigos.
+- Teste do ciclo de retenção, incluindo remoção do job e evento
+  `scan.expired`.
+
+### Alterado
+
+- Eventos do navegador, métricas de performance, correlação e anotação de
+  evidências extraídos de `scanner.ts` para módulos dedicados, sem mudança no
+  comportamento do scanner.
+
 ## [3.0.1] - 2026-07-20
 
 ### Corrigido
