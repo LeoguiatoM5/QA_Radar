@@ -20,6 +20,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 - Eventos do navegador, métricas de performance, inspeção DOM, correlação e
   anotação de evidências extraídos de `scanner.ts` para módulos dedicados,
   sem mudança no comportamento do scanner.
+- Estrutura HTML, estilos e comportamento do dashboard extraídos de
+  `web-page.ts` para módulos dedicados, com testes próprios dos componentes.
 
 ## [3.0.1] - 2026-07-20
 
