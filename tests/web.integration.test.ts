@@ -40,8 +40,26 @@ describe("web scan integration", () => {
       await page.locator("summary").click();
       await page.locator("#settleMs").fill("30000");
       await page.locator("#submit").click();
+      await page.locator("#cancel").waitFor();
+
+      const queuedResponse = await page.request.post(`${appUrl}/api/scans`, {
+        data: { url: targetUrl, settleMs: 0, screenshot: "never" },
+      });
+      const queued = await queuedResponse.json() as { id: string; status: string };
+      assert.equal(queued.status, "queued");
       await page.locator("#cancel").click();
       await page.getByText("CANCELADA", { exact: true }).waitFor({ timeout: 15_000 });
+
+      await assert.doesNotReject(async () => {
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          const response = await page.request.get(`${appUrl}/api/scans/${queued.id}`);
+          const job = await response.json() as { status: string; error?: string };
+          if (job.status === "completed") return;
+          if (job.status === "failed") throw new Error(job.error);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        throw new Error("A próxima análise não iniciou após o cancelamento.");
+      });
 
       const health = await (await page.request.get(`${appUrl}/health`)).json() as {
         active: number;

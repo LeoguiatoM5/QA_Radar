@@ -36,7 +36,7 @@ export async function scanSitemap(
 ): Promise<ScanReport> {
   const startedAt = new Date();
   control.signal?.throwIfAborted();
-  const urls = await discoverSitemapUrls(options);
+  const urls = await discoverSitemapUrls(options, control);
   const reports: ScanReport[] = [];
   const pages: ScanPageResult[] = [];
   control.onProgress?.({

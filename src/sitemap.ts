@@ -1,5 +1,5 @@
 import { assertPublicUrl } from "./security.js";
-import type { ScanOptions } from "./types.js";
+import type { ScanControl, ScanOptions } from "./types.js";
 
 const MAX_SITEMAP_BYTES = 5 * 1024 * 1024;
 const MAX_SITEMAP_FILES = 10;
@@ -45,13 +45,18 @@ async function responseText(response: Response): Promise<string> {
   return new TextDecoder().decode(content);
 }
 
-async function fetchSitemap(rawUrl: string, publicNetworkOnly: boolean): Promise<{ url: string; xml: string }> {
+async function fetchSitemap(
+  rawUrl: string,
+  publicNetworkOnly: boolean,
+  signal?: AbortSignal,
+): Promise<{ url: string; xml: string }> {
   let current = rawUrl;
   for (let redirects = 0; redirects <= 5; redirects += 1) {
     if (publicNetworkOnly) await assertPublicUrl(current);
+    const timeout = AbortSignal.timeout(15_000);
     const response = await fetch(current, {
       redirect: "manual",
-      signal: AbortSignal.timeout(15_000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       headers: { "user-agent": "QA-Radar-Sitemap/1.0" },
     });
     if (response.status >= 300 && response.status < 400) {
@@ -79,7 +84,10 @@ function normalizedPage(rawUrl: string, origin: string): string | undefined {
   }
 }
 
-export async function discoverSitemapUrls(options: ScanOptions): Promise<string[]> {
+export async function discoverSitemapUrls(
+  options: ScanOptions,
+  control: ScanControl = {},
+): Promise<string[]> {
   const root = new URL(options.url);
   const initialSitemap = new URL("/sitemap.xml", root).toString();
   const pending = [initialSitemap];
@@ -88,10 +96,15 @@ export async function discoverSitemapUrls(options: ScanOptions): Promise<string[
   const maxPages = options.maxPages ?? 20;
 
   while (pending.length > 0 && visitedSitemaps.size < MAX_SITEMAP_FILES && pages.size < maxPages) {
+    control.signal?.throwIfAborted();
     const candidate = pending.shift();
     if (!candidate || visitedSitemaps.has(candidate)) continue;
     visitedSitemaps.add(candidate);
-    const fetched = await fetchSitemap(candidate, options.publicNetworkOnly === true);
+    const fetched = await fetchSitemap(
+      candidate,
+      options.publicNetworkOnly === true,
+      control.signal,
+    );
     const locations = parseSitemapLocations(fetched.xml);
     const sitemapIndex = /<sitemapindex\b/i.test(fetched.xml);
     for (const location of locations) {
