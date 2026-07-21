@@ -13,9 +13,9 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Alterado
 
-- Eventos do navegador, métricas de performance, correlação e anotação de
-  evidências extraídos de `scanner.ts` para módulos dedicados, sem mudança no
-  comportamento do scanner.
+- Eventos do navegador, métricas de performance, inspeção DOM, correlação e
+  anotação de evidências extraídos de `scanner.ts` para módulos dedicados,
+  sem mudança no comportamento do scanner.
 
 ## [3.0.1] - 2026-07-20
 
