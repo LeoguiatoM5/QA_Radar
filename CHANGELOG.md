@@ -4,6 +4,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+## [3.1.0] - 2026-07-22
+
 ### Adicionado
 
 - Auditoria de acessibilidade com `axe-core`, normalizada no mesmo modelo de

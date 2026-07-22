@@ -213,9 +213,9 @@ Toda evolução deve verificar antes da entrega:
   publicação de JUnit/SARIF e preservação dos códigos de saída do quality gate;
 - compatibilidade dos nomes e caminhos de artefatos públicos.
 
-O repositório já possui workflows completos para GitHub Actions. A configuração
-GitLab CI/CD ainda não existe e deverá ser criada e homologada antes de declarar
-suporte oficial a essa plataforma.
+O repositório possui workflows completos para GitHub Actions e uma configuração
+equivalente em `.gitlab-ci.yml`. A declaração de suporte oficial ao GitLab fica
+condicionada à homologação do primeiro pipeline em uma instância GitLab real.
 
 ### 2026-07-22 — Hardening de acessibilidade e jornadas
 
@@ -275,6 +275,25 @@ suporte oficial a essa plataforma.
 - A falha de rede equivalente é correlacionada e removida para não duplicar a
   ocorrência CORS mais informativa.
 - Referência MDN incluída no JSON, console, HTML e SARIF.
+
+### 2026-07-22 — Preparação da versão 3.1.0 e GitLab CI/CD
+
+- Objetivo: consolidar acessibilidade, jornadas e Lighthouse em uma versão
+  identificável, preservando os contratos existentes e a integração contínua.
+- Arquivos/contratos afetados: versão do pacote, CLI/relatórios, documentação,
+  smoke da composite action e novo `.gitlab-ci.yml`.
+- Decisões e compatibilidade: o consumer smoke de `@v3` continua validando
+  `3.0.1` até a publicação efetiva de `v3.1.0`; schema JSON permanece em `1.0`.
+- GitLab: jobs separados para validação, Playwright, Lighthouse, smoke com
+  JUnit/SARIF e empacotamento npm; artefatos são preservados por sete dias.
+- Segurança: ambientes e credenciais reais devem usar variáveis protegidas e
+  mascaradas; o smoke padrão acessa apenas `https://example.com`.
+- Comandos executados e resultados: `npm run check` (61 testes),
+  `npm run test:integration` (16 testes), `npm run test:lighthouse` (1 teste),
+  `npm audit --omit=dev` (0 vulnerabilidades), `npm pack --dry-run` e build da
+  imagem `qa-radar:3.1.0-test`; o container confirmou a versão e UID `1001`.
+- Homologação pendente: executar o primeiro pipeline em um projeto GitLab antes
+  de declarar suporte oficial e atualizar exemplos de consumidores.
 
 ## Modelo para registrar próximas etapas
 

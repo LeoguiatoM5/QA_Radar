@@ -1,0 +1,73 @@
+stages:
+  - validate
+  - integration
+  - package
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+default:
+  interruptible: true
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+validate:
+  stage: validate
+  image: node:20-bookworm
+  script:
+    - npm ci
+    - npm run check
+    - npm audit --omit=dev
+
+playwright:
+  stage: integration
+  image: mcr.microsoft.com/playwright:v1.61.1-noble
+  script:
+    - npm ci
+    - npm run test:integration
+
+lighthouse:
+  stage: integration
+  image: mcr.microsoft.com/playwright:v1.61.1-noble
+  script:
+    - npm ci
+    - npm run test:lighthouse
+
+smoke-reports:
+  stage: integration
+  image: mcr.microsoft.com/playwright:v1.61.1-noble
+  script:
+    - npm ci
+    - npm run build
+    - node dist/index.js https://example.com --format all --fail-on none --output qa-radar-gitlab-smoke
+    - node -e "const r=require('./qa-radar-gitlab-smoke/report.json');if(r.schemaVersion!=='1.0'||r.version!=='3.1.0')process.exit(1)"
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - qa-radar-gitlab-smoke/
+    reports:
+      junit: qa-radar-gitlab-smoke/report.junit.xml
+
+package:
+  stage: package
+  image: node:20-bookworm
+  script:
+    - npm ci
+    - mkdir gitlab-package
+    - npm pack --ignore-scripts --pack-destination gitlab-package
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - gitlab-package/*.tgz
