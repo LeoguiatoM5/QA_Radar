@@ -15,6 +15,7 @@ import { RateLimiter } from "./rate-limit.js";
 import { runJourneyDefinition } from "./journey-cli.js";
 import type { JourneyRunResult } from "./journey-runner.js";
 import { parseJourney } from "./journey.js";
+import { createJourneyEvidenceHtml, parseJourneyEvidenceMetadata } from "./journey-evidence-report.js";
 
 type JourneyJobStatus = "running" | "completed" | "failed" | "cancelled";
 
@@ -633,7 +634,31 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         return;
       }
 
-      const journeyArtifact = /^\/api\/journeys\/([0-9a-f-]+)\/(journey-report\.json|[0-9]{3}-[a-zA-Z]+-(?:before|after)\.png)$/.exec(url.pathname);
+      const journeyEvidenceReport = /^\/api\/journeys\/([0-9a-f-]+)\/evidence-report$/.exec(url.pathname);
+      if (request.method === "POST" && journeyEvidenceReport) {
+        if (!config.allowJourneys) {
+          json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
+          return;
+        }
+        const id = journeyEvidenceReport[1];
+        const job = id ? journeyJobs.get(id) : undefined;
+        if (!job) {
+          json(response, 404, { error: "Jornada não encontrada ou já expirada." });
+          return;
+        }
+        if (!requireAccess(request, response, job.accessTokenHash)) return;
+        if (job.status !== "completed" || !job.report) {
+          json(response, 409, { error: "A jornada precisa estar concluída para gerar evidências." });
+          return;
+        }
+        const metadata = parseJourneyEvidenceMetadata(await readJson(request));
+        const html = createJourneyEvidenceHtml(job.report, metadata);
+        await writeFile(join(job.outputDir, "journey-evidence.html"), html, "utf8");
+        json(response, 201, { url: `/api/journeys/${id}/journey-evidence.html` });
+        return;
+      }
+
+      const journeyArtifact = /^\/api\/journeys\/([0-9a-f-]+)\/(journey-report\.json|journey-evidence\.html|[0-9]{3}-[a-zA-Z]+-(?:before|after)\.png)$/.exec(url.pathname);
       if (request.method === "GET" && journeyArtifact) {
         if (!config.allowJourneys) {
           json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
@@ -653,16 +678,21 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           json(response, 409, { error: "A jornada ainda não foi concluída." });
           return;
         }
-        const path = name === "journey-report.json"
+        const path = name === "journey-report.json" || name === "journey-evidence.html"
           ? join(config.resultsDir, `journey-${id}`, name)
           : join(config.resultsDir, `journey-${id}`, "journey-evidence", name);
         const content = await readFile(path);
         response.writeHead(200, {
-          "content-type": name.endsWith(".json") ? "application/json; charset=utf-8" : "image/png",
+          "content-type": name.endsWith(".json")
+            ? "application/json; charset=utf-8"
+            : name.endsWith(".html") ? "text/html; charset=utf-8" : "image/png",
           "content-length": content.length,
           "x-content-type-options": "nosniff",
           "cache-control": "private, no-store",
           "referrer-policy": "no-referrer",
+          ...(name.endsWith(".html") ? {
+            "content-security-policy": "sandbox allow-popups; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
+          } : {}),
         });
         response.end(content);
         return;

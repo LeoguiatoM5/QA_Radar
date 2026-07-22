@@ -35,6 +35,8 @@ describe("dashboard components", () => {
     assert.match(html, /description/);
     assert.match(html, /journey-controls/);
     assert.match(html, /journeyActionLabels/);
+    assert.match(html, /id="journey-evidence-modal"/);
+    assert.match(html, /Gerar relatório de evidências/);
     assert.doesNotMatch(html, /Secrets são lidos somente/);
   });
 

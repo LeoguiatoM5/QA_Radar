@@ -12,6 +12,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   análise pública.
 - Descrição opcional por passo de Jornada, nomes amigáveis para ações e guia dos
   comandos disponíveis diretamente no dashboard.
+- Relatório HTML de evidências das Jornadas, com identidade do QA Radar,
+  responsável, tipo de teste, passos, descrições e capturas Antes/Depois.
 
 ### Alterado
 
