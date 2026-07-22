@@ -305,6 +305,26 @@ condicionada à homologação do primeiro pipeline em uma instância GitLab real
 - Rollback: restaurar o alias anotado `v3` para o commit da release `v3.0.1` se
   o smoke da action publicada falhar.
 
+### 2026-07-22 — Hardening do servidor público antes do Render
+
+- Objetivo: reduzir exposição de relatórios e abuso de recursos sem habilitar
+  funcionalidades experimentais no serviço público.
+- Decisão: Turnstile foi adiado explicitamente e não faz parte desta entrega.
+- Controle de acesso: token aleatório de 256 bits por scan, hash SHA-256 no disco,
+  cookie `HttpOnly`/`SameSite=Strict` na UI e suporte a Bearer para clientes API.
+- Recursos: timeout global configurável, com três minutos no Blueprint Render;
+  expiração e limite de concorrência existentes foram preservados.
+- Rede: faixas reservadas adicionais são bloqueadas e mudanças de resolução do
+  mesmo hostname durante o scan encerram a requisição como possível rebinding.
+- Artefatos: respostas privadas sem cache/referrer; HTML recebe CSP sandbox.
+- Compatibilidade: criação continua pública e retorna `accessToken`; leitura,
+  cancelamento e artefatos agora exigem o token. Schema dos relatórios permanece
+  em `1.0`; jornadas e histórico seguem desabilitados no Render.
+- Validação: `npm run check` (64 testes), `npm run test:integration` (16 testes),
+  `npm run test:lighthouse` (1 teste real), `npm audit --omit=dev` (0
+  vulnerabilidades) e imagem Docker executada com UID `1001`.
+- Deploy: nenhuma publicação no Render foi realizada nesta etapa.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown

@@ -25,6 +25,7 @@ function job(id: string): ScanJob {
     progress: { discoveredPages: 0, completedPages: 0, currentUrl: undefined, percent: 0 },
     controller: new AbortController(),
     cancelRequested: false,
+    accessTokenHash: "0".repeat(64),
   };
 }
 

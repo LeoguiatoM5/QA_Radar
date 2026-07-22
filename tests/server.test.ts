@@ -5,12 +5,13 @@ import type { Server } from "node:http";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { createQaRadarServer } from "../src/server.js";
 import type { OperationalEvent } from "../src/server.js";
 
-async function waitFor(predicate: () => boolean, timeoutMs = 1_000): Promise<void> {
+async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 1_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
+  while (!await predicate()) {
     if (Date.now() >= deadline) throw new Error("A condição esperada não ocorreu no prazo.");
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -38,6 +39,8 @@ describe("web server", () => {
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
+    assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.match(html, /Nova análise/);
     assert.match(html, /Executar scanner/);
     assert.match(html, /Cobrir sitemap\.xml/);
@@ -140,11 +143,14 @@ describe("web server", () => {
       });
       const created = (await createResponse.json()) as {
         id: string;
+        accessToken: string;
         status: string;
         queuePosition: number;
         progress: { discoveredPages: number; completedPages: number; percent: number; stage: string };
       };
       assert.equal(created.status, "queued");
+      assert.match(created.accessToken, /^[A-Za-z0-9_-]{40,}$/);
+      assert.match(createResponse.headers.get("set-cookie") ?? "", /HttpOnly; SameSite=Strict/);
       assert.equal(created.queuePosition, 1);
       assert.deepEqual(created.progress, {
         discoveredPages: 0,
@@ -153,16 +159,59 @@ describe("web server", () => {
         stage: "queued",
       });
 
-      const cancelResponse = await fetch(`${queuedUrl}/api/scans/${created.id}/cancel`, { method: "POST" });
+      const authorization = { authorization: `Bearer ${created.accessToken}` };
+      const deniedResponse = await fetch(`${queuedUrl}/api/scans/${created.id}`);
+      assert.equal(deniedResponse.status, 401);
+      const forbiddenResponse = await fetch(`${queuedUrl}/api/scans/${created.id}`, {
+        headers: { authorization: "Bearer token-incorreto" },
+      });
+      assert.equal(forbiddenResponse.status, 403);
+
+      const cancelResponse = await fetch(`${queuedUrl}/api/scans/${created.id}/cancel`, {
+        method: "POST",
+        headers: authorization,
+      });
       const cancelled = (await cancelResponse.json()) as { status: string };
       assert.equal(cancelResponse.status, 202);
       assert.equal(cancelled.status, "cancelled");
 
-      const statusResponse = await fetch(`${queuedUrl}/api/scans/${created.id}`);
-      const status = (await statusResponse.json()) as { status: string };
+      const statusResponse = await fetch(`${queuedUrl}/api/scans/${created.id}`, { headers: authorization });
+      const status = (await statusResponse.json()) as { status: string; accessToken?: string };
       assert.equal(status.status, "cancelled");
+      assert.equal(status.accessToken, undefined);
     } finally {
       await new Promise<void>((resolve) => queuedServer.close(() => resolve()));
+    }
+  });
+
+  it("interrompe a análise ao atingir o timeout global do servidor", async () => {
+    const timeoutServer = createQaRadarServer({
+      allowPrivateTargets: true,
+      maxJobDurationMs: 25,
+      scanRunner: async (_options, control) => new Promise<never>((_resolve, reject) => {
+        const fail = () => reject(control?.signal?.reason ?? new Error("abortada"));
+        if (control?.signal?.aborted) fail();
+        else control?.signal?.addEventListener("abort", fail, { once: true });
+      }),
+    });
+    await new Promise<void>((resolve) => timeoutServer.listen(0, "127.0.0.1", resolve));
+    const address = timeoutServer.address() as AddressInfo;
+    const timeoutUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const createResponse = await fetch(`${timeoutUrl}/api/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: timeoutUrl }),
+      });
+      const created = await createResponse.json() as { id: string; accessToken: string };
+      const headers = { authorization: `Bearer ${created.accessToken}` };
+      await waitFor(async () => {
+        const response = await fetch(`${timeoutUrl}/api/scans/${created.id}`, { headers });
+        const job = await response.json() as { status: string; error?: string };
+        return job.status === "failed" && /limite global de 25 ms/.test(job.error ?? "");
+      });
+    } finally {
+      await new Promise<void>((resolve) => timeoutServer.close(() => resolve()));
     }
   });
 
@@ -175,7 +224,9 @@ describe("web server", () => {
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-recovery-"));
     const id = "11111111-1111-4111-8111-111111111111";
     const outputDir = join(resultsDir, id);
+    const accessToken = "recovery-test-token";
     await mkdir(outputDir);
+    await writeFile(join(outputDir, ".access-token.sha256"), createHash("sha256").update(accessToken).digest("hex"));
     await writeFile(join(outputDir, "report.json"), JSON.stringify({
       tool: "QA Radar",
       version: "3.0.1",
@@ -189,11 +240,14 @@ describe("web server", () => {
     const address = recoveryServer.address() as AddressInfo;
     const recoveryUrl = `http://127.0.0.1:${address.port}/api/scans/${id}`;
     try {
-      const statusResponse = await fetch(recoveryUrl);
+      const headers = { authorization: `Bearer ${accessToken}` };
+      const statusResponse = await fetch(recoveryUrl, { headers });
       const status = (await statusResponse.json()) as { status: string };
       assert.equal(status.status, "completed");
-      const htmlResponse = await fetch(`${recoveryUrl}/report.html`);
+      const htmlResponse = await fetch(`${recoveryUrl}/report.html`, { headers });
       assert.equal(htmlResponse.status, 200);
+      assert.equal(htmlResponse.headers.get("cache-control"), "private, no-store");
+      assert.match(htmlResponse.headers.get("content-security-policy") ?? "", /sandbox/);
       assert.match(await htmlResponse.text(), /Relatório recuperado/);
     } finally {
       await new Promise<void>((resolve) => recoveryServer.close(() => resolve()));

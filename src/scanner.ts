@@ -19,7 +19,7 @@ import type {
   ScanReport,
 } from "./types.js";
 import { VERSION } from "./version.js";
-import { assertPublicUrl } from "./security.js";
+import { PublicNetworkGuard } from "./security.js";
 import { compareWithBaseline, emptyBaseline, loadBaseline } from "./baseline.js";
 import { performanceIssues } from "./performance.js";
 import { attachListeners, cleanMessage } from "./scanner-events.js";
@@ -68,9 +68,11 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
     page = await context.newPage();
     await installPerformanceObservers(page);
     if (options.publicNetworkOnly) {
+      const networkGuard = new PublicNetworkGuard();
+      await networkGuard.assert(options.url);
       await page.route("**/*", async (route) => {
         try {
-          await assertPublicUrl(route.request().url());
+          await networkGuard.assert(route.request().url());
           await route.continue();
         } catch {
           await route.abort("blockedbyclient");

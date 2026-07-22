@@ -503,6 +503,12 @@ Não habilite histórico compartilhado em uma implantação pública antes de ad
 
 Ainda são necessários autenticação, HTTPS e persistência antes de uma implantação aberta ao público. A API já aplica política de destinos públicos, rate limit, limite de fila e tetos de duração como primeiras camadas de proteção.
 
+Cada análise criada pela API recebe um token aleatório. O dashboard preserva esse
+token em cookie `HttpOnly`, restrito às rotas da própria análise. Clientes da API
+devem enviar o valor retornado em `accessToken` pelo cabeçalho
+`Authorization: Bearer <token>` para consultar o estado, cancelar ou baixar
+artefatos. O servidor guarda somente o hash do token durante a retenção.
+
 O servidor limita por padrão cada endereço a 10 novas análises por minuto,
 retorna os cabeçalhos `X-RateLimit-Limit`, `X-RateLimit-Remaining` e
 `X-RateLimit-Reset`, mantém resultados por uma hora e expõe `GET /health` para
@@ -510,6 +516,10 @@ monitoramento. Quando o limite é excedido, a resposta `429` também informa
 `Retry-After`. Em uma hospedagem com proxy reverso conhecido, configure
 `QA_RADAR_TRUST_PROXY=true` para considerar `X-Forwarded-For`. Não habilite essa
 opção ao expor o processo Node diretamente.
+
+O limite global padrão de uma análise é cinco minutos. No Blueprint do Render ele
+é reduzido para três minutos por `QA_RADAR_MAX_JOB_DURATION_MS=180000`. Esse
+limite inclui inicialização do navegador, navegação, inspeção e relatórios.
 
 Para alterar host ou porta conscientemente:
 
@@ -569,6 +579,10 @@ O formulário suporta Cloudflare Turnstile com validação obrigatória no servi
 - `TURNSTILE_SECRET_KEY`: chave secreta, disponível somente no backend.
 
 As duas variáveis devem ser configuradas juntas. Sem elas, o Turnstile permanece desativado para facilitar o desenvolvimento local. Nunca publique a chave secreta no repositório.
+
+O Turnstile permanece adiado no deploy atual por decisão operacional. Antes de
+uma divulgação ampla do endereço público, reavalie sua ativação ou adote outra
+camada de controle de abuso.
 
 ## Desenvolvimento
 
