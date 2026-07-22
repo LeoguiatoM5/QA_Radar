@@ -35,7 +35,7 @@ describe("journey runner integration", () => {
     const evidenceDir = await mkdtemp(join(tmpdir(), "qa-radar-journey-"));
     try {
       const result = await runJourney(page, { schemaVersion: "1.0", name: "Login", steps: [
-        { action: "goto", url: origin },
+        { action: "goto", url: origin, description: "Abrir o formulário de login" },
         { action: "fill", selector: "#email", value: "qa@example.com" },
         { action: "fill", selector: "#password", valueFromEnv: "QA_RADAR_SECRET_PASSWORD" },
         { action: "select", selector: "#role", value: "qa" },
@@ -48,6 +48,7 @@ describe("journey runner integration", () => {
       });
       assert.equal(result.status, "passed");
       assert.equal(result.steps.length, 6);
+      assert.equal(result.steps[0]?.description, "Abrir o formulário de login");
       assert.doesNotMatch(JSON.stringify(result), /super-secret/);
       assert.equal(result.steps.every((step) => Boolean(step.evidence)), true);
       await access(result.steps[2]?.evidence?.after ?? "missing");

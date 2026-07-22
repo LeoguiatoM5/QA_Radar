@@ -10,6 +10,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   de relatórios, com hash persistido durante a retenção e cookie `HttpOnly` na UI.
 - Timeout global do servidor e bloqueio de mudanças de resolução DNS durante uma
   análise pública.
+- Descrição opcional por passo de Jornada, nomes amigáveis para ações e guia dos
+  comandos disponíveis diretamente no dashboard.
 
 ### Alterado
 
@@ -25,6 +27,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 - Jornadas no dashboard deixam de herdar o limite padrão de páginas do sitemap
   quando a cobertura multipágina não está habilitada.
+- O botão de cancelamento substitui temporariamente o botão de execução e deixa
+  de permanecer visível junto ao resultado concluído.
 
 ## [3.1.0] - 2026-07-22
 

@@ -371,6 +371,19 @@ condicionada à homologação do primeiro pipeline em uma instância GitLab real
   SauceDemo concluiu cinco passos e foi aprovado; o dashboard requer novo deploy
   para receber a correção definitiva.
 
+### 2026-07-22 — Clareza dos passos e controles de Jornada
+
+- Objetivo: tornar o resultado compreensível para usuários que não conhecem os
+  nomes técnicos das ações do Playwright.
+- Contrato: cada passo aceita `description` opcional, não vazia e limitada a 200
+  caracteres; o campo é preservado no relatório e exibido no dashboard.
+- Interface: ações sem descrição recebem nomes amigáveis em português; a ação
+  técnica e a duração continuam visíveis como detalhe.
+- Controles: durante a execução, o botão Executar é substituído pelo botão
+  Cancelar; depois da conclusão somente Executar nova jornada permanece.
+- Ajuda: o painel passa a explicar `goto`, `fill`, `click`, `select`, `waitFor`,
+  `assertVisible`, `assertText`, `description` e exemplos de seletores CSS.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown
