@@ -25,7 +25,7 @@
     "web:start": "node dist/web.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
-    "test": "node --import tsx --test tests/accessibility.test.ts tests/cli.test.ts tests/history.test.ts tests/job-queue.test.ts tests/journey.test.ts tests/lighthouse.test.ts tests/quality.test.ts tests/rate-limit.test.ts tests/reporters.test.ts tests/scanner-events.test.ts tests/scanner-evidence.test.ts tests/schema.test.ts tests/security.test.ts tests/server.test.ts tests/sitemap.test.ts tests/web-page.test.ts",
+    "test": "node --import tsx --test tests/accessibility.test.ts tests/cli.test.ts tests/history.test.ts tests/job-queue.test.ts tests/journey-evidence-report.test.ts tests/journey.test.ts tests/lighthouse.test.ts tests/quality.test.ts tests/rate-limit.test.ts tests/reporters.test.ts tests/scanner-events.test.ts tests/scanner-evidence.test.ts tests/schema.test.ts tests/security.test.ts tests/server.test.ts tests/sitemap.test.ts tests/web-page.test.ts",
     "test:integration": "node --import tsx --test tests/journey-runner.integration.test.ts tests/scanner.integration.test.ts tests/suite.integration.test.ts tests/web.integration.test.ts",
     "test:lighthouse": "node --import tsx --test tests/lighthouse.integration.test.ts",
     "benchmark:sitemap": "node --import tsx scripts/benchmark-sitemap.ts",

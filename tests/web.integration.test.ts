@@ -244,7 +244,7 @@ describe("web scan integration", () => {
       response.end('<!doctype html><html lang="pt-BR"><main><button id="go" onclick="document.querySelector(\'#done\').textContent=\'Concluído\'">Ir</button><p id="done"></p></main>');
     });
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-journey-"));
-    const app = createQaRadarServer({ resultsDir, allowJourneys: true, allowPrivateTargets: true, retentionMs: 1_000 });
+    const app = createQaRadarServer({ resultsDir, allowJourneys: true, allowPrivateTargets: true, retentionMs: 3_000 });
     const targetUrl = await listen(target);
     const appUrl = await listen(app);
     let browser: Browser | undefined;
@@ -287,7 +287,24 @@ describe("web scan integration", () => {
       assert.equal((await page.context().request.get(evidenceUrl, { headers: artifactHeaders })).status(), 200);
       const journeyBase = evidenceUrl.slice(0, evidenceUrl.lastIndexOf("/") + 1);
       assert.equal((await page.context().request.get(`${journeyBase}journey-report.json`, { headers: artifactHeaders })).status(), 200);
-      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      await page.locator("#journey-evidence-button").click();
+      await page.locator("#journey-tester-name").fill("QA Integração");
+      await page.locator("#journey-test-type").selectOption("regression");
+      const popupPromise = page.waitForEvent("popup");
+      const evidenceCreationPromise = page.waitForResponse((response) => response.url().endsWith("/evidence-report"));
+      await page.locator("#journey-evidence-form button[type=submit]").click();
+      const evidenceReport = await popupPromise;
+      const evidenceCreation = await evidenceCreationPromise;
+      assert.equal(evidenceCreation.status(), 201, await evidenceCreation.text());
+      await evidenceReport.waitForURL(/journey-evidence\.html/, { timeout: 10_000 });
+      await evidenceReport.waitForLoadState("domcontentloaded");
+      assert.match((await evidenceReport.locator("body").textContent()) ?? "", /QA RADAR/);
+      assert.match((await evidenceReport.locator("body").textContent()) ?? "", /QA Integração/);
+      assert.match((await evidenceReport.locator("body").textContent()) ?? "", /Regressão/);
+      assert.match((await evidenceReport.locator("body").textContent()) ?? "", /Confirmar a conclusão/);
+      assert.equal(await evidenceReport.locator("img").count() > 0, true);
+      await evidenceReport.close();
+      await new Promise((resolve) => setTimeout(resolve, 3_100));
       assert.equal((await page.context().request.get(evidenceUrl, { headers: artifactHeaders })).status(), 404);
     } finally {
       await browser?.close();

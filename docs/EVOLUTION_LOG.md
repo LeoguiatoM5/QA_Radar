@@ -384,6 +384,19 @@ condicionada à homologação do primeiro pipeline em uma instância GitLab real
 - Ajuda: o painel passa a explicar `goto`, `fill`, `click`, `select`, `waitFor`,
   `assertVisible`, `assertText`, `description` e exemplos de seletores CSS.
 
+### 2026-07-22 — Relatório HTML de evidências de Jornada
+
+- Objetivo: transformar uma execução em evidência compartilhável e legível por
+  QA, desenvolvimento e produto.
+- Interface: “Gerar relatório de evidências” abre modal com responsável e tipo
+  de teste: funcional, smoke, regressão, aceitação ou exploratório.
+- Conteúdo: identidade visual do QA Radar, resumo, resultado, passo a passo,
+  descrições, ação técnica, duração, falhas e imagens Antes/Depois.
+- Segurança: geração e leitura exigem o token da Jornada; o HTML usa CSP sandbox,
+  `no-store`, escape de conteúdo e referências somente às imagens protegidas do
+  mesmo job.
+- Retenção: o HTML e as imagens seguem a mesma expiração da Jornada.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown

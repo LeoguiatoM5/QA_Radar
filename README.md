@@ -312,6 +312,12 @@ Cada passo pode declarar `description` com até 200 caracteres. Essa descrição
 exibida no resultado para explicar a intenção do teste; quando ausente, o
 dashboard apresenta um nome amigável baseado na ação.
 
+Depois da execução, **Gerar relatório de evidências** abre um formulário para
+informar o responsável e classificar o teste como funcional, smoke, regressão,
+aceitação ou exploratório. O HTML protegido resultante usa a identidade visual
+do QA Radar e reúne o resumo, as descrições, durações, resultados e imagens de
+antes/depois de cada passo.
+
 Para testar jornadas no dashboard local:
 
 ```powershell
