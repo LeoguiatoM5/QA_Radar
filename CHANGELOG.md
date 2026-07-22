@@ -21,6 +21,11 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 - O Blueprint do Render habilita Jornadas para homologação controlada, mantendo
   os limites de 10 passos, 16 KiB de payload e 120 segundos por execução.
 
+### Corrigido
+
+- Jornadas no dashboard deixam de herdar o limite padrão de páginas do sitemap
+  quando a cobertura multipágina não está habilitada.
+
 ## [3.1.0] - 2026-07-22
 
 ### Adicionado

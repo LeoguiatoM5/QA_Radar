@@ -357,6 +357,20 @@ condicionada à homologação do primeiro pipeline em uma instância GitLab real
 - Homologação pendente: desktop/mobile, ações permitidas, polling, conclusão,
   cancelamento, timeout, tokens, evidências, expiração e SSRF/redirect privado.
 
+### 2026-07-22 — Correção do início de Jornadas no Render
+
+- Problema observado: o primeiro login real no SauceDemo foi rejeitado antes da
+  execução porque Jornadas sem `maxPages` herdavam o padrão de 20 páginas, acima
+  do limite 5 configurado no Render.
+- Causa: a validação de `maxSitemapPages` era aplicada mesmo sem `sitemap`.
+- Correção: o teto de páginas agora é validado somente em scans com cobertura
+  por sitemap; o contrato HTTP do dashboard permanece inalterado.
+- Teste de regressão: o servidor de Jornadas usa limite de sitemap 5 e aceita a
+  criação sem enviar `maxPages`.
+- Evidência: com o contorno temporário `maxPages: 5`, o login público no
+  SauceDemo concluiu cinco passos e foi aprovado; o dashboard requer novo deploy
+  para receber a correção definitiva.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown

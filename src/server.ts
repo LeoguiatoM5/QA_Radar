@@ -224,7 +224,7 @@ function scanOptions(body: Record<string, unknown>, outputDir: string, config: S
   const options = parsed.options;
   if (options.timeoutMs > 120_000) throw new Error("O timeout máximo é 120000 ms.");
   if (options.settleMs > 30_000) throw new Error("O tempo de observação máximo é 30000 ms.");
-  if ((options.maxPages ?? 20) > config.maxSitemapPages) {
+  if (options.sitemap && (options.maxPages ?? 20) > config.maxSitemapPages) {
     throw new Error(`O limite de páginas neste servidor é ${config.maxSitemapPages}.`);
   }
   if (options.project && !config.allowHistory) {

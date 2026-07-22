@@ -65,6 +65,7 @@ describe("web server", () => {
     const journeyServer = createQaRadarServer({
       allowJourneys: true,
       allowPrivateTargets: true,
+      maxSitemapPages: 5,
       maxJourneySteps: 2,
       journeyRunner: async (_options, _definition, _environment, signal) => new Promise<never>((_resolve, reject) => {
         const abort = () => reject(signal?.reason ?? new Error("abortada"));
