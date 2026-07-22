@@ -295,6 +295,16 @@ condicionada à homologação do primeiro pipeline em uma instância GitLab real
 - Homologação pendente: executar o primeiro pipeline em um projeto GitLab antes
   de declarar suporte oficial e atualizar exemplos de consumidores.
 
+### 2026-07-22 — Promoção do canal estável v3 para 3.1.0
+
+- Objetivo: atualizar o alias consumido pela composite action sem alterar a
+  referência principal `v3` usada pelos projetos integrados.
+- Pré-condições: release `v3.1.0` publicada, pacote anexado e CI da tag aprovado.
+- Compatibilidade: schema JSON permanece em `1.0`; o smoke consumidor passa a
+  exigir a versão `3.1.0`, regressões vazias e todos os formatos de relatório.
+- Rollback: restaurar o alias anotado `v3` para o commit da release `v3.0.1` se
+  o smoke da action publicada falhar.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown
