@@ -1,6 +1,6 @@
 # QA Radar
 
-> **Beta · versão 3.0.1**
+> **Beta · versão 3.1.0**
 > O projeto está em desenvolvimento ativo. Funcionalidades, formatos de relatório e regras de classificação podem evoluir entre versões.
 
 O QA Radar é uma ferramenta de diagnóstico para aplicações web. A partir de uma URL, ele combina smoke testing, observação do navegador e inspeção segura do DOM para encontrar problemas antes que eles cheguem ao usuário.
@@ -425,6 +425,18 @@ a action dentro deste próprio repositório, copie
 `examples/qa-radar-github-actions.yml` para `.github/workflows/` e configure o
 secret `STAGING_URL`.
 
+### GitLab CI/CD
+
+O arquivo `.gitlab-ci.yml` valida tipos, testes unitários, integração Playwright,
+Lighthouse e o pacote npm. Um smoke test adicional publica os relatórios JSON,
+HTML, JUnit e SARIF como artefatos; o JUnit também aparece na interface de testes
+do GitLab. O pipeline é executado em merge requests, na branch padrão, em tags e
+quando iniciado manualmente.
+
+URLs e credenciais de ambientes reais não ficam no repositório. Cadastre-as como
+variáveis protegidas e mascaradas do GitLab antes de adaptar o smoke test para um
+ambiente autenticado.
+
 ## Roadmap da versão Beta
 
 As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeitas a mudanças conforme o uso e o feedback recebido.
@@ -588,8 +600,8 @@ Para preparar uma versão, confirme que `package.json`, `package-lock.json`,
 as mudanças na branch `main`, crie e envie uma tag correspondente:
 
 ```bash
-git tag -a v3.0.1 -m "QA Radar 3.0.1"
-git push origin v3.0.1
+git tag -a v3.1.0 -m "QA Radar 3.1.0"
+git push origin v3.1.0
 ```
 
 O workflow de release rejeita tags que não correspondam ao `package.json`,
