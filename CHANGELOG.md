@@ -18,6 +18,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 - Jornadas do dashboard agora são jobs assíncronos protegidos por token, com
   consulta, cancelamento, timeout global e limites próprios de passos/payload.
 - Evidências e JSON de jornadas exigem autorização e não expõem caminhos internos.
+- O Blueprint do Render habilita Jornadas para homologação controlada, mantendo
+  os limites de 10 passos, 16 KiB de payload e 120 segundos por execução.
 
 ## [3.1.0] - 2026-07-22
 

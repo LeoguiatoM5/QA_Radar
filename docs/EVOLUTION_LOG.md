@@ -342,6 +342,21 @@ condicionada à homologação do primeiro pipeline em uma instância GitLab real
 - Decisão operacional: `QA_RADAR_ENABLE_JOURNEYS` continua ausente do Render;
   Turnstile permanece adiado e nenhum deploy é autorizado por esta etapa.
 
+### 2026-07-22 — Preparação da homologação de Jornadas no Render
+
+- Objetivo: disponibilizar a aba Jornadas no próximo deploy manual para executar
+  o roteiro de homologação do recurso assíncrono.
+- Configuração: o Blueprint passa a definir `QA_RADAR_ENABLE_JOURNEYS=true` e
+  preserva os limites de 10 passos, 16 KiB e 120 segundos.
+- Segurança: tokens, bloqueio de rede privada, redaction de secrets, fila única
+  e proteção de artefatos permanecem obrigatórios; Turnstile continua adiado.
+- Risco operacional: uma jornada abre Chromium no plano Free e deve ser
+  acompanhada por logs, memória, fila e possíveis reinícios/OOM.
+- Deploy: a mudança somente prepara o Blueprint. O deploy permanece manual e
+  deve ser executado pelo usuário após integração do PR.
+- Homologação pendente: desktop/mobile, ações permitidas, polling, conclusão,
+  cancelamento, timeout, tokens, evidências, expiração e SSRF/redirect privado.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown
