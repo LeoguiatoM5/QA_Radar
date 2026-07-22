@@ -30,6 +30,8 @@ describe("dashboard components", () => {
     assert.match(html, /Analisa até 5 páginas/);
     assert.match(html, /id="journey-form"/);
     assert.match(html, /\/api\/journeys/);
+    assert.match(html, /Informe a URL e descreva os passos que o navegador deve executar/);
+    assert.doesNotMatch(html, /Secrets são lidos somente/);
   });
 
   it("mantém os componentes principais no fragmento do dashboard", () => {
