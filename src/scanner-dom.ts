@@ -58,31 +58,6 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
         element.tagName.toLowerCase();
       return `${element.tagName.toLowerCase()} · ${detail}`;
     };
-    const accessibleName = (element: HTMLElement): string => {
-      const labelledBy = element.getAttribute("aria-labelledby");
-      const labelledText = labelledBy
-        ?.split(/\s+/)
-        .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
-        .join(" ")
-        .trim();
-      const explicitLabel = element.id
-        ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`)?.textContent?.trim()
-        : "";
-      const nestedLabel = element.closest("label")?.textContent?.trim();
-      const imageAlt = element.querySelector("img")?.getAttribute("alt")?.trim();
-      return (
-        element.getAttribute("aria-label")?.trim() ||
-        labelledText ||
-        explicitLabel ||
-        nestedLabel ||
-        element.getAttribute("title")?.trim() ||
-        imageAlt ||
-        element.textContent?.trim() ||
-        (element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
-          ? element.value.trim()
-          : "")
-      );
-    };
     const add = (finding: Omit<Finding, "selector" | "element" | "box">, element: HTMLElement): void => {
       result.push({
         ...finding,
@@ -106,70 +81,9 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
           occurrences: 1,
         }, image);
       }
-      if (!image.hasAttribute("alt") && visible(image)) {
-        add({
-          ruleId: "accessibility.image.alt-missing",
-          category: "accessibility",
-          severity: "warning",
-          title: "Imagem sem descrição alternativa",
-          impact: "Pessoas que usam leitores de tela podem não compreender o conteúdo da imagem.",
-          recommendation: "Adicione um atributo alt descritivo; use alt vazio apenas quando a imagem for decorativa.",
-          message: "Elemento img visível sem atributo alt.",
-          url: image.currentSrc || image.src || undefined,
-          occurrences: 1,
-        }, image);
-      }
     }
 
-    for (const element of document.querySelectorAll<HTMLElement>("button,a[href]")) {
-      if (visible(element) && !accessibleName(element)) {
-        const isButton = element.tagName === "BUTTON";
-        add({
-          ruleId: isButton ? "accessibility.button.name-missing" : "accessibility.link.name-missing",
-          category: "accessibility",
-          severity: "warning",
-          title: isButton ? "Botão sem identificação" : "Link sem identificação",
-          impact: "O controle não comunica sua finalidade para leitores de tela e pode confundir usuários.",
-          recommendation: `Adicione texto visível ou aria-label ao ${isButton ? "botão" : "link"}.`,
-          message: "Elemento interativo visível sem nome acessível.",
-          url: element instanceof HTMLAnchorElement ? element.href : undefined,
-          occurrences: 1,
-        }, element);
-      }
-    }
-
-    for (const control of document.querySelectorAll<HTMLElement>("input:not([type=hidden]),select,textarea")) {
-      if (visible(control) && !accessibleName(control)) {
-        add({
-          ruleId: "accessibility.form-control.name-missing",
-          category: "accessibility",
-          severity: "warning",
-          title: "Campo sem identificação",
-          impact: "O usuário pode não saber qual informação deve preencher, especialmente com leitor de tela.",
-          recommendation: "Associe um label ao campo usando for/id ou adicione aria-label.",
-          message: "Controle de formulário visível sem label ou nome acessível.",
-          url: undefined,
-          occurrences: 1,
-        }, control);
-      }
-    }
-
-    for (const frame of document.querySelectorAll<HTMLIFrameElement>("iframe")) {
-      if (visible(frame) && !frame.title.trim()) {
-        add({
-          ruleId: "accessibility.iframe.title-missing",
-          category: "accessibility",
-          severity: "warning",
-          title: "Conteúdo incorporado sem título",
-          impact: "Usuários de leitores de tela não conseguem identificar a finalidade do conteúdo incorporado.",
-          recommendation: "Adicione um atributo title que descreva o conteúdo do iframe.",
-          message: "Iframe visível sem atributo title.",
-          url: frame.src || undefined,
-          occurrences: 1,
-        }, frame);
-      }
-    }
-
+    // O axe-core não reporta IDs duplicados que não participam de relações ARIA.
     const ids = new Map<string, HTMLElement[]>();
     for (const element of document.querySelectorAll<HTMLElement>("[id]")) {
       if (!element.id) continue;

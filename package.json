@@ -12,6 +12,8 @@
   "files": [
     "dist",
     "scripts",
+    "docs",
+    "examples",
     "README.md",
     "CHANGELOG.md",
     "BENCHMARKS.md",
@@ -23,8 +25,9 @@
     "web:start": "node dist/web.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
-    "test": "node --import tsx --test tests/cli.test.ts tests/history.test.ts tests/job-queue.test.ts tests/quality.test.ts tests/rate-limit.test.ts tests/reporters.test.ts tests/scanner-evidence.test.ts tests/schema.test.ts tests/server.test.ts tests/sitemap.test.ts tests/web-page.test.ts",
-    "test:integration": "node --import tsx --test tests/scanner.integration.test.ts tests/suite.integration.test.ts tests/web.integration.test.ts",
+    "test": "node --import tsx --test tests/accessibility.test.ts tests/cli.test.ts tests/history.test.ts tests/job-queue.test.ts tests/journey.test.ts tests/lighthouse.test.ts tests/quality.test.ts tests/rate-limit.test.ts tests/reporters.test.ts tests/scanner-events.test.ts tests/scanner-evidence.test.ts tests/schema.test.ts tests/server.test.ts tests/sitemap.test.ts tests/web-page.test.ts",
+    "test:integration": "node --import tsx --test tests/journey-runner.integration.test.ts tests/scanner.integration.test.ts tests/suite.integration.test.ts tests/web.integration.test.ts",
+    "test:lighthouse": "node --import tsx --test tests/lighthouse.integration.test.ts",
     "benchmark:sitemap": "node --import tsx scripts/benchmark-sitemap.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "start": "node dist/index.js"
@@ -41,6 +44,9 @@
     "node": ">=20"
   },
   "dependencies": {
+    "axe-core": "^4.12.1",
+    "chrome-launcher": "1.2.1",
+    "lighthouse": "12.6.1",
     "playwright": "^1.61.1"
   },
   "devDependencies": {

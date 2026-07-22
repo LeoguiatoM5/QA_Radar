@@ -5,6 +5,7 @@ import { scan } from "./scanner.js";
 import { VERSION } from "./version.js";
 import { findHistoryBaseline, storeRun } from "./history.js";
 import { scanSitemap } from "./suite.js";
+import { runJourneyFile } from "./journey-cli.js";
 
 export async function run(args: string[]): Promise<number> {
   try {
@@ -20,6 +21,15 @@ export async function run(args: string[]): Promise<number> {
 
     const options = parsed.options;
     if (!options) throw new Error("Configuração da análise ausente.");
+    if (options.journeyPath) {
+      console.log(`Executando jornada em ${options.url}...`);
+      const journey = await runJourneyFile(options);
+      console.log(`Jornada:    ${journey.report.name}`);
+      console.log(`Resultado:  ${journey.report.status === "passed" ? "APROVADA" : "REPROVADA"}`);
+      console.log(`Passos:     ${journey.report.steps.length}`);
+      console.log(`Relatório:  ${journey.reportPath}`);
+      return journey.report.status === "passed" ? 0 : 1;
+    }
     const automaticBaseline = options.baselinePath ? undefined : await findHistoryBaseline(options);
     const effectiveOptions = automaticBaseline ? { ...options, baselinePath: automaticBaseline } : options;
     console.log(`Analisando ${options.url}...`);

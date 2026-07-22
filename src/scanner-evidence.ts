@@ -4,6 +4,9 @@ import type { Issue, IssueEvidence, IssueInput } from "./types.js";
 export function correlateIssues(issues: IssueInput[]): IssueInput[] {
   const correlated = issues.filter((issue) => {
     if (!issue.url) return true;
+    if (issue.category === "network" && issues.some(
+      (candidate) => candidate.category === "console" && candidate.ruleId.startsWith("console.cors.") && candidate.url === issue.url,
+    )) return false;
     const transportIssue = issues.some(
       (candidate) =>
         candidate !== issue &&

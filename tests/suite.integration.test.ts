@@ -56,11 +56,11 @@ describe("sitemap suite integration", () => {
       }
       if (request.url === "/failure") {
         response.writeHead(500, { "content-type": "text/html" });
-        response.end("<!doctype html><title>Página com falha</title>");
+        response.end('<!doctype html><html lang="pt-BR"><title>Página com falha</title><main>Falha</main>');
         return;
       }
       response.writeHead(200, { "content-type": "text/html" });
-      response.end("<!doctype html><title>Página saudável</title><main>Conteúdo</main>");
+      response.end('<!doctype html><html lang="pt-BR"><title>Página saudável</title><main>Conteúdo</main>');
     });
     await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
     const address = server.address();

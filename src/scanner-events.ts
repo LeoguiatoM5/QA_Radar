@@ -18,6 +18,65 @@ export function cleanMessage(value: string): string {
   return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "").trim();
 }
 
+export function consoleErrorIssue(
+  technicalMessage: string,
+  locationUrl?: string,
+  source?: string,
+): IssueInput {
+  const cors = /Access to (?:fetch|XMLHttpRequest) at '([^']+)' from origin '([^']+)' has been blocked by CORS policy:\s*(.+)/is.exec(technicalMessage);
+  if (cors) {
+    const target = cors[1] ?? "";
+    const origin = cors[2] ?? "";
+    const reason = cors[3]?.trim() ?? "Política CORS rejeitou a resposta.";
+    const configuredOrigin = /Access-Control-Allow-Origin.+value '([^']+)'/i.exec(reason)?.[1];
+    const telemetry = /^https:\/\/play\.google\.com\/log(?:\?|$)/i.test(target);
+    return {
+      ruleId: telemetry ? "console.cors.telemetry-blocked" : "console.cors.blocked",
+      category: "console",
+      severity: telemetry ? "warning" : "error",
+      title: telemetry ? "Telemetria externa bloqueada por CORS" : "Requisição bloqueada por configuração CORS incorreta",
+      impact: telemetry
+        ? "O envio de telemetria ao Google Play falhou. A funcionalidade principal pode continuar operando, mas métricas ou registros dessa integração podem ser perdidos."
+        : "O JavaScript da página não conseguiu acessar a resposta; a funcionalidade que depende dessa chamada pode falhar ou permanecer incompleta.",
+      recommendation: telemetry
+        ? "Confirme qual integração inicia essa chamada e se a telemetria é necessária. Se for, o fornecedor ou um backend intermediário deve autorizar a origem correta; CORS não pode ser corrigido pelo JavaScript do navegador."
+        : "Configure o servidor de destino para responder ao preflight e autorizar exatamente a origem solicitante, ou encaminhe a chamada por um backend confiável da própria aplicação.",
+      referenceUrl: "https://developer.mozilla.org/docs/Web/HTTP/Guides/CORS",
+      message: `Destino: ${target}. Origem solicitante: ${origin}.${configuredOrigin ? ` Access-Control-Allow-Origin recebido: ${configuredOrigin}.` : ""} Motivo: ${reason}`,
+      method: undefined,
+      status: undefined,
+      url: target,
+      resourceType: "fetch",
+      source,
+      occurrences: 1,
+    };
+  }
+
+  const cookieBlocked = /Cookie .+ rejected.+cross-site context.+SameSite/is.test(technicalMessage);
+  const mimeBlocked = /blocked due to MIME type|MIME type.+mismatch/is.test(technicalMessage);
+  return {
+    ruleId: cookieBlocked ? "console.cookie.blocked" : mimeBlocked ? "console.resource.mime-mismatch" : "console.error",
+    category: "console",
+    severity: cookieBlocked ? "warning" : "error",
+    title: cookieBlocked ? "Cookie de terceiro bloqueado pelo navegador" : mimeBlocked ? "Recurso bloqueado por formato incorreto" : "Erro registrado pelo navegador",
+    impact: cookieBlocked
+      ? "Uma integração externa pode perder sessão ou preferências, mas a página pode continuar funcionando."
+      : mimeBlocked ? "Um estilo ou script não foi carregado, podendo quebrar o visual ou uma funcionalidade."
+      : "Pode existir uma funcionalidade quebrada ou recurso ausente na página.",
+    recommendation: cookieBlocked
+      ? "Confirme se a integração realmente depende do cookie. O fornecedor deve usar SameSite=None; Secure quando apropriado."
+      : mimeBlocked ? "Garanta que a URL retorne o arquivo esperado e o Content-Type correto, sem redirecionar para uma página HTML."
+      : "Abra a ocorrência técnica, identifique o componente relacionado e reproduza a ação afetada.",
+    message: technicalMessage,
+    method: undefined,
+    status: undefined,
+    url: locationUrl,
+    resourceType: undefined,
+    source,
+    occurrences: 1,
+  };
+}
+
 function requestIssue(request: Request): IssueInput {
   const resourceType = request.resourceType();
   const technicalMessage = request.failure()?.errorText ?? "Falha de rede desconhecida";
@@ -94,38 +153,7 @@ export function attachListeners(page: Page, issues: IssueInput[], options: ScanO
     if (message.type() !== "error") return;
     const location = message.location();
     if (location.url && isIgnored(location.url, options)) return;
-    const technicalMessage = message.text();
-    const cookieBlocked = /Cookie .+ rejected.+cross-site context.+SameSite/is.test(technicalMessage);
-    const mimeBlocked = /blocked due to MIME type|MIME type.+mismatch/is.test(technicalMessage);
-    issues.push({
-      ruleId: cookieBlocked
-        ? "console.cookie.blocked"
-        : mimeBlocked ? "console.resource.mime-mismatch" : "console.error",
-      category: "console",
-      severity: cookieBlocked ? "warning" : "error",
-      title: cookieBlocked
-        ? "Cookie de terceiro bloqueado pelo navegador"
-        : mimeBlocked
-          ? "Recurso bloqueado por formato incorreto"
-          : "Erro registrado pelo navegador",
-      impact: cookieBlocked
-        ? "Uma integração externa pode perder sessão ou preferências, mas a página pode continuar funcionando."
-        : mimeBlocked
-          ? "Um estilo ou script não foi carregado, podendo quebrar o visual ou uma funcionalidade."
-          : "Pode existir uma funcionalidade quebrada ou recurso ausente na página.",
-      recommendation: cookieBlocked
-        ? "Confirme se a integração realmente depende do cookie. O fornecedor deve usar SameSite=None; Secure quando apropriado."
-        : mimeBlocked
-          ? "Garanta que a URL retorne o arquivo esperado e o Content-Type correto, sem redirecionar para uma página HTML."
-          : "Abra a ocorrência técnica, identifique o componente relacionado e reproduza a ação afetada.",
-      message: technicalMessage,
-      method: undefined,
-      status: undefined,
-      url: location.url || undefined,
-      resourceType: undefined,
-      source: sourceFromConsole(message),
-      occurrences: 1,
-    });
+    issues.push(consoleErrorIssue(message.text(), location.url || undefined, sourceFromConsole(message)));
   });
 
   page.on("pageerror", (error) => {

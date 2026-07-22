@@ -32,6 +32,9 @@ Opções:
   --github-annotations   Emite erros e avisos no formato do GitHub Actions
   --sitemap              Analisa URLs publicadas em /sitemap.xml
   --max-pages <número>   Limite de páginas do sitemap (padrão: 20, máximo: 100)
+  --accessibility        Executa a auditoria WCAG com axe-core
+  --lighthouse           Executa auditoria completa (local, somente Chromium)
+  --journey <arquivo>    Executa uma jornada JSON 1.0 em modo isolado
   --ignore-status <lista> Status separados por vírgula, ex.: 401,404
   --ignore-url <regex>   Ignora URLs correspondentes; pode ser repetido
   -h, --help             Exibe esta ajuda
@@ -109,6 +112,9 @@ export function parseCli(args: string[]): ParsedCli {
   let githubAnnotations = false;
   let sitemap = false;
   let maxPages = 20;
+  let journeyPath: string | undefined;
+  let accessibility = false;
+  let lighthouse = false;
   const ignoredStatuses = new Set<number>();
   const ignoredUrlPatterns: RegExp[] = [];
   const optionsWithValue = new Set([
@@ -124,6 +130,7 @@ export function parseCli(args: string[]): ParsedCli {
     "--environment",
     "--history-dir",
     "--max-pages",
+    "--journey",
     "--ignore-status",
     "--ignore-url",
   ]);
@@ -155,6 +162,14 @@ export function parseCli(args: string[]): ParsedCli {
     }
     if (arg === "--sitemap") {
       sitemap = true;
+      continue;
+    }
+    if (arg === "--accessibility") {
+      accessibility = true;
+      continue;
+    }
+    if (arg === "--lighthouse") {
+      lighthouse = true;
       continue;
     }
 
@@ -200,6 +215,9 @@ export function parseCli(args: string[]): ParsedCli {
         maxPages = positiveInteger(value, arg);
         if (maxPages > 100) throw new Error("--max-pages deve ser no máximo 100.");
         break;
+      case "--journey":
+        journeyPath = resolve(value);
+        break;
       case "--ignore-status":
         for (const status of value.split(",")) {
           ignoredStatuses.add(positiveInteger(status.trim(), arg));
@@ -221,6 +239,13 @@ export function parseCli(args: string[]): ParsedCli {
   }
   if (environment && !project) throw new Error("--environment exige a opção --project.");
   if (acceptBaseline && !project) throw new Error("--accept-baseline exige a opção --project.");
+  if (journeyPath && sitemap) throw new Error("--journey não pode ser combinado com --sitemap.");
+  if (lighthouse && browser !== "chromium") throw new Error("--lighthouse exige --browser chromium.");
+  if (lighthouse && journeyPath) throw new Error("--lighthouse não pode ser combinado com --journey.");
+  if (lighthouse && sitemap) throw new Error("--lighthouse ainda não pode ser combinado com --sitemap.");
+  if (journeyPath && (baselinePath || regressionsOnly || project)) {
+    throw new Error("--journey ainda não pode ser combinado com baseline, regressões ou histórico.");
+  }
 
   return {
     action: "scan",
@@ -242,6 +267,9 @@ export function parseCli(args: string[]): ParsedCli {
       githubAnnotations,
       sitemap,
       maxPages,
+      accessibility,
+      lighthouse,
+      ...(journeyPath ? { journeyPath } : {}),
     },
   };
 }

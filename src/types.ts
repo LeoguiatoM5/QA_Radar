@@ -6,6 +6,8 @@ export type IssueCategory =
   | "network"
   | "navigation"
   | "performance"
+  | "best-practices"
+  | "seo"
   | "element"
   | "accessibility";
 export type Severity = "warning" | "error";
@@ -35,6 +37,9 @@ export interface ScanOptions {
   sitemap?: boolean;
   maxPages?: number;
   publicNetworkOnly?: boolean;
+  journeyPath?: string;
+  accessibility?: boolean;
+  lighthouse?: boolean;
 }
 
 export interface ScanProgress {
@@ -72,6 +77,7 @@ export interface Issue {
   title?: string;
   impact?: string;
   recommendation?: string;
+  referenceUrl?: string;
   message: string;
   method: string | undefined;
   status: number | undefined;
@@ -109,6 +115,13 @@ export interface PerformanceMetrics {
   cls: number | undefined;
   domContentLoadedMs: number | undefined;
   loadMs: number | undefined;
+}
+
+export interface LighthouseSummary {
+  performance: number | undefined;
+  bestPractices: number | undefined;
+  seo: number | undefined;
+  reportPath: string;
 }
 
 export interface ScanPageResult {
@@ -150,6 +163,7 @@ export interface ScanReport {
   gateScope: "all" | "regressions";
   summary: ScanSummary;
   performance?: PerformanceMetrics;
+  lighthouse?: LighthouseSummary;
   pages?: ScanPageResult[];
   comparison?: ScanComparison;
   issues: Issue[];

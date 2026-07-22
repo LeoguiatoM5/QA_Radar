@@ -45,6 +45,17 @@ describe("web server", () => {
     assert.match(html, /Cancelar/);
     assert.match(html, /progress-bar/);
     assert.match(html, /Histórico desabilitado neste servidor/);
+    assert.doesNotMatch(html, /id="journey-form"/);
+  });
+
+  it("mantém jornadas desabilitadas por padrão", async () => {
+    const response = await fetch(`${baseUrl}/api/journeys`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 403);
+    assert.match((await response.json() as { error: string }).error, /desabilitadas/);
   });
 
   it("expõe o estado de saúde sem iniciar uma análise", async () => {

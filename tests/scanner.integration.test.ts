@@ -36,6 +36,7 @@ describe("scanner integration", () => {
       ignoredStatuses: new Set(),
       ignoredUrlPatterns: [],
       regressionsOnly: false,
+      accessibility: true,
     };
     const baselinePath = resolve("qa-radar-results", `scanner-baseline-${process.pid}.json`);
     const stages: ScanStage[] = [];
@@ -47,6 +48,7 @@ describe("scanner integration", () => {
       assert.equal(report.passed, false);
       assert.ok(report.issues.some((issue) => issue.category === "console"));
       assert.ok(report.issues.some((issue) => issue.category === "http" && issue.status === 500));
+      assert.ok(report.issues.some((issue) => issue.ruleId === "axe.html-has-lang" && issue.source === "axe-core"));
       assert.ok(report.performance);
       assert.equal(typeof report.performance.ttfbMs, "number");
       assert.equal(typeof report.performance.domContentLoadedMs, "number");
@@ -61,6 +63,42 @@ describe("scanner integration", () => {
       await rm(baselinePath, { force: true });
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it("executa axe-core mesmo quando a página bloqueia scripts inline por CSP", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "content-security-policy": "default-src 'self'; script-src 'none'",
+      });
+      response.end('<!doctype html><html><title>CSP estrita</title><main>Conteúdo</main>');
+    });
+    await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+
+    try {
+      const report = await scan({
+        url: `http://127.0.0.1:${address.port}/`,
+        browser: "chromium",
+        headed: false,
+        timeoutMs: 10_000,
+        settleMs: 0,
+        outputDir: "qa-radar-report-test",
+        format: "console",
+        screenshot: "never",
+        failOn: "error",
+        ignoredStatuses: new Set(),
+        ignoredUrlPatterns: [],
+        accessibility: true,
+      });
+      assert.ok(report.issues.some((issue) => issue.ruleId === "axe.html-has-lang"));
+      assert.ok(!report.issues.some((issue) => issue.ruleId === "accessibility.audit-failed"));
+    } finally {
+      await new Promise<void>((resolveClose, reject) =>
+        server.close((error) => (error ? reject(error) : resolveClose())),
       );
     }
   });
