@@ -303,6 +303,10 @@ describe("web scan integration", () => {
       assert.match((await evidenceReport.locator("body").textContent()) ?? "", /Regressão/);
       assert.match((await evidenceReport.locator("body").textContent()) ?? "", /Confirmar a conclusão/);
       assert.equal(await evidenceReport.locator("img").count() > 0, true);
+      assert.equal(await evidenceReport.locator("img").evaluateAll((images) => images.every((img) => {
+        const image = img as HTMLImageElement;
+        return image.complete && image.naturalWidth > 0;
+      })), true);
       await evidenceReport.close();
       await new Promise((resolve) => setTimeout(resolve, 3_100));
       assert.equal((await page.context().request.get(evidenceUrl, { headers: artifactHeaders })).status(), 404);

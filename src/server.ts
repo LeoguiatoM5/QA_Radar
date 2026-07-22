@@ -691,7 +691,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           "cache-control": "private, no-store",
           "referrer-policy": "no-referrer",
           ...(name.endsWith(".html") ? {
-            "content-security-policy": "sandbox allow-popups; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
+            "content-security-policy": "sandbox allow-popups allow-same-origin; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
           } : {}),
         });
         response.end(content);
