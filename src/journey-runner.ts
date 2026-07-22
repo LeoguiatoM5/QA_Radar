@@ -6,6 +6,7 @@ import { isPotentiallyDestructive, parseJourney, type JourneyDefinition, type Jo
 export interface JourneyStepResult {
   index: number;
   action: JourneyStep["action"];
+  description?: string;
   status: "passed" | "failed";
   durationMs: number;
   error?: string;
@@ -200,6 +201,7 @@ export async function runJourney(
       const result: JourneyStepResult = {
         index,
         action: step.action,
+        ...(step.description ? { description: step.description } : {}),
         status: "passed",
         durationMs: Date.now() - stepStarted,
         ...(evidence ? { evidence } : {}),
@@ -215,6 +217,7 @@ export async function runJourney(
       const result: JourneyStepResult = {
         index,
         action: step.action,
+        ...(step.description ? { description: step.description } : {}),
         status: "failed",
         durationMs: Date.now() - stepStarted,
         error: safeError(error, secrets),

@@ -256,7 +256,7 @@ describe("web scan integration", () => {
       await page.locator("#journey-json").fill(JSON.stringify({ schemaVersion: "1.0", name: "Jornada Web", steps: [
         { action: "goto", url: targetUrl },
         { action: "click", selector: "#go" },
-        { action: "assertText", selector: "#done", text: "Concluído" },
+        { action: "assertText", selector: "#done", text: "Concluído", description: "Confirmar a conclusão" },
       ] }));
       const creationPromise = page.waitForResponse((response) =>
         response.url() === `${appUrl}/api/journeys` && response.request().method() === "POST");
@@ -276,6 +276,9 @@ describe("web scan integration", () => {
       }
       assert.equal(await page.locator("#journey-status").textContent(), "APROVADA");
       assert.match((await page.locator("#journey-steps").textContent()) ?? "", /assertText/);
+      assert.match((await page.locator("#journey-steps").textContent()) ?? "", /Confirmar a conclusão/);
+      assert.equal(await page.locator("#journey-cancel").isHidden(), true);
+      assert.equal(await page.locator("#journey-submit").isVisible(), true);
       const evidenceHref = await page.locator("#journey-steps a").first().getAttribute("href");
       assert.match(evidenceHref ?? "", /^\/api\/journeys\//);
       const evidenceUrl = new URL(evidenceHref ?? "", appUrl).toString();

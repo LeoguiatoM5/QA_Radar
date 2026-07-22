@@ -1,11 +1,14 @@
-export type JourneyStep =
+type JourneyStepDescription = { description?: string };
+
+export type JourneyStep = JourneyStepDescription & (
   | { action: "goto"; url: string }
   | { action: "click"; selector: string; allowDestructive?: boolean }
   | { action: "fill"; selector: string; value?: string; valueFromEnv?: string }
   | { action: "select"; selector: string; value: string }
   | { action: "waitFor"; selector: string; timeoutMs?: number }
   | { action: "assertVisible"; selector: string }
-  | { action: "assertText"; selector: string; text: string };
+  | { action: "assertText"; selector: string; text: string }
+);
 
 export interface JourneyDefinition {
   schemaVersion: "1.0";
@@ -41,29 +44,34 @@ function selector(step: Record<string, unknown>, index: number): string {
   return text(step.selector, `Passo ${index + 1}: selector`);
 }
 
+function description(step: Record<string, unknown>, index: number): JourneyStepDescription {
+  if (step.description === undefined) return {};
+  return { description: text(step.description, `Passo ${index + 1}: description`, 200) };
+}
+
 function parseStep(value: unknown, index: number): JourneyStep {
   const step = record(value, `Passo ${index + 1}`);
   const action = text(step.action, `Passo ${index + 1}: action`, 30);
   if (!ACTIONS.has(action)) throw new Error(`Passo ${index + 1}: ação não permitida "${action}".`);
   switch (action) {
     case "goto": {
-      exactKeys(step, ["action", "url"], index);
+      exactKeys(step, ["action", "url", "description"], index);
       const url = text(step.url, `Passo ${index + 1}: url`, 2_048);
       const parsed = new URL(url);
       if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(`Passo ${index + 1}: URL deve usar HTTP ou HTTPS.`);
-      return { action, url: parsed.toString() };
+      return { action, url: parsed.toString(), ...description(step, index) };
     }
     case "click": {
-      exactKeys(step, ["action", "selector", "allowDestructive"], index);
+      exactKeys(step, ["action", "selector", "allowDestructive", "description"], index);
       const target = selector(step, index);
       const allowDestructive = step.allowDestructive === true;
       if (isPotentiallyDestructive(target) && !allowDestructive) {
         throw new Error(`Passo ${index + 1}: clique potencialmente destrutivo exige allowDestructive: true.`);
       }
-      return { action, selector: target, ...(allowDestructive ? { allowDestructive: true } : {}) };
+      return { action, selector: target, ...(allowDestructive ? { allowDestructive: true } : {}), ...description(step, index) };
     }
     case "fill": {
-      exactKeys(step, ["action", "selector", "value", "valueFromEnv"], index);
+      exactKeys(step, ["action", "selector", "value", "valueFromEnv", "description"], index);
       const target = selector(step, index);
       const hasValue = typeof step.value === "string";
       const hasEnvironment = typeof step.valueFromEnv === "string";
@@ -73,27 +81,27 @@ function parseStep(value: unknown, index: number): JourneyStep {
         if (!/^QA_RADAR_SECRET_[A-Z0-9_]+$/.test(name)) {
           throw new Error(`Passo ${index + 1}: secrets devem usar variável QA_RADAR_SECRET_*.`);
         }
-        return { action, selector: target, valueFromEnv: name };
+        return { action, selector: target, valueFromEnv: name, ...description(step, index) };
       }
-      return { action, selector: target, value: text(step.value, `Passo ${index + 1}: value`, 2_000) };
+      return { action, selector: target, value: text(step.value, `Passo ${index + 1}: value`, 2_000), ...description(step, index) };
     }
     case "select":
-      exactKeys(step, ["action", "selector", "value"], index);
-      return { action, selector: selector(step, index), value: text(step.value, `Passo ${index + 1}: value`) };
+      exactKeys(step, ["action", "selector", "value", "description"], index);
+      return { action, selector: selector(step, index), value: text(step.value, `Passo ${index + 1}: value`), ...description(step, index) };
     case "waitFor": {
-      exactKeys(step, ["action", "selector", "timeoutMs"], index);
+      exactKeys(step, ["action", "selector", "timeoutMs", "description"], index);
       const timeoutMs = step.timeoutMs === undefined ? undefined : Number(step.timeoutMs);
       if (timeoutMs !== undefined && (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 120_000)) {
         throw new Error(`Passo ${index + 1}: timeoutMs deve estar entre 100 e 120000.`);
       }
-      return { action, selector: selector(step, index), ...(timeoutMs === undefined ? {} : { timeoutMs }) };
+      return { action, selector: selector(step, index), ...(timeoutMs === undefined ? {} : { timeoutMs }), ...description(step, index) };
     }
     case "assertVisible":
-      exactKeys(step, ["action", "selector"], index);
-      return { action, selector: selector(step, index) };
+      exactKeys(step, ["action", "selector", "description"], index);
+      return { action, selector: selector(step, index), ...description(step, index) };
     case "assertText":
-      exactKeys(step, ["action", "selector", "text"], index);
-      return { action, selector: selector(step, index), text: text(step.text, `Passo ${index + 1}: text`) };
+      exactKeys(step, ["action", "selector", "text", "description"], index);
+      return { action, selector: selector(step, index), text: text(step.text, `Passo ${index + 1}: text`), ...description(step, index) };
     default:
       throw new Error(`Passo ${index + 1}: ação não permitida.`);
   }

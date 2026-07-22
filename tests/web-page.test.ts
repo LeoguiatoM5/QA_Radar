@@ -31,6 +31,10 @@ describe("dashboard components", () => {
     assert.match(html, /id="journey-form"/);
     assert.match(html, /\/api\/journeys/);
     assert.match(html, /Informe a URL e descreva os passos que o navegador deve executar/);
+    assert.match(html, /Como montar uma jornada/);
+    assert.match(html, /description/);
+    assert.match(html, /journey-controls/);
+    assert.match(html, /journeyActionLabels/);
     assert.doesNotMatch(html, /Secrets são lidos somente/);
   });
 

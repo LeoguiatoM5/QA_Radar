@@ -289,11 +289,11 @@ Crie `journey.json`:
   "schemaVersion": "1.0",
   "name": "Login",
   "steps": [
-    { "action": "goto", "url": "https://staging.example.com/login" },
-    { "action": "fill", "selector": "#email", "value": "qa@example.com" },
-    { "action": "fill", "selector": "#password", "valueFromEnv": "QA_RADAR_SECRET_PASSWORD" },
-    { "action": "click", "selector": "button[type=submit]" },
-    { "action": "assertVisible", "selector": "[data-testid=dashboard]" }
+    { "action": "goto", "url": "https://staging.example.com/login", "description": "Abrir a página de login" },
+    { "action": "fill", "selector": "#email", "value": "qa@example.com", "description": "Informar o usuário" },
+    { "action": "fill", "selector": "#password", "valueFromEnv": "QA_RADAR_SECRET_PASSWORD", "description": "Informar a senha" },
+    { "action": "click", "selector": "button[type=submit]", "description": "Entrar no sistema" },
+    { "action": "assertVisible", "selector": "[data-testid=dashboard]", "description": "Confirmar que o painel foi exibido" }
   ]
 }
 ```
@@ -307,6 +307,10 @@ npm run dev -- https://staging.example.com --journey journey.json --output qa-ra
 
 O modo é opt-in, aceita somente a origem informada e gera `journey-report.json`
 e screenshots em `journey-evidence/`.
+
+Cada passo pode declarar `description` com até 200 caracteres. Essa descrição é
+exibida no resultado para explicar a intenção do teste; quando ausente, o
+dashboard apresenta um nome amigável baseado na ação.
 
 Para testar jornadas no dashboard local:
 
