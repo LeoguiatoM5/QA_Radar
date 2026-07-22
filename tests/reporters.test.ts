@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createGitHubAnnotations, createHtmlReport, createJunitReport, createSarifReport } from "../src/reporters.js";
+import { createGitHubAnnotations, createHtmlReport, createJunitReport, createSarifReport, resourceTypeLabel } from "../src/reporters.js";
 import type { ScanReport } from "../src/types.js";
 
 describe("HTML reporter", () => {
+  it("traduz tipos técnicos somente na apresentação", () => {
+    assert.equal(resourceTypeLabel("document"), "Página principal");
+    assert.equal(resourceTypeLabel("fetch"), "Chamada da aplicação");
+    assert.equal(resourceTypeLabel("script"), "JavaScript");
+  });
   it("escapa conteúdo vindo da página", () => {
     const report: ScanReport = {
       tool: "QA Radar",

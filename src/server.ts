@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { access, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseCli } from "./cli.js";
 import { writeReports } from "./reporters.js";
@@ -11,6 +11,9 @@ import { assertPublicUrl } from "./security.js";
 import { findHistoryBaseline, listProjectHistory, storeRun } from "./history.js";
 import { scanSitemap } from "./suite.js";
 import { JobQueue, type ScanJob } from "./job-queue.js";
+import { RateLimiter } from "./rate-limit.js";
+import { runJourneyDefinition } from "./journey-cli.js";
+import type { JourneyRunResult } from "./journey-runner.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -53,6 +56,7 @@ export interface ServerOptions {
   turnstileSiteKey: string | undefined;
   turnstileSecretKey: string | undefined;
   allowHistory: boolean;
+  allowJourneys: boolean;
   historyDir: string;
   maxSitemapPages: number;
   operationalLogger: (event: OperationalEvent) => void;
@@ -75,15 +79,11 @@ const DEFAULT_OPTIONS: ServerOptions = {
   turnstileSiteKey: undefined,
   turnstileSecretKey: undefined,
   allowHistory: false,
+  allowJourneys: false,
   historyDir: join(process.cwd(), ".qa-radar-history"),
   maxSitemapPages: 20,
   operationalLogger: defaultOperationalLogger,
 };
-
-interface RateEntry {
-  count: number;
-  resetAt: number;
-}
 
 function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
@@ -141,6 +141,7 @@ function scanOptions(body: Record<string, unknown>, outputDir: string, config: S
     if (value) args.push(name, value);
   }
   if (body.sitemap === true) args.push("--sitemap");
+  if (body.accessibility === true) args.push("--accessibility");
   if (body.regressionsOnly === true) args.push("--regressions-only");
   if (body.acceptBaseline === true) args.push("--accept-baseline");
   if (textField(body, "project")) args.push("--history-dir", config.historyDir);
@@ -204,7 +205,18 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     throw new Error("Configure TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY em conjunto.");
   }
   const jobQueue = new JobQueue();
-  const rateLimits = new Map<string, RateEntry>();
+  const rateLimiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
+  let journeyActive = false;
+
+  const publicJourney = (report: JourneyRunResult): JourneyRunResult => ({
+    ...report,
+    steps: report.steps.map((step) => ({
+      ...step,
+      ...(step.evidence ? {
+        evidence: { before: basename(step.evidence.before), after: basename(step.evidence.after) },
+      } : {}),
+    })),
+  });
 
   const logOperational = (event: OperationalEvent): void => {
     try {
@@ -243,25 +255,12 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   };
 
   const consumeRateLimit = (request: IncomingMessage, response: ServerResponse): boolean => {
-    const now = Date.now();
-    if (rateLimits.size > 10_000) {
-      for (const [address, candidate] of rateLimits) {
-        if (candidate.resetAt <= now) rateLimits.delete(address);
-      }
-    }
-    const key = clientAddress(request);
-    let entry = rateLimits.get(key);
-    if (!entry || entry.resetAt <= now) {
-      entry = { count: 0, resetAt: now + config.rateLimitWindowMs };
-      rateLimits.set(key, entry);
-    }
-    entry.count += 1;
-    const remaining = Math.max(config.rateLimitMax - entry.count, 0);
-    response.setHeader("x-ratelimit-limit", config.rateLimitMax);
-    response.setHeader("x-ratelimit-remaining", remaining);
-    response.setHeader("x-ratelimit-reset", Math.ceil(entry.resetAt / 1000));
-    if (entry.count <= config.rateLimitMax) return true;
-    response.setHeader("retry-after", Math.max(Math.ceil((entry.resetAt - now) / 1000), 1));
+    const decision = rateLimiter.consume(clientAddress(request));
+    response.setHeader("x-ratelimit-limit", decision.limit);
+    response.setHeader("x-ratelimit-remaining", decision.remaining);
+    response.setHeader("x-ratelimit-reset", Math.ceil(decision.resetAt / 1000));
+    if (decision.allowed) return true;
+    response.setHeader("retry-after", decision.retryAfterSeconds ?? 1);
     json(response, 429, { error: "Muitas análises solicitadas. Aguarde antes de tentar novamente." });
     return false;
   };
@@ -278,6 +277,13 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           ...queueStats(),
         });
       });
+    }, config.retentionMs);
+    timer.unref();
+  };
+
+  const expireJourney = (id: string): void => {
+    const timer = setTimeout(() => {
+      void rm(join(config.resultsDir, `journey-${id}`), { recursive: true, force: true });
     }, config.retentionMs);
     timer.unref();
   };
@@ -407,11 +413,66 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           "x-content-type-options": "nosniff",
           "content-security-policy": `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
         });
-        response.end(createWebPage(config.turnstileSiteKey, config.allowHistory, config.maxSitemapPages));
+        response.end(createWebPage(config.turnstileSiteKey, config.allowHistory, config.maxSitemapPages, config.allowJourneys));
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/journeys") {
+        if (!config.allowJourneys) {
+          json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
+          return;
+        }
+        if (!consumeRateLimit(request, response)) return;
+        const stats = queueStats();
+        if (journeyActive || stats.active > 0 || stats.queued > 0) {
+          json(response, 429, { error: "Já existe uma execução usando o navegador neste servidor." });
+          return;
+        }
+        const body = await readJson(request);
+        const definition = body.journey;
+        if (!definition) throw new Error("Informe a definição da jornada.");
+        const id = randomUUID();
+        const options = scanOptions(body, join(config.resultsDir, `journey-${id}`), config);
+        if (!config.allowPrivateTargets) {
+          await assertPublicUrl(options.url);
+          options.publicNetworkOnly = true;
+        }
+        journeyActive = true;
+        try {
+          const result = await runJourneyDefinition(options, definition);
+          json(response, 200, { id, report: publicJourney(result.report) });
+        } finally {
+          journeyActive = false;
+          expireJourney(id);
+        }
+        return;
+      }
+
+      const journeyArtifact = /^\/api\/journeys\/([0-9a-f-]+)\/([0-9]{3}-[a-zA-Z]+-(?:before|after)\.png)$/.exec(url.pathname);
+      if (request.method === "GET" && journeyArtifact) {
+        if (!config.allowJourneys) {
+          json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
+          return;
+        }
+        const id = journeyArtifact[1];
+        const name = journeyArtifact[2];
+        if (!id || !name) throw new Error("Evidência inválida.");
+        const content = await readFile(join(config.resultsDir, `journey-${id}`, "journey-evidence", name));
+        response.writeHead(200, {
+          "content-type": "image/png",
+          "content-length": content.length,
+          "x-content-type-options": "nosniff",
+          "cache-control": "no-store",
+        });
+        response.end(content);
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/api/scans") {
+        if (journeyActive) {
+          json(response, 429, { error: "Já existe uma jornada usando o navegador neste servidor." });
+          return;
+        }
         if (!consumeRateLimit(request, response)) return;
         const stats = queueStats();
         if (stats.queued + stats.active >= config.maxQueueSize) {

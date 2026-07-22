@@ -24,7 +24,7 @@ describe("web scan integration", () => {
   it("cancela uma análise em execução e libera a concorrência", async () => {
     const target = createServer((_request, response) => {
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end("<!doctype html><title>Alvo lento</title><main>Conteúdo</main>");
+      response.end('<!doctype html><html lang="pt-BR"><title>Alvo lento</title><main>Conteúdo</main>');
     });
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-cancel-"));
     const app = createQaRadarServer({ resultsDir, concurrency: 1, allowPrivateTargets: true });
@@ -84,7 +84,7 @@ describe("web scan integration", () => {
         return;
       }
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end('<title>Alvo Web</title><h1>Catálogo</h1><img src="/broken" alt="Imagem do produto"><button></button><input id="email"><div id="repetido"></div><span id="repetido"></span>');
+      response.end('<html lang="pt-BR"><title>Alvo Web</title><main><h1>Catálogo</h1><img src="/broken" alt="Imagem do produto"><button></button><input id="email"><div id="repetido"></div><span id="repetido"></span></main>');
     });
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-"));
     const app = createQaRadarServer({
@@ -110,6 +110,7 @@ describe("web scan integration", () => {
       await page.locator("#timeoutMs").fill("10000");
       await page.locator("#settleMs").fill("200");
       await page.locator("#screenshot").selectOption("always");
+      await page.locator("#accessibility").check();
       await page.locator("#submit").click();
       await page.locator("#status.fail").waitFor({ timeout: 20_000 });
 
@@ -123,8 +124,8 @@ describe("web scan integration", () => {
       assert.match((await page.locator("#history-list").textContent()) ?? "", /catalogo-web|Execução completa/i);
       assert.match((await page.locator("#issues").textContent()) ?? "", /503/);
       assert.match((await page.locator("#issues").textContent()) ?? "", /img\[src/);
-      assert.match((await page.locator("#issues").textContent()) ?? "", /Botão sem identificação/);
-      assert.match((await page.locator("#issues").textContent()) ?? "", /Campo sem identificação/);
+      assert.match((await page.locator("#issues").textContent()) ?? "", /Buttons must have discernible text/);
+      assert.match((await page.locator("#issues").textContent()) ?? "", /Form elements must have labels/);
       assert.match((await page.locator("#issues").textContent()) ?? "", /Identificador duplicado/);
 
       const htmlLink = page.getByRole("link", { name: /Abrir relatório HTML/ });
@@ -169,7 +170,7 @@ describe("web scan integration", () => {
         return;
       }
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end(`<!doctype html><title>${request.url === "/catalogo" ? "Catálogo" : "Contato"}</title><main>Conteúdo saudável</main>`);
+      response.end(`<!doctype html><html lang="pt-BR"><title>${request.url === "/catalogo" ? "Catálogo" : "Contato"}</title><main>Conteúdo saudável</main>`);
     });
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-suite-"));
     const app = createQaRadarServer({ resultsDir, concurrency: 1, allowPrivateTargets: true, maxSitemapPages: 5 });
@@ -198,6 +199,44 @@ describe("web scan integration", () => {
       const childResponse = await page.request.get(new URL(href ?? "", appUrl).toString());
       assert.equal(childResponse.status(), 200);
       assert.match(await childResponse.text(), /Catálogo/);
+    } finally {
+      await browser?.close();
+      await close(app);
+      await close(target);
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("executa jornada experimental pelo dashboard quando habilitada", async () => {
+    const target = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end('<!doctype html><html lang="pt-BR"><main><button id="go" onclick="document.querySelector(\'#done\').textContent=\'Concluído\'">Ir</button><p id="done"></p></main>');
+    });
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-journey-"));
+    const app = createQaRadarServer({ resultsDir, allowJourneys: true, allowPrivateTargets: true, retentionMs: 1_000 });
+    const targetUrl = await listen(target);
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(appUrl);
+      await page.locator("#journey-url").fill(targetUrl);
+      await page.locator("#journey-json").fill(JSON.stringify({ schemaVersion: "1.0", name: "Jornada Web", steps: [
+        { action: "goto", url: targetUrl },
+        { action: "click", selector: "#go" },
+        { action: "assertText", selector: "#done", text: "Concluído" },
+      ] }));
+      await page.locator("#journey-submit").click();
+      await page.locator("#journey-status.pass").waitFor({ timeout: 20_000 });
+      assert.equal(await page.locator("#journey-status").textContent(), "APROVADA");
+      assert.match((await page.locator("#journey-steps").textContent()) ?? "", /assertText/);
+      const evidenceHref = await page.locator("#journey-steps a").first().getAttribute("href");
+      assert.match(evidenceHref ?? "", /^\/api\/journeys\//);
+      const evidenceUrl = new URL(evidenceHref ?? "", appUrl).toString();
+      assert.equal((await page.request.get(evidenceUrl)).status(), 200);
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      assert.equal((await page.request.get(evidenceUrl)).status(), 404);
     } finally {
       await browser?.close();
       await close(app);

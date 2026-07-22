@@ -47,6 +47,21 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:integration
 
+  lighthouse:
+    name: Integração Lighthouse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:lighthouse
+
   action-smoke:
     name: Composite action
     runs-on: ubuntu-latest

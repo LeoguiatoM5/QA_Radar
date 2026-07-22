@@ -27,18 +27,36 @@ function categoryLabel(category: Issue["category"]): string {
     network: "Rede",
     navigation: "Navegação",
     performance: "Performance",
+    "best-practices": "Boas práticas",
+    seo: "SEO",
     element: "Elemento da página",
     accessibility: "Acessibilidade",
   }[category];
 }
 
+export function resourceTypeLabel(resourceType: string | undefined): string {
+  if (!resourceType) return "Página ou requisição de rede";
+  return {
+    document: "Página principal",
+    fetch: "Chamada da aplicação",
+    xhr: "Chamada da aplicação (XHR)",
+    script: "JavaScript",
+    stylesheet: "Folha de estilos",
+    image: "Imagem",
+    font: "Fonte",
+    media: "Áudio ou vídeo",
+    websocket: "WebSocket",
+  }[resourceType] ?? resourceType;
+}
+
 function issueLine(issue: Issue): string {
-  const details = [issue.method, issue.status, issue.resourceType].filter(Boolean).join(" · ");
+  const details = [issue.method, issue.status, issue.resourceType ? resourceTypeLabel(issue.resourceType) : undefined].filter(Boolean).join(" · ");
   const occurrence = issue.occurrences > 1 ? ` (${issue.occurrences}x)` : "";
   return `${issue.title ?? issue.message}${occurrence}${details ? ` [${details}]` : ""}` +
     `${issue.impact ? `\n    Impacto: ${issue.impact}` : ""}` +
     `${issue.recommendation ? `\n    Ação: ${issue.recommendation}` : ""}` +
     `${issue.url ? `\n    URL: ${issue.url}` : ""}` +
+    `${issue.referenceUrl ? `\n    Referência: ${issue.referenceUrl}` : ""}` +
     `\n    Técnico: ${issue.message}`;
 }
 
@@ -59,6 +77,10 @@ export function printConsoleReport(report: ScanReport): void {
         `FCP ${metric(report.performance.fcpMs, " ms")} · ` +
         `LCP ${metric(report.performance.lcpMs, " ms")} · CLS ${metric(report.performance.cls, "")}`,
     );
+  }
+  if (report.lighthouse) {
+    const score = (value: number | undefined) => value === undefined ? "N/A" : Math.round(value * 100);
+    console.log(`Lighthouse: Performance ${score(report.lighthouse.performance)} · Boas práticas ${score(report.lighthouse.bestPractices)} · SEO ${score(report.lighthouse.seo)}`);
   }
   if (report.scanStatus === "partial") console.log(`Execução:   ${paint("PARCIAL", "yellow")} · DOM indisponível ou navegação instável`);
   console.log(
@@ -154,6 +176,7 @@ export function createSarifReport(report: ScanReport): string {
     name: issue.ruleId.replaceAll(".", "_"),
     shortDescription: { text: issue.title ?? issue.message },
     help: { text: issue.recommendation ?? "Consulte o relatório do QA Radar para investigar a ocorrência." },
+    ...(issue.referenceUrl ? { helpUri: issue.referenceUrl } : {}),
     properties: { category: issue.category },
   }])).values()];
   const results = report.issues.map((issue) => ({
@@ -188,10 +211,10 @@ export function createHtmlReport(report: ScanReport): string {
       (issue) => `<tr>
         <td><span class="badge ${issue.severity}">${issue.severity === "error" ? "Erro" : "Aviso"}</span>${issue.baselineStatus ? `<small>${issue.baselineStatus === "new" ? "Novo" : "Existente"}</small>` : ""}</td>
         <td>${escapeHtml(categoryLabel(issue.category))}</td>
-        <td><strong>${escapeHtml(issue.title ?? issue.message)}</strong>${issue.occurrences > 1 ? ` <small>${issue.occurrences}x</small>` : ""}${issue.impact ? `<p>${escapeHtml(issue.impact)}</p>` : ""}${issue.recommendation ? `<p class="action"><b>Como verificar:</b> ${escapeHtml(issue.recommendation)}</p>` : ""}<code>${escapeHtml(issue.url)}</code><details><summary>Detalhe técnico</summary><pre>${escapeHtml(issue.message)}</pre></details></td>
+        <td><strong>${escapeHtml(issue.title ?? issue.message)}</strong>${issue.occurrences > 1 ? ` <small>${issue.occurrences}x</small>` : ""}${issue.impact ? `<p>${escapeHtml(issue.impact)}</p>` : ""}${issue.recommendation ? `<p class="action"><b>Como corrigir:</b> ${escapeHtml(issue.recommendation)}</p>` : ""}${issue.referenceUrl ? `<p><a href="${escapeHtml(issue.referenceUrl)}" target="_blank" rel="noreferrer">Referência oficial</a></p>` : ""}<code>${escapeHtml(issue.url)}</code><details><summary>Detalhe técnico</summary><pre>${escapeHtml(issue.message)}</pre></details></td>
         <td>${escapeHtml(issue.status ?? "—")}</td>
-        <td>${escapeHtml(issue.resourceType ?? "—")}</td>
-        <td>${issue.evidence ? `<span class="evidence">${escapeHtml(issue.evidence.label)}</span><code>${escapeHtml(issue.evidence.selector)}</code><small>${escapeHtml(issue.evidence.element)}</small>` : "<span class=\"muted\">Página/rede</span>"}</td>
+        <td>${escapeHtml(resourceTypeLabel(issue.resourceType))}</td>
+        <td>${issue.evidence ? `<span class="evidence">${escapeHtml(issue.evidence.label)}</span><code>${escapeHtml(issue.evidence.selector)}</code><small>${escapeHtml(issue.evidence.element)}</small>` : `<span class="muted">${escapeHtml(issue.resourceType === "document" ? "Página principal" : "Sem elemento DOM associado")}</span>`}</td>
       </tr>`,
     )
     .join("\n");
@@ -203,6 +226,9 @@ export function createHtmlReport(report: ScanReport): string {
     : "";
   const performance = report.performance
     ? `<section><h2>Performance de laboratório</h2><div class="grid"><div class="card"><span class="muted">TTFB</span><div class="number">${escapeHtml(report.performance.ttfbMs ?? "N/A")}<small> ms</small></div></div><div class="card"><span class="muted">FCP</span><div class="number">${escapeHtml(report.performance.fcpMs ?? "N/A")}<small> ms</small></div></div><div class="card"><span class="muted">LCP</span><div class="number">${escapeHtml(report.performance.lcpMs ?? "N/A")}<small> ms</small></div></div><div class="card"><span class="muted">CLS</span><div class="number">${escapeHtml(report.performance.cls ?? "N/A")}</div></div></div><p class="muted">DOMContentLoaded: ${escapeHtml(report.performance.domContentLoadedMs ?? "N/A")} ms · Load: ${escapeHtml(report.performance.loadMs ?? "N/A")} ms</p></section>`
+    : "";
+  const lighthouse = report.lighthouse
+    ? `<section><h2>Lighthouse</h2><div class="grid"><div class="card"><span class="muted">Performance</span><div class="number">${escapeHtml(report.lighthouse.performance === undefined ? "N/A" : Math.round(report.lighthouse.performance * 100))}</div></div><div class="card"><span class="muted">Boas práticas</span><div class="number">${escapeHtml(report.lighthouse.bestPractices === undefined ? "N/A" : Math.round(report.lighthouse.bestPractices * 100))}</div></div><div class="card"><span class="muted">SEO</span><div class="number">${escapeHtml(report.lighthouse.seo === undefined ? "N/A" : Math.round(report.lighthouse.seo * 100))}</div></div></div><a href="${escapeHtml(report.lighthouse.reportPath)}">Abrir relatório Lighthouse bruto</a></section>`
     : "";
   const coverage = report.pages
     ? `<section><h2>Cobertura do sitemap</h2><table><thead><tr><th>Página</th><th>HTTP</th><th>Estado</th><th>Erros</th><th>Avisos</th><th>Tempo</th></tr></thead><tbody>${report.pages.map((page) => `<tr><td><a href="pages/${escapeHtml(basename(page.outputDir))}/report.html">${escapeHtml(page.title || page.url)}</a><code>${escapeHtml(page.url)}</code></td><td>${escapeHtml(page.mainStatus ?? "N/A")}</td><td>${page.scanStatus === "completed" ? "Completa" : "Parcial"}</td><td>${page.summary.errors}</td><td>${page.summary.warnings}</td><td>${page.durationMs} ms</td></tr>`).join("")}</tbody></table></section>`
@@ -218,6 +244,7 @@ export function createHtmlReport(report: ScanReport): string {
 <div class="grid"><div class="card"><span class="muted">Erros</span><div class="number">${report.summary.errors}</div></div><div class="card"><span class="muted">Avisos</span><div class="number">${report.summary.warnings}</div></div><div class="card"><span class="muted">HTTP principal</span><div class="number">${escapeHtml(report.mainStatus ?? "N/A")}</div></div><div class="card"><span class="muted">Duração</span><div class="number">${report.durationMs}<small> ms</small></div></div></div>
 ${comparison}
 ${performance}
+${lighthouse}
 ${coverage}
 <section><h2>Ocorrências</h2>${rows ? `<table><thead><tr><th>Nível</th><th>Categoria</th><th>Detalhe</th><th>HTTP</th><th>Recurso</th><th>Apontamento</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>Nenhum problema encontrado.</p>"}</section>
 ${screenshot}<p class="muted">Executado em ${escapeHtml(report.startedAt)} · ${escapeHtml(report.browser)} · Estado: ${report.scanStatus === "partial" ? "parcial" : "completo"} · Quality gate: ${escapeHtml(report.failOn)}</p>

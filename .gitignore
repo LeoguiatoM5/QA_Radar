@@ -4,5 +4,7 @@ qa-radar-report/
 qa-radar-results/
 .qa-radar-history/
 qa-radar-report-test/
+qa-radar-report-test-axe/
+qa-radar-journey-test/
 *.log
 .DS_Store

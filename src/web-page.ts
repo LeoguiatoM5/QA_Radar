@@ -6,7 +6,7 @@ function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-export function createWebPage(turnstileSiteKey?: string, allowHistory = false, maxSitemapPages = 20): string {
+export function createWebPage(turnstileSiteKey?: string, allowHistory = false, maxSitemapPages = 20, allowJourneys = false): string {
   const turnstileScript = turnstileSiteKey
     ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
     : "";
@@ -26,6 +26,6 @@ export function createWebPage(turnstileSiteKey?: string, allowHistory = false, m
   ${turnstileScript}
   <style>${WEB_STYLES}</style>
 </head>
-<body>${renderDashboard({ allowHistory, maxSitemapPages, turnstileWidget, historyWidget })}
+<body>${renderDashboard({ allowHistory, maxSitemapPages, turnstileWidget, historyWidget, allowJourneys })}
 <script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
 }

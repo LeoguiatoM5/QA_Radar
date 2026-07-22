@@ -96,4 +96,24 @@ describe("parseCli", () => {
     assert.equal(result.options?.maxPages, 35);
     assert.throws(() => parseCli(["https://example.com", "--max-pages", "101"]), /no máximo 100/);
   });
+
+  it("mantém axe-core desativado por compatibilidade até opção explícita", () => {
+    assert.equal(parseCli(["https://example.com"]).options?.accessibility, false);
+    assert.equal(parseCli(["https://example.com", "--accessibility"]).options?.accessibility, true);
+  });
+
+  it("habilita Lighthouse somente em Chromium e fora de jornadas", () => {
+    assert.equal(parseCli(["https://example.com"]).options?.lighthouse, false);
+    assert.equal(parseCli(["https://example.com", "--lighthouse"]).options?.lighthouse, true);
+    assert.throws(() => parseCli(["https://example.com", "--browser", "firefox", "--lighthouse"]), /chromium/);
+    assert.throws(() => parseCli(["https://example.com", "--journey", "x.json", "--lighthouse"]), /não pode/);
+    assert.throws(() => parseCli(["https://example.com", "--sitemap", "--lighthouse"]), /sitemap/);
+  });
+
+  it("habilita jornada isolada e rejeita combinações ainda incompatíveis", () => {
+    const result = parseCli(["https://example.com", "--journey", "login.json"]);
+    assert.ok(result.options?.journeyPath?.endsWith("login.json"));
+    assert.throws(() => parseCli(["https://example.com", "--journey", "login.json", "--sitemap"]), /não pode ser combinado/);
+    assert.throws(() => parseCli(["https://example.com", "--journey", "login.json", "--project", "web"]), /ainda não pode/);
+  });
 });

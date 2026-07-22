@@ -6,6 +6,12 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- Auditoria de acessibilidade com `axe-core`, normalizada no mesmo modelo de
+  issues, evidências, fingerprints e quality gate do QA Radar.
+- Jornadas Playwright declarativas e experimentais pela CLI e pelo dashboard
+  local, com evidências antes/depois e secrets somente por variáveis de ambiente.
+- Adaptador Lighthouse experimental e opt-in pela CLI, com resumo normalizado e
+  preservação do relatório bruto.
 - Testes de contrato do schema JSON `1.0` e de incompatibilidade de baselines
   antigos.
 - Teste do ciclo de retenção, incluindo remoção do job e evento
@@ -20,6 +26,13 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Alterado
 
+- Auditoria `axe-core` passou a ser opt-in para não alterar silenciosamente os
+  quality gates existentes (`--accessibility` ou opção equivalente na interface).
+- Jornadas agora bloqueiam redirecionamentos para origens não autorizadas antes
+  da requisição, inspecionam controles destrutivos e expiram seus artefatos.
+- Diagnósticos Lighthouse agora apontam auditorias específicas com orientação,
+  evidência e referência, sem alertas genéricos por nota nem duplicação do scanner.
+
 - Eventos do navegador, métricas de performance, inspeção DOM, correlação e
   anotação de evidências extraídos de `scanner.ts` para módulos dedicados,
   sem mudança no comportamento do scanner.
@@ -27,6 +40,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   `web-page.ts` para módulos dedicados, com testes próprios dos componentes.
 - Estado, ordenação e transições da fila extraídos de `server.ts` para um
   módulo dedicado e testável.
+- Política e estado do rate limit extraídos de `server.ts` para um módulo
+  dedicado, com testes de isolamento e renovação da janela.
 
 ## [3.0.1] - 2026-07-20
 

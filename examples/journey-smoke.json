@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Smoke público sem ações destrutivas",
+  "steps": [
+    {
+      "action": "goto",
+      "url": "https://www.cantinhodasqas.com.br/"
+    },
+    {
+      "action": "assertVisible",
+      "selector": "body"
+    }
+  ]
+}

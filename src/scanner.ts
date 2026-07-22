@@ -13,6 +13,7 @@ import { identifyIssue } from "./fingerprint.js";
 import type {
   IssueInput,
   PerformanceMetrics,
+  LighthouseSummary,
   ScanControl,
   ScanOptions,
   ScanReport,
@@ -25,6 +26,8 @@ import { attachListeners, cleanMessage } from "./scanner-events.js";
 import { collectPerformanceMetrics, installPerformanceObservers } from "./scanner-performance.js";
 import { annotateEvidence, correlateIssues } from "./scanner-evidence.js";
 import { inspectStablePage } from "./scanner-dom.js";
+import { auditAccessibility } from "./scanner-accessibility.js";
+import { auditLighthouse } from "./scanner-lighthouse.js";
 
 function browserType(name: ScanOptions["browser"]): BrowserType {
   return { chromium, firefox, webkit }[name];
@@ -46,6 +49,7 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
   let mainStatus: number | undefined;
   let screenshotPath: string | undefined;
   let performance: PerformanceMetrics | undefined;
+  let lighthouse: LighthouseSummary | undefined;
   let scanStatus: ScanReport["scanStatus"] = "completed";
   const abort = (): void => {
     void browser?.close();
@@ -109,8 +113,15 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
     issues.push(...inspection.issues);
     if (inspection.partial) scanStatus = "partial";
     if (scanStatus === "completed") {
+      if (options.accessibility) issues.push(...await auditAccessibility(page, options.url));
       performance = await collectPerformanceMetrics(page);
       if (performance) issues.push(...performanceIssues(performance, page.url() || options.url));
+      if (options.lighthouse) {
+        if (options.publicNetworkOnly) throw new Error("Lighthouse ainda não está habilitado no servidor público.");
+        const audit = await auditLighthouse(options.url, options.outputDir, options.timeoutMs);
+        lighthouse = audit.summary;
+        issues.push(...audit.issues);
+      }
     }
 
     const uniqueIssues = deduplicateIssues(correlateIssues(issues).map(identifyIssue));
@@ -157,6 +168,7 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
       gateScope: options.regressionsOnly ? "regressions" : "all",
       summary,
       ...(performance ? { performance } : {}),
+      ...(lighthouse ? { lighthouse } : {}),
       ...(comparison ? { comparison } : {}),
       issues: uniqueIssues,
       screenshotPath,

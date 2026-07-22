@@ -29,14 +29,17 @@ O objetivo da versão Beta é validar a utilidade da ferramenta com QAs, desenvo
 ### Inspeção segura dos elementos
 
 - Imagens quebradas ou que não puderam ser decodificadas.
-- Imagens visíveis sem descrição alternativa.
-- Botões e links sem identificação acessível.
-- Campos de formulário sem label ou nome acessível.
-- Iframes visíveis sem título.
-- Identificadores HTML duplicados.
+- Auditoria automática com `axe-core`, cobrindo regras WCAG aplicáveis à página.
+- Regra, impacto, elemento e orientação de correção para cada violação encontrada.
+- Elementos afetados pela mesma regra são agrupados para evitar diagnósticos repetitivos.
+- Verificações complementares, como imagens quebradas e identificadores HTML duplicados.
 - Relação entre recursos com falha e seus elementos no DOM.
 
-Essa inspeção é considerada segura porque não clica automaticamente em controles, não envia formulários e não executa ações que possam alterar dados.
+Essa inspeção é considerada segura porque não clica automaticamente em controles, não envia formulários e não executa ações que possam alterar dados. A auditoria automatizada não substitui uma avaliação manual de acessibilidade.
+
+Para preservar os quality gates existentes, o `axe-core` é opt-in. Ative
+**Auditoria de acessibilidade com axe-core** na interface ou use
+`--accessibility` pela CLI.
 
 ### Evidências e relatórios
 
@@ -84,6 +87,8 @@ performance.
 - Exit codes próprios para aprovação, reprovação e erro de execução.
 - Filtros por status HTTP e expressão regular de URL.
 - Fila local com até duas análises simultâneas.
+- Progresso por página e por etapa, incluindo posição atual na fila.
+- Cancelamento de análises em fila, durante sitemap ou com o navegador aberto.
 - Diretório isolado para os artefatos de cada análise.
 
 ## Requisitos
@@ -113,7 +118,8 @@ No dashboard é possível:
 - configurar timeout e janela de observação;
 - definir quando o quality gate deve reprovar;
 - ignorar status ou serviços conhecidos;
-- acompanhar a execução;
+- acompanhar páginas concluídas, etapa atual e posição na fila;
+- cancelar uma análise longa sem aguardar o timeout;
 - consultar problema, impacto e ação recomendada;
 - abrir o relatório HTML completo;
 - baixar o relatório JSON;
@@ -260,6 +266,59 @@ Consultar todas as opções:
 npm run dev -- --help
 ```
 
+### Auditoria Lighthouse experimental
+
+O modo rápido permanece padrão. Para executar também a auditoria completa local
+com Chromium:
+
+```powershell
+npm run dev -- https://example.com --lighthouse --output qa-radar-lighthouse
+```
+
+O resumo é incorporado aos relatórios do QA Radar e o resultado bruto fica em
+`report.lighthouse.json`. Nesta etapa o recurso é CLI-only, não pode ser combinado
+com jornadas e permanece bloqueado no servidor público enquanto o isolamento de
+rede e os limites de infraestrutura não forem homologados.
+
+### Jornadas Playwright experimentais
+
+Crie `journey.json`:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "name": "Login",
+  "steps": [
+    { "action": "goto", "url": "https://staging.example.com/login" },
+    { "action": "fill", "selector": "#email", "value": "qa@example.com" },
+    { "action": "fill", "selector": "#password", "valueFromEnv": "QA_RADAR_SECRET_PASSWORD" },
+    { "action": "click", "selector": "button[type=submit]" },
+    { "action": "assertVisible", "selector": "[data-testid=dashboard]" }
+  ]
+}
+```
+
+No PowerShell, configure o secret apenas no ambiente e execute:
+
+```powershell
+$env:QA_RADAR_SECRET_PASSWORD="valor-protegido"
+npm run dev -- https://staging.example.com --journey journey.json --output qa-radar-journey
+```
+
+O modo é opt-in, aceita somente a origem informada e gera `journey-report.json`
+e screenshots em `journey-evidence/`.
+
+Para testar jornadas no dashboard local:
+
+```powershell
+$env:QA_RADAR_ENABLE_JOURNEYS="true"
+$env:QA_RADAR_ALLOW_PRIVATE_TARGETS="true" # somente se o alvo for localhost/rede privada
+npm run web
+```
+
+O painel **Jornada Playwright** aparecerá abaixo do scanner. O recurso permanece
+desabilitado por padrão e não deve ser habilitado no deploy público nesta fase.
+
 ## Como interpretar os resultados
 
 | Categoria | Nível comum | Exemplo |
@@ -370,6 +429,9 @@ secret `STAGING_URL`.
 
 As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeitas a mudanças conforme o uso e o feedback recebido.
 
+O plano incremental, as regras de compatibilidade e as evidências de validação de
+cada etapa são mantidos em [`docs/EVOLUTION_LOG.md`](docs/EVOLUTION_LOG.md).
+
 ### Exploração configurável
 
 - Permitir que o QA descreva jornadas com cliques e preenchimento de campos.
@@ -385,7 +447,7 @@ As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeit
 
 ### Qualidade e acessibilidade
 
-- Ampliar a auditoria de acessibilidade com regras WCAG.
+- Ampliar a auditoria de acessibilidade e a interpretação das regras WCAG.
 - Detectar problemas de layout, conteúdo cortado e overflow.
 - Evoluir o agrupamento de sintomas em causas-raiz.
 - Permitir configurar severidade, regras e falsos positivos por projeto.
@@ -403,7 +465,8 @@ As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeit
 - A ferramenta não entende sozinha a regra de negócio da aplicação.
 - Elementos carregados depois da janela de observação podem não ser analisados.
 - Erros de serviços externos podem aparecer no relatório da página que os incorporou.
-- O scanner não clica, envia formulários ou percorre jornadas automaticamente nesta versão.
+- O scanner padrão não clica nem envia formulários. Jornadas declarativas podem
+  fazê-lo somente quando o recurso experimental é habilitado explicitamente.
 - O histórico é persistido no filesystem local, sem banco de dados, transações ou armazenamento remoto.
 
 ## Segurança e publicação
@@ -428,7 +491,13 @@ Não habilite histórico compartilhado em uma implantação pública antes de ad
 
 Ainda são necessários autenticação, HTTPS e persistência antes de uma implantação aberta ao público. A API já aplica política de destinos públicos, rate limit, limite de fila e tetos de duração como primeiras camadas de proteção.
 
-O servidor limita por padrão cada endereço a 10 novas análises por minuto, mantém resultados por uma hora e expõe `GET /health` para monitoramento. Em uma hospedagem com proxy reverso conhecido, configure `QA_RADAR_TRUST_PROXY=true` para considerar `X-Forwarded-For`. Não habilite essa opção ao expor o processo Node diretamente.
+O servidor limita por padrão cada endereço a 10 novas análises por minuto,
+retorna os cabeçalhos `X-RateLimit-Limit`, `X-RateLimit-Remaining` e
+`X-RateLimit-Reset`, mantém resultados por uma hora e expõe `GET /health` para
+monitoramento. Quando o limite é excedido, a resposta `429` também informa
+`Retry-After`. Em uma hospedagem com proxy reverso conhecido, configure
+`QA_RADAR_TRUST_PROXY=true` para considerar `X-Forwarded-For`. Não habilite essa
+opção ao expor o processo Node diretamente.
 
 Para alterar host ou porta conscientemente:
 

@@ -21,13 +21,15 @@ describe("dashboard components", () => {
   });
 
   it("renderiza recursos opcionais sem expor atributos não escapados", () => {
-    const html = createWebPage('site"><script>alert(1)</script>', true, 5);
+    const html = createWebPage('site"><script>alert(1)</script>', true, 5, true);
 
     assert.match(html, /data-sitekey="site&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt;"/);
     assert.doesNotMatch(html, /data-sitekey="site"><script>/);
     assert.match(html, /id="history-button"/);
     assert.match(html, /max="5"/);
     assert.match(html, /Analisa até 5 páginas/);
+    assert.match(html, /id="journey-form"/);
+    assert.match(html, /\/api\/journeys/);
   });
 
   it("mantém os componentes principais no fragmento do dashboard", () => {
@@ -36,6 +38,7 @@ describe("dashboard components", () => {
       maxSitemapPages: 3,
       turnstileWidget: "",
       historyWidget: "",
+      allowJourneys: false,
     });
 
     for (const id of ["scan-form", "scan-panel", "help-panel", "results", "progress", "issues"]) {
@@ -47,6 +50,7 @@ describe("dashboard components", () => {
       maxSitemapPages: 3,
       turnstileWidget: "",
       historyWidget: "",
+      allowJourneys: false,
     }), /id="scan-form"/);
     assert.match(renderResultsPanel(), /id="results"/);
   });

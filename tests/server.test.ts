@@ -45,6 +45,17 @@ describe("web server", () => {
     assert.match(html, /Cancelar/);
     assert.match(html, /progress-bar/);
     assert.match(html, /Histórico desabilitado neste servidor/);
+    assert.doesNotMatch(html, /id="journey-form"/);
+  });
+
+  it("mantém jornadas desabilitadas por padrão", async () => {
+    const response = await fetch(`${baseUrl}/api/journeys`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 403);
+    assert.match((await response.json() as { error: string }).error, /desabilitadas/);
   });
 
   it("expõe o estado de saúde sem iniciar uma análise", async () => {
@@ -84,6 +95,36 @@ describe("web server", () => {
   it("responde 404 para rotas desconhecidas", async () => {
     const response = await fetch(`${baseUrl}/nao-existe`);
     assert.equal(response.status, 404);
+  });
+
+  it("aplica rate limit por cliente e publica os cabeçalhos da janela", async () => {
+    const limitedServer = createQaRadarServer({
+      allowPrivateTargets: true,
+      concurrency: 0,
+      rateLimitMax: 1,
+      rateLimitWindowMs: 60_000,
+    });
+    await new Promise<void>((resolve) => limitedServer.listen(0, "127.0.0.1", resolve));
+    const address = limitedServer.address() as AddressInfo;
+    const limitedUrl = `http://127.0.0.1:${address.port}`;
+    const request = () => fetch(`${limitedUrl}/api/scans`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: limitedUrl }),
+    });
+    try {
+      const accepted = await request();
+      assert.equal(accepted.status, 202);
+      assert.equal(accepted.headers.get("x-ratelimit-limit"), "1");
+      assert.equal(accepted.headers.get("x-ratelimit-remaining"), "0");
+
+      const blocked = await request();
+      assert.equal(blocked.status, 429);
+      assert.equal(blocked.headers.get("x-ratelimit-remaining"), "0");
+      assert.ok(Number(blocked.headers.get("retry-after")) >= 1);
+    } finally {
+      await new Promise<void>((resolve) => limitedServer.close(() => resolve()));
+    }
   });
 
   it("expõe progresso aditivo e cancela uma análise na fila", async () => {
