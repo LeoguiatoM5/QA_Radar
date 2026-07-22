@@ -4,6 +4,18 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+### Adicionado
+
+- Tokens aleatórios por análise para proteger consulta, cancelamento e download
+  de relatórios, com hash persistido durante a retenção e cookie `HttpOnly` na UI.
+- Timeout global do servidor e bloqueio de mudanças de resolução DNS durante uma
+  análise pública.
+
+### Alterado
+
+- Artefatos agora usam política sem cache, sem referrer e sandbox para HTML.
+- Faixas IPv4 reservadas adicionais passaram a ser bloqueadas pela proteção SSRF.
+
 ## [3.1.0] - 2026-07-22
 
 ### Adicionado

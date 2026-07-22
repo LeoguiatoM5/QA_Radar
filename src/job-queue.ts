@@ -12,6 +12,7 @@ export interface ScanJob {
   progress: ScanProgress;
   controller: AbortController;
   cancelRequested: boolean;
+  accessTokenHash: string;
 }
 
 export interface QueueStats {

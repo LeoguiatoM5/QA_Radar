@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { access, readFile, rm } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { parseCli } from "./cli.js";
 import { writeReports } from "./reporters.js";
 import { scan } from "./scanner.js";
@@ -52,6 +52,7 @@ export interface ServerOptions {
   rateLimitMax: number;
   rateLimitWindowMs: number;
   retentionMs: number;
+  maxJobDurationMs: number;
   trustProxy: boolean;
   turnstileSiteKey: string | undefined;
   turnstileSecretKey: string | undefined;
@@ -59,6 +60,7 @@ export interface ServerOptions {
   allowJourneys: boolean;
   historyDir: string;
   maxSitemapPages: number;
+  scanRunner: typeof scan;
   operationalLogger: (event: OperationalEvent) => void;
 }
 
@@ -75,6 +77,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   rateLimitMax: 10,
   rateLimitWindowMs: 60_000,
   retentionMs: 60 * 60_000,
+  maxJobDurationMs: 5 * 60_000,
   trustProxy: false,
   turnstileSiteKey: undefined,
   turnstileSecretKey: undefined,
@@ -82,6 +85,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   allowJourneys: false,
   historyDir: join(process.cwd(), ".qa-radar-history"),
   maxSitemapPages: 20,
+  scanRunner: scan,
   operationalLogger: defaultOperationalLogger,
 };
 
@@ -89,8 +93,55 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
   });
   response.end(JSON.stringify(body));
+}
+
+const ACCESS_HASH_FILE = ".access-token.sha256";
+
+function tokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function tokenMatches(token: string, expectedHash: string): boolean {
+  const actual = Buffer.from(tokenHash(token), "hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function requestToken(request: IncomingMessage): string | undefined {
+  const authorization = request.headers.authorization;
+  if (authorization?.startsWith("Bearer ")) return authorization.slice(7).trim() || undefined;
+  const cookie = request.headers.cookie?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("qa_radar_access="));
+  return cookie ? decodeURIComponent(cookie.slice("qa_radar_access=".length)) : undefined;
+}
+
+function requireAccess(request: IncomingMessage, response: ServerResponse, expectedHash: string): boolean {
+  const token = requestToken(request);
+  if (token && tokenMatches(token, expectedHash)) return true;
+  response.setHeader("www-authenticate", 'Bearer realm="QA Radar report"');
+  json(response, token ? 403 : 401, { error: "Token de acesso da análise ausente ou inválido." });
+  return false;
+}
+
+function accessCookie(request: IncomingMessage, id: string, token: string, retentionMs: number, trustProxy: boolean): string {
+  const forwardedProto = request.headers["x-forwarded-proto"];
+  const secure = Boolean((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted) ||
+    (trustProxy && forwardedProto === "https");
+  return `qa_radar_access=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/api/scans/${id}; Max-Age=${Math.ceil(retentionMs / 1000)}${secure ? "; Secure" : ""}`;
+}
+
+async function storedAccessHash(resultsDir: string, id: string): Promise<string | undefined> {
+  try {
+    const value = (await readFile(join(resultsDir, id, ACCESS_HASH_FILE), "utf8")).trim();
+    return /^[a-f0-9]{64}$/.test(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
@@ -204,6 +255,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   if (Boolean(config.turnstileSiteKey) !== Boolean(config.turnstileSecretKey)) {
     throw new Error("Configure TURNSTILE_SITE_KEY e TURNSTILE_SECRET_KEY em conjunto.");
   }
+  if (!Number.isInteger(config.maxJobDurationMs) || config.maxJobDurationMs <= 0) {
+    throw new Error("maxJobDurationMs deve ser um número inteiro positivo.");
+  }
   const jobQueue = new JobQueue();
   const rateLimiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
   let journeyActive = false;
@@ -294,6 +348,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       if (!job) return;
       const startedAt = Date.now();
       const cpuStart = process.cpuUsage();
+      const deadline = setTimeout(() => {
+        job.controller.abort(new Error(`A análise excedeu o limite global de ${config.maxJobDurationMs} ms.`));
+      }, config.maxJobDurationMs);
+      deadline.unref();
       logOperational({
         event: "scan.started",
         timestamp: new Date(startedAt).toISOString(),
@@ -331,11 +389,13 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           }
           job.report = effectiveOptions.sitemap
             ? await scanSitemap(effectiveOptions, control)
-            : await scan(effectiveOptions, control);
+            : await config.scanRunner(effectiveOptions, control);
           job.controller.signal.throwIfAborted();
           job.progress = { ...job.progress, stage: "writing-reports" };
           await writeReports(job.report, job.options);
+          job.controller.signal.throwIfAborted();
           await storeRun(job.report, effectiveOptions);
+          job.controller.signal.throwIfAborted();
           job.progress = {
             discoveredPages: job.progress.discoveredPages || 1,
             completedPages: job.progress.discoveredPages || 1,
@@ -345,15 +405,17 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           };
           job.status = "completed";
         } catch (error) {
-          if (job.cancelRequested || job.controller.signal.aborted) {
+          if (job.cancelRequested) {
             job.status = "cancelled";
             job.error = undefined;
             job.progress = { ...job.progress, currentUrl: undefined, stage: "cancelled" };
           } else {
             job.status = "failed";
-            job.error = error instanceof Error ? error.message : String(error);
+            const failure = job.controller.signal.aborted ? job.controller.signal.reason : error;
+            job.error = failure instanceof Error ? failure.message : String(failure);
           }
         } finally {
+          clearTimeout(deadline);
           const usage = resourceUsage(startedAt, cpuStart);
           logOperational({
             event: job.status === "completed"
@@ -411,7 +473,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
           "x-content-type-options": "nosniff",
-          "content-security-policy": `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
+          "referrer-policy": "no-referrer",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
         });
         response.end(createWebPage(config.turnstileSiteKey, config.allowHistory, config.maxSitemapPages, config.allowJourneys));
         return;
@@ -505,6 +569,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           await assertPublicUrl(options.url);
           options.publicNetworkOnly = true;
         }
+        const accessToken = randomBytes(32).toString("base64url");
+        const accessTokenHash = tokenHash(accessToken);
+        await mkdir(options.outputDir, { recursive: true });
+        await writeFile(join(options.outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
         const job: ScanJob = {
           id,
           status: "queued",
@@ -521,10 +589,12 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           },
           controller: new AbortController(),
           cancelRequested: false,
+          accessTokenHash,
         };
         jobQueue.enqueue(job);
         schedule();
-        json(response, 202, publicJob(job, jobQueue.position(job.id)));
+        response.setHeader("set-cookie", accessCookie(request, id, accessToken, config.retentionMs, config.trustProxy));
+        json(response, 202, { ...publicJob(job, jobQueue.position(job.id)), accessToken });
         return;
       }
 
@@ -536,6 +606,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           json(response, 404, { error: "Análise não encontrada ou já expirada." });
           return;
         }
+        if (!requireAccess(request, response, job.accessTokenHash)) return;
         if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
           json(response, 409, { error: "A análise já foi finalizada." });
           return;
@@ -566,6 +637,12 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           return;
         }
         const job = jobQueue.get(id);
+        const expectedHash = job?.accessTokenHash ?? await storedAccessHash(config.resultsDir, id);
+        if (!expectedHash) {
+          json(response, 404, { error: "Análise não encontrada ou já expirada." });
+          return;
+        }
+        if (!requireAccess(request, response, expectedHash)) return;
         if (!artifact) {
           if (job) {
             json(response, 200, publicJob(job, jobQueue.position(job.id)));
@@ -596,6 +673,11 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           "content-type": contentType,
           "content-length": content.length,
           "x-content-type-options": "nosniff",
+          "cache-control": "private, no-store",
+          "referrer-policy": "no-referrer",
+          ...(artifact.endsWith(".html") ? {
+            "content-security-policy": "default-src 'none'; base-uri 'none'; img-src data: blob: 'self'; style-src 'unsafe-inline'; sandbox allow-same-origin",
+          } : {}),
         });
         response.end(content);
         return;
