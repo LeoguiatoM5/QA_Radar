@@ -207,6 +207,37 @@ describe("web scan integration", () => {
     }
   });
 
+  it("cancela uma jornada em execução pelo dashboard", async () => {
+    const target = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang=pt-BR><main>Jornada longa</main>");
+    });
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-journey-cancel-"));
+    const app = createQaRadarServer({ resultsDir, allowJourneys: true, allowPrivateTargets: true });
+    const targetUrl = await listen(target);
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(appUrl);
+      await page.locator("#journey-url").fill(targetUrl);
+      await page.locator("#journey-json").fill(JSON.stringify({ schemaVersion: "1.0", name: "Cancelar", steps: [
+        { action: "goto", url: targetUrl },
+        { action: "waitFor", selector: "#nunca-existe", timeoutMs: 120000 },
+      ] }));
+      await page.locator("#journey-submit").click();
+      await page.locator("#journey-cancel").waitFor();
+      await page.locator("#journey-cancel").click();
+      await page.getByText("A jornada foi cancelada.", { exact: true }).waitFor({ timeout: 20_000 });
+    } finally {
+      await browser?.close();
+      await close(app);
+      await close(target);
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
   it("executa jornada experimental pelo dashboard quando habilitada", async () => {
     const target = createServer((_request, response) => {
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -227,16 +258,34 @@ describe("web scan integration", () => {
         { action: "click", selector: "#go" },
         { action: "assertText", selector: "#done", text: "Concluído" },
       ] }));
+      const creationPromise = page.waitForResponse((response) =>
+        response.url() === `${appUrl}/api/journeys` && response.request().method() === "POST");
       await page.locator("#journey-submit").click();
-      await page.locator("#journey-status.pass").waitFor({ timeout: 20_000 });
+      const creation = await creationPromise;
+      const createdJourney = await creation.json() as { id: string; accessToken: string };
+      await page.waitForTimeout(200);
+      const journeyCookies = await page.context().cookies(`${appUrl}/api/journeys/status`);
+      const journeyCookie = journeyCookies.find((cookie) => cookie.name === "qa_radar_access");
+      assert.ok(journeyCookie, "Cookie HttpOnly da jornada ausente.");
+      assert.ok(journeyCookie.value === createdJourney.accessToken, "Cookie da jornada não corresponde ao token criado.");
+      try {
+        await page.locator("#journey-status.pass").waitFor({ timeout: 20_000 });
+      } catch (error) {
+        const detail = await page.locator("#journey-error").textContent();
+        throw new Error(`A jornada não apareceu como aprovada: ${detail || "sem detalhe na interface"}`, { cause: error });
+      }
       assert.equal(await page.locator("#journey-status").textContent(), "APROVADA");
       assert.match((await page.locator("#journey-steps").textContent()) ?? "", /assertText/);
       const evidenceHref = await page.locator("#journey-steps a").first().getAttribute("href");
       assert.match(evidenceHref ?? "", /^\/api\/journeys\//);
       const evidenceUrl = new URL(evidenceHref ?? "", appUrl).toString();
-      assert.equal((await page.request.get(evidenceUrl)).status(), 200);
+      assert.equal((await fetch(evidenceUrl)).status, 401);
+      const artifactHeaders = { authorization: `Bearer ${createdJourney.accessToken}` };
+      assert.equal((await page.context().request.get(evidenceUrl, { headers: artifactHeaders })).status(), 200);
+      const journeyBase = evidenceUrl.slice(0, evidenceUrl.lastIndexOf("/") + 1);
+      assert.equal((await page.context().request.get(`${journeyBase}journey-report.json`, { headers: artifactHeaders })).status(), 200);
       await new Promise((resolve) => setTimeout(resolve, 1_100));
-      assert.equal((await page.request.get(evidenceUrl)).status(), 404);
+      assert.equal((await page.context().request.get(evidenceUrl, { headers: artifactHeaders })).status(), 404);
     } finally {
       await browser?.close();
       await close(app);

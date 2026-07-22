@@ -36,6 +36,9 @@ try {
     retentionMs: positiveIntegerFromEnvironment("QA_RADAR_RETENTION_MS", 60 * 60_000),
     maxJobDurationMs: positiveIntegerFromEnvironment("QA_RADAR_MAX_JOB_DURATION_MS", 5 * 60_000),
     maxSitemapPages: positiveIntegerFromEnvironment("QA_RADAR_MAX_SITEMAP_PAGES", 20),
+    maxJourneySteps: positiveIntegerFromEnvironment("QA_RADAR_MAX_JOURNEY_STEPS", 20),
+    maxJourneyPayloadBytes: positiveIntegerFromEnvironment("QA_RADAR_MAX_JOURNEY_PAYLOAD_BYTES", 32 * 1024),
+    maxJourneyDurationMs: positiveIntegerFromEnvironment("QA_RADAR_MAX_JOURNEY_DURATION_MS", 3 * 60_000),
     turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
     turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
   });

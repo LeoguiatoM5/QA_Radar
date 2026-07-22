@@ -19,5 +19,11 @@ services:
         value: 180000
       - key: QA_RADAR_MAX_SITEMAP_PAGES
         value: 5
+      - key: QA_RADAR_MAX_JOURNEY_STEPS
+        value: 10
+      - key: QA_RADAR_MAX_JOURNEY_PAYLOAD_BYTES
+        value: 16384
+      - key: QA_RADAR_MAX_JOURNEY_DURATION_MS
+        value: 120000
       - key: QA_RADAR_TRUST_PROXY
         value: true

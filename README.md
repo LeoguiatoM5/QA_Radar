@@ -319,6 +319,12 @@ npm run web
 O painel **Jornada Playwright** aparecerá abaixo do scanner. O recurso permanece
 desabilitado por padrão e não deve ser habilitado no deploy público nesta fase.
 
+No dashboard, jornadas são executadas como jobs assíncronos. A criação retorna
+um token usado no acompanhamento, cancelamento, relatório JSON e evidências. O
+servidor limita passos, payload e duração total; no Blueprint Render os limites
+preparados são 10 passos, 16 KiB e 120 segundos. A variável de ativação continua
+ausente do Render até homologação e autorização explícita.
+
 ## Como interpretar os resultados
 
 | Categoria | Nível comum | Exemplo |

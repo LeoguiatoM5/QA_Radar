@@ -325,6 +325,23 @@ condicionada à homologação do primeiro pipeline em uma instância GitLab real
   vulnerabilidades) e imagem Docker executada com UID `1001`.
 - Deploy: nenhuma publicação no Render foi realizada nesta etapa.
 
+### 2026-07-22 — Hardening de Jornadas para futura homologação
+
+- Objetivo: remover o bloqueio técnico para testar Jornadas no Render sem
+  transformar a ferramenta em uma plataforma paralela ao scanner.
+- Contrato: `POST /api/journeys` cria job assíncrono; `GET /api/journeys/:id`
+  acompanha; `POST /api/journeys/:id/cancel` interrompe com `AbortSignal`.
+- Segurança: token de 256 bits por jornada, hash no disco, Bearer no polling e
+  cookie `HttpOnly` para evidências; respostas removem paths internos.
+- Limites preparados no Blueprint: 10 passos, payload de 16 KiB e timeout global
+  de 120 segundos. Apenas uma jornada ou scan usa o navegador por vez.
+- Secrets: continuam apenas em `QA_RADAR_SECRET_*`, são desfocados nas capturas e
+  removidos de erros; valores não entram em logs operacionais.
+- Validação: `npm run check` (66 testes), `npm run test:integration` (17 testes),
+  Lighthouse real, `npm audit` sem vulnerabilidades e imagem Docker com UID 1001.
+- Decisão operacional: `QA_RADAR_ENABLE_JOURNEYS` continua ausente do Render;
+  Turnstile permanece adiado e nenhum deploy é autorizado por esta etapa.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown
