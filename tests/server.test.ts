@@ -61,6 +61,91 @@ describe("web server", () => {
     assert.match((await response.json() as { error: string }).error, /desabilitadas/);
   });
 
+  it("protege, limita e cancela jornadas assíncronas", async () => {
+    const journeyServer = createQaRadarServer({
+      allowJourneys: true,
+      allowPrivateTargets: true,
+      maxJourneySteps: 2,
+      journeyRunner: async (_options, _definition, _environment, signal) => new Promise<never>((_resolve, reject) => {
+        const abort = () => reject(signal?.reason ?? new Error("abortada"));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener("abort", abort, { once: true });
+      }),
+    });
+    await new Promise<void>((resolve) => journeyServer.listen(0, "127.0.0.1", resolve));
+    const address = journeyServer.address() as AddressInfo;
+    const journeyUrl = `http://127.0.0.1:${address.port}`;
+    const request = (steps: unknown[]) => fetch(`${journeyUrl}/api/journeys`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        url: journeyUrl,
+        journey: { schemaVersion: "1.0", name: "Protegida", steps },
+      }),
+    });
+    try {
+      const excessive = await request([
+        { action: "assertVisible", selector: "body" },
+        { action: "assertVisible", selector: "main" },
+        { action: "assertVisible", selector: "footer" },
+      ]);
+      assert.equal(excessive.status, 400);
+      assert.match((await excessive.json() as { error: string }).error, /no máximo 2 passos/);
+
+      const createdResponse = await request([{ action: "assertVisible", selector: "body" }]);
+      const created = await createdResponse.json() as { id: string; accessToken: string; status: string };
+      assert.equal(createdResponse.status, 202);
+      assert.equal(created.status, "running");
+      assert.match(createdResponse.headers.get("set-cookie") ?? "", /HttpOnly; SameSite=Strict/);
+
+      assert.equal((await fetch(`${journeyUrl}/api/journeys/${created.id}`)).status, 401);
+      const headers = { authorization: `Bearer ${created.accessToken}` };
+      const cancel = await fetch(`${journeyUrl}/api/journeys/${created.id}/cancel`, { method: "POST", headers });
+      assert.equal(cancel.status, 202);
+      await waitFor(async () => {
+        const response = await fetch(`${journeyUrl}/api/journeys/${created.id}`, { headers });
+        return (await response.json() as { status: string }).status === "cancelled";
+      });
+    } finally {
+      await new Promise<void>((resolve) => journeyServer.close(() => resolve()));
+    }
+  });
+
+  it("aplica timeout global às jornadas", async () => {
+    const journeyServer = createQaRadarServer({
+      allowJourneys: true,
+      allowPrivateTargets: true,
+      maxJourneyDurationMs: 25,
+      journeyRunner: async (_options, _definition, _environment, signal) => new Promise<never>((_resolve, reject) => {
+        const abort = () => reject(signal?.reason ?? new Error("abortada"));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener("abort", abort, { once: true });
+      }),
+    });
+    await new Promise<void>((resolve) => journeyServer.listen(0, "127.0.0.1", resolve));
+    const address = journeyServer.address() as AddressInfo;
+    const journeyUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const response = await fetch(`${journeyUrl}/api/journeys`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: journeyUrl,
+          journey: { schemaVersion: "1.0", name: "Timeout", steps: [{ action: "assertVisible", selector: "body" }] },
+        }),
+      });
+      const created = await response.json() as { id: string; accessToken: string };
+      const headers = { authorization: `Bearer ${created.accessToken}` };
+      await waitFor(async () => {
+        const status = await fetch(`${journeyUrl}/api/journeys/${created.id}`, { headers });
+        const job = await status.json() as { status: string; error?: string };
+        return job.status === "failed" && /limite global de 25 ms/.test(job.error ?? "");
+      });
+    } finally {
+      await new Promise<void>((resolve) => journeyServer.close(() => resolve()));
+    }
+  });
+
   it("expõe o estado de saúde sem iniciar uma análise", async () => {
     const response = await fetch(`${baseUrl}/health`);
     const body = (await response.json()) as { status: string; active: number; queued: number };

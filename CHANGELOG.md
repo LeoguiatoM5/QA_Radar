@@ -15,6 +15,9 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 - Artefatos agora usam política sem cache, sem referrer e sandbox para HTML.
 - Faixas IPv4 reservadas adicionais passaram a ser bloqueadas pela proteção SSRF.
+- Jornadas do dashboard agora são jobs assíncronos protegidos por token, com
+  consulta, cancelamento, timeout global e limites próprios de passos/payload.
+- Evidências e JSON de jornadas exigem autorização e não expõem caminhos internos.
 
 ## [3.1.0] - 2026-07-22
 

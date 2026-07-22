@@ -37,7 +37,7 @@ export function renderJourneyPanel(): string {
     { "action": "goto", "url": "https://example.com" },
     { "action": "assertVisible", "selector": "body" }
   ]
-}</textarea><button id="journey-submit" type="submit">Executar jornada</button><div class="error-box" id="journey-error"></div></form><section id="journey-results" hidden><div class="result-head"><div><h2 id="journey-title"></h2><small id="journey-summary"></small></div><span class="status" id="journey-status"></span></div><div class="issues" id="journey-steps"></div></section></section>`;
+}</textarea><button id="journey-submit" type="submit">Executar jornada</button><button class="cancel" id="journey-cancel" type="button" hidden>Cancelar jornada</button><div class="error-box" id="journey-error"></div></form><section id="journey-results" hidden><div class="result-head"><div><h2 id="journey-title"></h2><small id="journey-summary"></small></div><span class="status" id="journey-status"></span></div><div class="issues" id="journey-steps"></div></section></section>`;
 }
 
 export function renderDashboard(options: DashboardOptions): string {

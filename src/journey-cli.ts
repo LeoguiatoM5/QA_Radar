@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { chromium, firefox, webkit, type BrowserType } from "playwright";
 import { runJourney, type JourneyRunResult } from "./journey-runner.js";
 import type { ScanOptions } from "./types.js";
-import { assertPublicUrl } from "./security.js";
+import { PublicNetworkGuard } from "./security.js";
 
 function browserType(name: ScanOptions["browser"]): BrowserType {
   return { chromium, firefox, webkit }[name];
@@ -33,16 +33,23 @@ export async function runJourneyDefinition(
   options: ScanOptions,
   definition: unknown,
   environment: NodeJS.ProcessEnv = process.env,
+  signal?: AbortSignal,
 ): Promise<{ report: JourneyRunResult; reportPath: string }> {
+  signal?.throwIfAborted();
   await mkdir(options.outputDir, { recursive: true });
   const browser = await browserType(options.browser).launch({ headless: !options.headed });
+  const abort = (): void => { void browser.close(); };
+  signal?.addEventListener("abort", abort, { once: true });
   try {
+    signal?.throwIfAborted();
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
+    const networkGuard = options.publicNetworkOnly ? new PublicNetworkGuard() : undefined;
     if (options.publicNetworkOnly) {
+      await networkGuard?.assert(options.url);
       await page.route("**/*", async (route) => {
         try {
-          await assertPublicUrl(route.request().url());
+          await networkGuard?.assert(route.request().url());
           await route.continue();
         } catch {
           await route.abort("blockedbyclient");
@@ -53,13 +60,15 @@ export async function runJourneyDefinition(
       allowedOrigins: [options.url],
       secrets: journeySecrets(environment),
       timeoutMs: options.timeoutMs,
+      ...(signal ? { signal } : {}),
       evidenceDir: join(options.outputDir, "journey-evidence"),
-      ...(options.publicNetworkOnly ? { validateNavigationUrl: assertPublicUrl } : {}),
+      ...(networkGuard ? { validateNavigationUrl: (url: string) => networkGuard.assert(url) } : {}),
     });
     const reportPath = join(options.outputDir, "journey-report.json");
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     return { report, reportPath };
   } finally {
+    signal?.removeEventListener("abort", abort);
     await browser.close();
   }
 }

@@ -14,6 +14,21 @@ import { JobQueue, type ScanJob } from "./job-queue.js";
 import { RateLimiter } from "./rate-limit.js";
 import { runJourneyDefinition } from "./journey-cli.js";
 import type { JourneyRunResult } from "./journey-runner.js";
+import { parseJourney } from "./journey.js";
+
+type JourneyJobStatus = "running" | "completed" | "failed" | "cancelled";
+
+interface JourneyJob {
+  id: string;
+  status: JourneyJobStatus;
+  createdAt: string;
+  outputDir: string;
+  accessTokenHash: string;
+  controller: AbortController;
+  cancelRequested: boolean;
+  report?: JourneyRunResult;
+  error?: string;
+}
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -60,7 +75,11 @@ export interface ServerOptions {
   allowJourneys: boolean;
   historyDir: string;
   maxSitemapPages: number;
+  maxJourneySteps: number;
+  maxJourneyPayloadBytes: number;
+  maxJourneyDurationMs: number;
   scanRunner: typeof scan;
+  journeyRunner: typeof runJourneyDefinition;
   operationalLogger: (event: OperationalEvent) => void;
 }
 
@@ -85,7 +104,11 @@ const DEFAULT_OPTIONS: ServerOptions = {
   allowJourneys: false,
   historyDir: join(process.cwd(), ".qa-radar-history"),
   maxSitemapPages: 20,
+  maxJourneySteps: 20,
+  maxJourneyPayloadBytes: 32 * 1024,
+  maxJourneyDurationMs: 3 * 60_000,
   scanRunner: scan,
+  journeyRunner: runJourneyDefinition,
   operationalLogger: defaultOperationalLogger,
 };
 
@@ -128,11 +151,11 @@ function requireAccess(request: IncomingMessage, response: ServerResponse, expec
   return false;
 }
 
-function accessCookie(request: IncomingMessage, id: string, token: string, retentionMs: number, trustProxy: boolean): string {
+function accessCookie(request: IncomingMessage, path: string, token: string, retentionMs: number, trustProxy: boolean): string {
   const forwardedProto = request.headers["x-forwarded-proto"];
   const secure = Boolean((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted) ||
     (trustProxy && forwardedProto === "https");
-  return `qa_radar_access=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/api/scans/${id}; Max-Age=${Math.ceil(retentionMs / 1000)}${secure ? "; Secure" : ""}`;
+  return `qa_radar_access=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=${path}; Max-Age=${Math.ceil(retentionMs / 1000)}${secure ? "; Secure" : ""}`;
 }
 
 async function storedAccessHash(resultsDir: string, id: string): Promise<string | undefined> {
@@ -258,9 +281,19 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   if (!Number.isInteger(config.maxJobDurationMs) || config.maxJobDurationMs <= 0) {
     throw new Error("maxJobDurationMs deve ser um número inteiro positivo.");
   }
+  if (!Number.isInteger(config.maxJourneySteps) || config.maxJourneySteps < 1 || config.maxJourneySteps > 50) {
+    throw new Error("maxJourneySteps deve estar entre 1 e 50.");
+  }
+  if (!Number.isInteger(config.maxJourneyPayloadBytes) || config.maxJourneyPayloadBytes < 1) {
+    throw new Error("maxJourneyPayloadBytes deve ser um número inteiro positivo.");
+  }
+  if (!Number.isInteger(config.maxJourneyDurationMs) || config.maxJourneyDurationMs < 1) {
+    throw new Error("maxJourneyDurationMs deve ser um número inteiro positivo.");
+  }
   const jobQueue = new JobQueue();
   const rateLimiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
   let journeyActive = false;
+  const journeyJobs = new Map<string, JourneyJob>();
 
   const publicJourney = (report: JourneyRunResult): JourneyRunResult => ({
     ...report,
@@ -335,9 +368,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     timer.unref();
   };
 
-  const expireJourney = (id: string): void => {
+  const expireJourney = (job: JourneyJob): void => {
     const timer = setTimeout(() => {
-      void rm(join(config.resultsDir, `journey-${id}`), { recursive: true, force: true });
+      journeyJobs.delete(job.id);
+      void rm(job.outputDir, { recursive: true, force: true });
     }, config.retentionMs);
     timer.unref();
   };
@@ -495,24 +529,111 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         const body = await readJson(request);
         const definition = body.journey;
         if (!definition) throw new Error("Informe a definição da jornada.");
+        const payloadBytes = Buffer.byteLength(JSON.stringify(definition), "utf8");
+        if (payloadBytes > config.maxJourneyPayloadBytes) {
+          throw new Error(`A definição da jornada deve ter no máximo ${config.maxJourneyPayloadBytes} bytes.`);
+        }
+        const parsedDefinition = parseJourney(definition);
+        if (parsedDefinition.steps.length > config.maxJourneySteps) {
+          throw new Error(`A jornada deve ter no máximo ${config.maxJourneySteps} passos neste servidor.`);
+        }
         const id = randomUUID();
-        const options = scanOptions(body, join(config.resultsDir, `journey-${id}`), config);
+        const outputDir = join(config.resultsDir, `journey-${id}`);
+        const options = scanOptions(body, outputDir, config);
         if (!config.allowPrivateTargets) {
           await assertPublicUrl(options.url);
           options.publicNetworkOnly = true;
         }
+        const accessToken = randomBytes(32).toString("base64url");
+        const accessTokenHash = tokenHash(accessToken);
+        await mkdir(outputDir, { recursive: true });
+        await writeFile(join(outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
+        const job: JourneyJob = {
+          id,
+          status: "running",
+          createdAt: new Date().toISOString(),
+          outputDir,
+          accessTokenHash,
+          controller: new AbortController(),
+          cancelRequested: false,
+        };
+        journeyJobs.set(id, job);
         journeyActive = true;
-        try {
-          const result = await runJourneyDefinition(options, definition);
-          json(response, 200, { id, report: publicJourney(result.report) });
-        } finally {
-          journeyActive = false;
-          expireJourney(id);
-        }
+        const deadline = setTimeout(() => {
+          job.controller.abort(new Error(`A jornada excedeu o limite global de ${config.maxJourneyDurationMs} ms.`));
+        }, config.maxJourneyDurationMs);
+        deadline.unref();
+        void (async () => {
+          try {
+            const result = await config.journeyRunner(options, parsedDefinition, process.env, job.controller.signal);
+            job.controller.signal.throwIfAborted();
+            job.report = publicJourney(result.report);
+            await writeFile(join(outputDir, "journey-report.json"), `${JSON.stringify(job.report, null, 2)}\n`, "utf8");
+            job.controller.signal.throwIfAborted();
+            job.status = "completed";
+          } catch (error) {
+            if (job.cancelRequested) {
+              job.status = "cancelled";
+              delete job.error;
+            } else {
+              job.status = "failed";
+              const failure = job.controller.signal.aborted ? job.controller.signal.reason : error;
+              job.error = failure instanceof Error ? failure.message : String(failure);
+            }
+          } finally {
+            clearTimeout(deadline);
+            journeyActive = false;
+            expireJourney(job);
+          }
+        })();
+        response.setHeader("set-cookie", accessCookie(request, "/api/journeys", accessToken, config.retentionMs, config.trustProxy));
+        json(response, 202, { id, status: job.status, createdAt: job.createdAt, accessToken });
         return;
       }
 
-      const journeyArtifact = /^\/api\/journeys\/([0-9a-f-]+)\/([0-9]{3}-[a-zA-Z]+-(?:before|after)\.png)$/.exec(url.pathname);
+      const journeyCancel = /^\/api\/journeys\/([0-9a-f-]+)\/cancel$/.exec(url.pathname);
+      if (request.method === "POST" && journeyCancel) {
+        const id = journeyCancel[1];
+        const job = id ? journeyJobs.get(id) : undefined;
+        if (!job) {
+          json(response, 404, { error: "Jornada não encontrada ou já expirada." });
+          return;
+        }
+        if (!requireAccess(request, response, job.accessTokenHash)) return;
+        if (job.status !== "running") {
+          json(response, 409, { error: "A jornada já foi finalizada." });
+          return;
+        }
+        job.cancelRequested = true;
+        job.controller.abort(new Error("Jornada cancelada pelo usuário."));
+        json(response, 202, { id: job.id, status: "cancelled" });
+        return;
+      }
+
+      const journeyStatus = /^\/api\/journeys\/([0-9a-f-]+)$/.exec(url.pathname);
+      if (request.method === "GET" && journeyStatus) {
+        if (!config.allowJourneys) {
+          json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
+          return;
+        }
+        const id = journeyStatus[1];
+        const job = id ? journeyJobs.get(id) : undefined;
+        if (!job) {
+          json(response, 404, { error: "Jornada não encontrada ou já expirada." });
+          return;
+        }
+        if (!requireAccess(request, response, job.accessTokenHash)) return;
+        json(response, 200, {
+          id: job.id,
+          status: job.status,
+          createdAt: job.createdAt,
+          ...(job.report ? { report: job.report } : {}),
+          ...(job.error ? { error: job.error } : {}),
+        });
+        return;
+      }
+
+      const journeyArtifact = /^\/api\/journeys\/([0-9a-f-]+)\/(journey-report\.json|[0-9]{3}-[a-zA-Z]+-(?:before|after)\.png)$/.exec(url.pathname);
       if (request.method === "GET" && journeyArtifact) {
         if (!config.allowJourneys) {
           json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
@@ -521,12 +642,27 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         const id = journeyArtifact[1];
         const name = journeyArtifact[2];
         if (!id || !name) throw new Error("Evidência inválida.");
-        const content = await readFile(join(config.resultsDir, `journey-${id}`, "journey-evidence", name));
+        const job = journeyJobs.get(id);
+        const expectedHash = job?.accessTokenHash ?? await storedAccessHash(config.resultsDir, `journey-${id}`);
+        if (!expectedHash) {
+          json(response, 404, { error: "Jornada não encontrada ou já expirada." });
+          return;
+        }
+        if (!requireAccess(request, response, expectedHash)) return;
+        if (job?.status === "running") {
+          json(response, 409, { error: "A jornada ainda não foi concluída." });
+          return;
+        }
+        const path = name === "journey-report.json"
+          ? join(config.resultsDir, `journey-${id}`, name)
+          : join(config.resultsDir, `journey-${id}`, "journey-evidence", name);
+        const content = await readFile(path);
         response.writeHead(200, {
-          "content-type": "image/png",
+          "content-type": name.endsWith(".json") ? "application/json; charset=utf-8" : "image/png",
           "content-length": content.length,
           "x-content-type-options": "nosniff",
-          "cache-control": "no-store",
+          "cache-control": "private, no-store",
+          "referrer-policy": "no-referrer",
         });
         response.end(content);
         return;
@@ -593,7 +729,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         };
         jobQueue.enqueue(job);
         schedule();
-        response.setHeader("set-cookie", accessCookie(request, id, accessToken, config.retentionMs, config.trustProxy));
+        response.setHeader("set-cookie", accessCookie(request, `/api/scans/${id}`, accessToken, config.retentionMs, config.trustProxy));
         json(response, 202, { ...publicJob(job, jobQueue.position(job.id)), accessToken });
         return;
       }

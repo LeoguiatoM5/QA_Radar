@@ -207,6 +207,7 @@ export async function runJourney(
       results.push(result);
       options.onStep?.(result);
     } catch (error) {
+      options.signal?.throwIfAborted();
       if (evidence) {
         if (step.action === "fill" && step.valueFromEnv) secretSelectors.add(step.selector);
         await captureMasked(page, evidence.after, secretSelectors).catch(() => undefined);
@@ -241,6 +242,6 @@ export async function runJourney(
     steps: results,
   };
   } finally {
-    await page.context().unroute("**/*", navigationGuard);
+    await page.context().unroute("**/*", navigationGuard).catch(() => undefined);
   }
 }
