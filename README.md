@@ -110,9 +110,18 @@ Inicie a aplicação:
 npm run web
 ```
 
-Abra [http://127.0.0.1:4173](http://127.0.0.1:4173), informe a URL e execute o scanner.
+Abra [http://127.0.0.1:4173](http://127.0.0.1:4173) para acessar a Home, o tutorial e os atalhos das funcionalidades.
 
-No dashboard é possível:
+As funcionalidades ficam separadas por rota:
+
+- `/`: Home e orientação inicial;
+- `/scanner`: inspeção segura por URL;
+- `/journeys`: Jornadas Playwright experimentais, quando habilitadas;
+- `/docs`: documentação resumida e exemplos.
+
+Para executar uma inspeção, acesse `/scanner` e informe a URL.
+
+Na página de inspeção é possível:
 
 - escolher o navegador;
 - configurar timeout e janela de observação;
@@ -318,17 +327,17 @@ aceitação ou exploratório. O HTML protegido resultante usa a identidade visua
 do QA Radar e reúne o resumo, as descrições, durações, resultados e imagens de
 antes/depois de cada passo.
 
-Para testar jornadas no dashboard local:
+Para desabilitar explicitamente as jornadas no dashboard local, use `QA_RADAR_ENABLE_JOURNEYS=false`. Por padrão, acesse `/journeys` para usar o recurso:
 
 ```powershell
-$env:QA_RADAR_ENABLE_JOURNEYS="true"
+$env:QA_RADAR_ENABLE_JOURNEYS="true" # opcional; true é o padrão
 $env:QA_RADAR_ALLOW_PRIVATE_TARGETS="true" # somente se o alvo for localhost/rede privada
 npm run web
 ```
 
 O painel **Jornada Playwright** aparecerá abaixo do scanner. O recurso permanece
-desabilitado por padrão no servidor; o Blueprint do Render o habilita somente
-para a etapa controlada de homologação descrita abaixo.
+disponível no dashboard por padrão; use `QA_RADAR_ENABLE_JOURNEYS=false` em uma
+implantação que ainda não queira expor a funcionalidade.
 
 No dashboard, jornadas são executadas como jobs assíncronos. A criação retorna
 um token usado no acompanhamento, cancelamento, relatório JSON e evidências. O
@@ -654,4 +663,10 @@ Ao reportar um problema, inclua quando possível:
 
 ## Licença
 
-[MIT](LICENSE)
+O QA Radar é distribuído sob a [Licença de Avaliação e Teste](LICENSE). É
+permitido clonar e executar o projeto para avaliação, aprendizado e testes
+locais não comerciais. Cópia, redistribuição, revenda, hospedagem para
+terceiros e uso comercial exigem autorização prévia e escrita do titular.
+
+As dependências e componentes de terceiros permanecem sujeitos às suas próprias
+licenças.

@@ -35,7 +35,7 @@ describe("web scan integration", () => {
     try {
       browser = await chromium.launch({ headless: true });
       const page = await browser.newPage();
-      await page.goto(appUrl);
+      await page.goto(`${appUrl}/scanner`);
       await page.locator("#url").fill(targetUrl);
       await page.locator("summary").click();
       await page.locator("#settleMs").fill("30000");
@@ -102,7 +102,7 @@ describe("web scan integration", () => {
     try {
       browser = await chromium.launch({ headless: true });
       const page = await browser.newPage();
-      await page.goto(appUrl);
+      await page.goto(`${appUrl}/scanner`);
       await page.locator("#url").fill(targetUrl);
       await page.locator("#project").fill("catalogo-web");
       await page.locator("#regressionsOnly").check();
@@ -181,7 +181,7 @@ describe("web scan integration", () => {
     try {
       browser = await chromium.launch({ headless: true });
       const page = await browser.newPage();
-      await page.goto(appUrl);
+      await page.goto(`${appUrl}/scanner`);
       await page.locator("#url").fill(targetUrl);
       await page.locator("#sitemap").check();
       await page.locator("#maxPages").fill("2");
@@ -220,7 +220,7 @@ describe("web scan integration", () => {
     try {
       browser = await chromium.launch({ headless: true });
       const page = await browser.newPage();
-      await page.goto(appUrl);
+      await page.goto(`${appUrl}/journeys`);
       await page.locator("#journey-url").fill(targetUrl);
       await page.locator("#journey-json").fill(JSON.stringify({ schemaVersion: "1.0", name: "Cancelar", steps: [
         { action: "goto", url: targetUrl },
@@ -251,7 +251,7 @@ describe("web scan integration", () => {
     try {
       browser = await chromium.launch({ headless: true });
       const page = await browser.newPage();
-      await page.goto(appUrl);
+      await page.goto(`${appUrl}/journeys`);
       await page.locator("#journey-url").fill(targetUrl);
       await page.locator("#journey-json").fill(JSON.stringify({ schemaVersion: "1.0", name: "Jornada Web", steps: [
         { action: "goto", url: targetUrl },

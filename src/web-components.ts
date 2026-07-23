@@ -30,7 +30,7 @@ export function renderResultsPanel(): string {
 }
 
 export function renderJourneyPanel(): string {
-  return `<section class="panel journey-panel"><div class="eyebrow">Experimental</div><h2>Jornada Playwright</h2><p class="sub">Informe a URL e descreva os passos que o navegador deve executar.</p><details class="journey-help"><summary>Como montar uma jornada</summary><div class="journey-help-grid"><div><strong>goto</strong><span>Abre uma URL da mesma origem autorizada.</span></div><div><strong>fill</strong><span>Preenche um campo usando selector e value.</span></div><div><strong>click</strong><span>Clica em um elemento identificado pelo selector.</span></div><div><strong>select</strong><span>Escolhe uma opção de uma lista.</span></div><div><strong>waitFor</strong><span>Aguarda um elemento ficar visível.</span></div><div><strong>assertVisible</strong><span>Confirma que um elemento está visível.</span></div><div><strong>assertText</strong><span>Confirma que um elemento contém o texto esperado.</span></div><div><strong>description</strong><span>Explica o objetivo do passo no resultado.</span></div></div><p class="hint">Cada passo aceita uma descrição de até 200 caracteres. Use seletores CSS como #login, .produto ou [data-testid=resultado].</p></details><form id="journey-form"><label for="journey-url">URL e origem autorizada</label><input id="journey-url" type="url" required placeholder="https://staging.example.com"><div class="row"><div><label for="journey-browser">Navegador</label><select id="journey-browser"><option>chromium</option><option>firefox</option><option>webkit</option></select></div><div><label for="journey-timeout">Timeout por passo (ms)</label><input id="journey-timeout" type="number" min="100" max="120000" value="10000"></div></div><label for="journey-json">Passos da jornada</label><textarea id="journey-json" rows="14" spellcheck="false" required>{
+  return `<section class="panel journey-panel"><div class="eyebrow">Experimental</div><h1 class="journey-title">Jornada Playwright</h1><p class="sub">Informe a URL e descreva os passos que o navegador deve executar.</p><details class="journey-help"><summary>Como montar uma jornada</summary><div class="journey-help-grid"><div><strong>goto</strong><span>Abre uma URL da mesma origem autorizada.</span></div><div><strong>fill</strong><span>Preenche um campo usando selector e value.</span></div><div><strong>click</strong><span>Clica em um elemento identificado pelo selector.</span></div><div><strong>select</strong><span>Escolhe uma opção de uma lista.</span></div><div><strong>waitFor</strong><span>Aguarda um elemento ficar visível.</span></div><div><strong>assertVisible</strong><span>Confirma que um elemento está visível.</span></div><div><strong>assertText</strong><span>Confirma que um elemento contém o texto esperado.</span></div><div><strong>description</strong><span>Explica o objetivo do passo no resultado.</span></div></div><p class="hint">Cada passo aceita uma descrição de até 200 caracteres. Use seletores CSS como #login, .produto ou [data-testid=resultado].</p></details><form id="journey-form"><label for="journey-url">URL e origem autorizada</label><input id="journey-url" type="url" required placeholder="https://staging.example.com"><div class="row"><div><label for="journey-browser">Navegador</label><select id="journey-browser"><option>chromium</option><option>firefox</option><option>webkit</option></select></div><div><label for="journey-timeout">Timeout por passo (ms)</label><input id="journey-timeout" type="number" min="100" max="120000" value="10000"></div></div><label for="journey-json">Passos da jornada</label><textarea id="journey-json" rows="14" spellcheck="false" required>{
   "schemaVersion": "1.0",
   "name": "Smoke local",
   "steps": [
@@ -42,13 +42,59 @@ export function renderJourneyPanel(): string {
 
 export function renderDashboard(options: DashboardOptions): string {
   return `<main class="shell">
-  <nav><div class="logo"><i class="radar"></i> QA RADAR</div><span class="pill">Beta pública</span></nav>
+  ${renderAppNav("scanner")}
   <section class="hero">
     <div><div class="eyebrow">Quality intelligence · Beta</div><h1>Encontre falhas antes que o <span>usuário encontre.</span></h1><p class="lead">O QA Radar inspeciona os elementos da página, detecta falhas de JavaScript, HTTP e rede, explica o impacto para o usuário e gera evidências visuais prontas para investigação.</p><div class="features"><span>Inspeção do DOM</span><span>Evidências anotadas</span><span>Diagnóstico em linguagem de QA</span></div></div>
     ${renderScannerForm(options)}
   </section>
   ${renderResultsPanel()}
   ${options.allowJourneys ? renderJourneyPanel() : ""}
+  <footer>&copy; 2026 QA Radar · Todos os direitos reservados.</footer>
+</main>`;
+}
+
+function renderAppNav(active: "home" | "scanner" | "journeys" | "docs"): string {
+  const link = (id: typeof active, label: string, href: string) => `<a class="nav-link ${active === id ? "active" : ""}" style="color:${active === id ? "var(--cyan)" : "var(--muted)"};text-decoration:none;font-size:.78rem;padding:7px 9px;border-radius:7px" href="${href}">${label}</a>`;
+  return `<nav><a class="logo" href="/"><i class="radar"></i> QA RADAR</a><div class="nav-links" style="display:flex;gap:8px;align-items:center;margin-left:auto">${link("home", "Home", "/")}${link("scanner", "Inspeção", "/scanner")}${link("journeys", "Jornadas", "/journeys")}${link("docs", "Documentação", "/docs")}</div><span class="pill">Beta pública</span></nav>`;
+}
+
+export function renderJourneyPage(allowJourneys: boolean): string {
+  return `<main class="shell">
+  ${renderAppNav("journeys")}
+  ${allowJourneys ? `${renderJourneyPanel()}${renderJourneyReference()}` : '<section class="panel"><div class="eyebrow">Jornada Playwright</div><h1>Recurso indisponível</h1><p class="lead">As Jornadas estão desabilitadas neste servidor. Volte à Home ou use a inspeção de aplicação.</p><p><a class="home-action" href="/scanner"><strong>Abrir inspeção</strong><span>Executar o scanner seguro por URL.</span></a></p></section>'}
+  <footer>&copy; 2026 QA Radar · Todos os direitos reservados.</footer>
+</main>`;
+}
+
+function renderJourneyReference(): string {
+  return `<section class="panel journey-reference"><div class="eyebrow">Referência</div><h2>Modelo JSON</h2><p class="sub">Use o schema 1.0 para declarar os passos. A execução aceita as funcionalidades permitidas pelo contrato atual da Jornada.</p><pre><code>{
+  "schemaVersion": "1.0",
+  "name": "Login",
+  "steps": [
+    { "action": "goto", "url": "https://example.com", "description": "Abrir a página" },
+    { "action": "fill", "selector": "#email", "value": "qa@example.com" },
+    { "action": "click", "selector": "button[type=submit]" },
+    { "action": "assertVisible", "selector": "[data-testid=dashboard]" }
+  ]
+}</code></pre><p><a href="https://playwright.dev/docs/intro" target="_blank" rel="noreferrer">Consultar documentação oficial do Playwright ↗</a></p></section>`;
+}
+
+export function renderHome(): string {
+  return `<main class="shell home-shell">
+  ${renderAppNav("home")}
+  <section class="hero home-hero">
+    <div><div class="eyebrow">Quality intelligence · Beta</div><h1>Qualidade antes que o <span>usuário encontre.</span></h1><p class="lead">O QA Radar ajuda seu time a investigar aplicações web com inspeção automatizada, jornadas controladas e evidências prontas para compartilhar.</p></div>
+    <div class="panel home-navigation"><h2>O que você quer fazer?</h2><p class="sub">Escolha uma funcionalidade para começar.</p><div class="home-actions"><a class="home-action" href="/scanner"><strong>Inspecionar aplicação</strong><span>Detecte falhas de JavaScript, HTTP, rede, DOM, acessibilidade e performance.</span></a><a class="home-action" href="/journeys"><strong>Executar jornada</strong><span>Teste fluxos declarativos com navegação, preenchimento, cliques e asserts.</span></a><a class="home-action" href="/docs"><strong>Aprender como funciona</strong><span>Consulte o tutorial, exemplos, limites e formatos de relatório.</span></a></div></div>
+  </section>
+  <section class="panel home-guide"><h2>Como começar</h2><div class="help-grid"><div class="help-item"><h3>1. Escolha uma ferramenta</h3><p>Use a inspeção para um diagnóstico rápido ou uma jornada para validar um fluxo.</p></div><div class="help-item"><h3>2. Revise as evidências</h3><p>Cada execução informa impacto, recomendação e detalhes técnicos para investigação.</p></div><div class="help-item"><h3>3. Integre ao seu fluxo</h3><p>Exporte HTML, JSON, JUnit ou SARIF e conecte o resultado ao CI.</p></div></div></section>
+  <footer>&copy; 2026 QA Radar · Todos os direitos reservados.</footer>
+</main>`;
+}
+
+export function renderDocs(): string {
+  return `<main class="shell home-shell">
+  ${renderAppNav("docs")}
+  <section class="panel docs-panel"><div class="eyebrow">Documentação · Beta</div><h1>Como usar o QA Radar</h1><p class="lead">Escolha a ferramenta conforme o tipo de validação que você precisa executar.</p><h2>Inspeção</h2><p>Analisa uma URL sem clicar ou enviar formulários. Observa navegador, JavaScript, rede, DOM, acessibilidade e performance.</p><div class="docs-action"><a href="/scanner">Abrir inspeção</a><span>Começar um diagnóstico de aplicação.</span></div><h2>Jornadas</h2><p>Execute uma Jornada usando um JSON compatível com o schema 1.0. O formulário apresenta um modelo e um link para a documentação oficial do Playwright.</p><div class="docs-action"><a href="/journeys">Abrir jornadas</a><span>Validar um fluxo controlado.</span></div><h2>Relatórios e limites</h2><p>As execuções geram evidências e formatos para leitura humana ou integração com CI. Os resultados são heurísticos e não substituem testes funcionais completos, exploração manual ou dados reais de usuários.</p></section>
   <footer>&copy; 2026 QA Radar · Todos os direitos reservados.</footer>
 </main>`;
 }

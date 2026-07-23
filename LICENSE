@@ -1,21 +1,46 @@
-MIT License
+QA RADAR — LICENÇA DE AVALIAÇÃO E TESTE v1.0
 
-Copyright (c) 2026 QA Radar contributors
+Copyright (c) 2026 QA Radar contributors. Todos os direitos reservados.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Concessão limitada
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+É concedida uma licença limitada, revogável, não exclusiva e intransferível
+para acessar e executar este repositório exclusivamente para avaliação,
+aprendizado, testes técnicos e validação interna não comercial.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Restrições
+
+Sem autorização prévia e escrita do titular dos direitos, é proibido:
+
+- copiar, redistribuir, publicar ou disponibilizar o código ou partes dele;
+- vender, sublicenciar, alugar, oferecer como serviço ou revendê-lo;
+- utilizar o software em produção, em atividade comercial ou para benefício
+  comercial de terceiros;
+- criar ou distribuir produtos derivados baseados substancialmente no código;
+- remover avisos de copyright ou de licença.
+
+3. Uso permitido para testes
+
+É permitido clonar o repositório, instalar dependências, executar a aplicação,
+usar os exemplos públicos e realizar testes locais, desde que o uso permaneça
+dentro da finalidade de avaliação e não envolva redistribuição ou exploração
+comercial.
+
+4. Componentes de terceiros
+
+Dependências, navegadores, exemplos e outros componentes de terceiros continuam
+submetidos às respectivas licenças. Esta licença não altera esses direitos.
+
+5. Ausência de garantia
+
+O software é fornecido "NO ESTADO EM QUE SE ENCONTRA", sem garantias expressas
+ou implícitas. O titular não será responsável por danos decorrentes do uso ou da
+impossibilidade de uso do software.
+
+6. Autorização comercial
+
+Uso comercial, redistribuição, revenda, hospedagem para terceiros ou inclusão
+em outro produto dependem de autorização contratual específica do titular.
+
+Se qualquer disposição desta licença for considerada inválida, as demais
+disposições permanecerão vigentes.
