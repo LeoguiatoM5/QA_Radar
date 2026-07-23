@@ -19,6 +19,8 @@ describe("journey evidence HTML", () => {
     }, { testerName: "QA <Ana>", testType: "functional" }, new Date("2026-07-22T12:00:00Z"));
     assert.match(html, /Entrar no sistema/);
     assert.match(html, /QA RADAR/);
+    assert.match(html, /href="\/journeys"/);
+    assert.match(html, /Voltar para Jornadas/);
     assert.match(html, /QA &lt;Ana&gt;/);
     assert.match(html, /001-click-before\.png/);
     assert.doesNotMatch(html, /<script>/);

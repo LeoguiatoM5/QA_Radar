@@ -34,13 +34,22 @@ describe("web server", () => {
     );
   });
 
-  it("entrega o dashboard com cabeçalhos de segurança", async () => {
+  it("entrega a Home com cabeçalhos de segurança", async () => {
     const response = await fetch(baseUrl);
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
     assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.match(html, /Inspecionar aplicação/);
+    assert.match(html, /Executar jornada/);
+    assert.doesNotMatch(html, /id="scan-form"/);
+  });
+
+  it("entrega o scanner em rota própria", async () => {
+    const response = await fetch(`${baseUrl}/scanner`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
     assert.match(html, /Nova análise/);
     assert.match(html, /Executar scanner/);
     assert.match(html, /Cobrir sitemap\.xml/);
@@ -48,6 +57,23 @@ describe("web server", () => {
     assert.match(html, /Cancelar/);
     assert.match(html, /progress-bar/);
     assert.match(html, /Histórico desabilitado neste servidor/);
+    assert.doesNotMatch(html, /id="journey-form"/);
+  });
+
+  it("entrega a documentação em rota própria", async () => {
+    const response = await fetch(`${baseUrl}/docs`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /Como usar o QA Radar/);
+    assert.match(html, /href="\/scanner"/);
+  });
+
+  it("separa a Jornada do scanner e mostra indisponibilidade com segurança", async () => {
+    const response = await fetch(`${baseUrl}/journeys`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /Recurso indisponível/);
+    assert.doesNotMatch(html, /id="scan-form"/);
     assert.doesNotMatch(html, /id="journey-form"/);
   });
 

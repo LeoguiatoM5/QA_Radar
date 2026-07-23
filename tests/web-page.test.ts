@@ -5,9 +5,42 @@ import {
   renderResultsPanel,
   renderScannerForm,
 } from "../src/web-components.js";
-import { createWebPage } from "../src/web-page.js";
+import { createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
 
 describe("dashboard components", () => {
+  it("compõe a Home sem carregar o cliente do scanner", () => {
+    const html = createHomePage();
+
+    assert.match(html, /^<!doctype html>/);
+    assert.match(html, /Inspecionar aplicação/);
+    assert.match(html, /href="\/scanner"/);
+    assert.match(html, /href="\/journeys"/);
+    assert.doesNotMatch(html, /WEB_CLIENT_SCRIPT/);
+    assert.doesNotMatch(html, /id="scan-form"/);
+  });
+
+  it("compõe a documentação com navegação para as ferramentas", () => {
+    const html = createDocsPage();
+
+    assert.match(html, /Como usar o QA Radar/);
+    assert.match(html, /href="\/scanner"/);
+    assert.match(html, /href="\/journeys"/);
+    assert.doesNotMatch(html, /id="scan-form"/);
+  });
+
+  it("compõe a Jornada isolada do scanner", () => {
+    const html = createJourneyPage(true);
+
+    assert.match(html, /id="journey-form"/);
+    assert.match(html, /<h1 class="journey-title">Jornada Playwright<\/h1>/);
+    assert.match(html, /\.nav-links\{display:flex;flex-wrap:wrap/);
+    assert.match(html, /Modelo JSON/);
+    assert.match(html, /playwright\.dev\/docs\/intro/);
+    assert.match(html, /WEB_CLIENT_SCRIPT|journeyForm/);
+    assert.doesNotMatch(html, /id="scan-form"/);
+    assert.doesNotMatch(html, /id="results"/);
+  });
+
   it("compõe estrutura, estilos e comportamento do cliente", () => {
     const html = createWebPage();
 

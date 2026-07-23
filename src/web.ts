@@ -24,7 +24,9 @@ try {
   const allowPrivateTargets = process.env.QA_RADAR_ALLOW_PRIVATE_TARGETS === "true";
   const trustProxy = process.env.QA_RADAR_TRUST_PROXY === "true";
   const allowHistory = process.env.QA_RADAR_ENABLE_HISTORY === "true";
-  const allowJourneys = process.env.QA_RADAR_ENABLE_JOURNEYS === "true";
+  // Jornadas ficam disponíveis no dashboard por padrão; use false para
+  // desativar explicitamente em uma implantação que ainda não queira expô-las.
+  const allowJourneys = process.env.QA_RADAR_ENABLE_JOURNEYS !== "false";
   const server = createQaRadarServer({
     allowPrivateTargets,
     trustProxy,
