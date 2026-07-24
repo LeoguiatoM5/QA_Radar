@@ -3,7 +3,7 @@ type JourneyStepDescription = { description?: string };
 export type JourneyStep = JourneyStepDescription & (
   | { action: "goto"; url: string }
   | { action: "click"; selector: string; allowDestructive?: boolean }
-  | { action: "fill"; selector: string; value?: string; valueFromEnv?: string }
+  | { action: "fill"; selector: string; value?: string; valueFromEnv?: string; valueFromInput?: string }
   | { action: "select"; selector: string; value: string }
   | { action: "waitFor"; selector: string; timeoutMs?: number }
   | { action: "assertVisible"; selector: string }
@@ -71,17 +71,25 @@ function parseStep(value: unknown, index: number): JourneyStep {
       return { action, selector: target, ...(allowDestructive ? { allowDestructive: true } : {}), ...description(step, index) };
     }
     case "fill": {
-      exactKeys(step, ["action", "selector", "value", "valueFromEnv", "description"], index);
+      exactKeys(step, ["action", "selector", "value", "valueFromEnv", "valueFromInput", "description"], index);
       const target = selector(step, index);
       const hasValue = typeof step.value === "string";
       const hasEnvironment = typeof step.valueFromEnv === "string";
-      if (hasValue === hasEnvironment) throw new Error(`Passo ${index + 1}: informe somente value ou valueFromEnv.`);
+      const hasInput = typeof step.valueFromInput === "string";
+      if ([hasValue, hasEnvironment, hasInput].filter(Boolean).length !== 1) throw new Error(`Passo ${index + 1}: informe somente value, valueFromEnv ou valueFromInput.`);
       if (hasEnvironment) {
         const name = text(step.valueFromEnv, `Passo ${index + 1}: valueFromEnv`, 100);
         if (!/^QA_RADAR_SECRET_[A-Z0-9_]+$/.test(name)) {
           throw new Error(`Passo ${index + 1}: secrets devem usar variável QA_RADAR_SECRET_*.`);
         }
         return { action, selector: target, valueFromEnv: name, ...description(step, index) };
+      }
+      if (hasInput) {
+        const name = text(step.valueFromInput, `Passo ${index + 1}: valueFromInput`, 100);
+        if (!/^QA_RADAR_INPUT_[A-Z0-9_]+$/.test(name)) {
+          throw new Error(`Passo ${index + 1}: entradas devem usar referência QA_RADAR_INPUT_*.`);
+        }
+        return { action, selector: target, valueFromInput: name, ...description(step, index) };
       }
       return { action, selector: target, value: text(step.value, `Passo ${index + 1}: value`, 2_000), ...description(step, index) };
     }

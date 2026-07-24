@@ -106,6 +106,31 @@ ou ações destrutivas executadas.
 - **Reprodutibilidade:** Reproduzido de forma determinística no axe-core.
 - **Status:** Corrigido e revalidado
 
+### BUG-UI-002 — Limite padrão inválido bloqueia o Scanner no Render
+
+- **Categoria:** Bug funcional / Validação de formulário
+- **Severidade:** Alta
+- **Prioridade:** Alta
+- **Ambiente:** `https://qa-radar.onrender.com/scanner`
+- **Navegador:** Chromium pelo Browser integrado
+- **Pré-condições:** Blueprint com `QA_RADAR_MAX_SITEMAP_PAGES=5`
+- **Passos para reproduzir:**
+  1. Abrir `/scanner`.
+  2. Informar uma URL pública válida.
+  3. Manter sitemap desmarcado e os demais valores padrão.
+  4. Pressionar “Executar scanner”.
+- **Resultado atual:** o campo “Máximo de páginas” possui `max="5"`, mas inicia
+  com `value="10"`. A validação nativa direciona o foco ao campo e impede o
+  envio do formulário, mesmo com sitemap desmarcado.
+- **Resultado esperado:** o valor inicial deve respeitar o limite configurado e
+  uma inspeção de página única deve iniciar sem ajuste manual.
+- **Contorno:** alterar “Máximo de páginas” para `5` ou menos.
+- **Causa raiz confirmada:** `renderScanner()` usa `value="10"` fixo enquanto
+  o atributo `max` utiliza `maxSitemapPages`.
+- **Reprodutibilidade:** reproduzido no deploy; após alterar para `5`, o Scanner
+  concluiu em 4,3 s, com HTTP `200` e zero issues.
+- **Status:** Corrigido localmente; aguardando publicação e revalidação no Render
+
 ## Melhorias recomendadas
 
 - Transformar a navegação em componente responsivo com menu compacto em telas
@@ -156,6 +181,7 @@ se comportaram de forma consistente.
 | --- | --- | --- | --- | --- | --- |
 | BUG-UI-001 | Navegação excede a largura no mobile | Responsividade / Visual / Usabilidade | Médio | Alta | Corrigido |
 | BUG-A11Y-001 | Jornada sem `h1` | Acessibilidade | Médio | Média | Corrigido |
+| BUG-UI-002 | Valor padrão excede o limite do Render e bloqueia o Scanner | Funcional / Validação | Alta | Alta | Corrigido localmente |
 
 Após a correção, a tabela de status vigente é:
 
@@ -167,10 +193,9 @@ Após a correção, a tabela de status vigente é:
 ## Conclusão
 
 A qualidade atual é **boa para uma versão Beta**, com os fluxos essenciais
-funcionais e compatíveis nos três motores testados. A aplicação não deve ser
-considerada pronta para uma experiência mobile ampla até corrigir o overflow da
-navegação e não deve declarar conformidade de acessibilidade enquanto a violação
-de heading permanecer.
+funcionais e compatíveis nos três motores testados. Os problemas de overflow
+mobile e hierarquia de headings encontrados na exploração inicial foram
+corrigidos e revalidados.
 
 As correções foram implementadas após a análise de causa raiz. A validação
 posterior confirmou typecheck, build, 75 testes unitários, overflow eliminado em
@@ -178,3 +203,82 @@ posterior confirmou typecheck, build, 75 testes unitários, overflow eliminado e
 intermitente no fluxo protegido de evidências da Jornada sob carga; o teste
 isolado passou, indicando flutuação de ambiente não relacionada às correções de
 layout/acessibilidade.
+
+## Smoke pós-deploy — 24/07/2026
+
+**Ambiente:** `https://qa-radar.onrender.com`
+
+**Método:** validação HTTP e execução não destrutiva pelas APIs públicas
+
+**Resultado:** reprovado para o fluxo padrão do Scanner; demais fluxos aprovados
+
+### Disponibilidade e rotas
+
+- `/health`, `/`, `/scanner`, `/journeys` e `/docs` retornaram HTTP `200`.
+- Home, Scanner, Jornadas e Documentação apresentaram os títulos esperados.
+- As quatro páginas contêm navegação compartilhada e título principal `h1`.
+- As respostas usam `Cache-Control: no-store`, `Referrer-Policy: no-referrer`,
+  `X-Content-Type-Options: nosniff` e política CSP.
+- Após as execuções, `/health` informou serviço saudável, sem job ativo ou em
+  fila.
+
+### Scanner
+
+- Alvo público: `https://example.com`.
+- Job: `23b14a69-f3ae-4825-b954-06b83f1b6e73`.
+- Criação HTTP `202`, progresso até 100% e estado final `completed`.
+- Duração: 7.228 ms.
+- Relatório JSON HTTP `200`, schema `1.0` e zero issues.
+- Tentativa de obter o relatório sem token retornou HTTP `401`.
+
+### Jornada
+
+- Nome: `Smoke pós-deploy`.
+- Alvo público: `https://example.com`.
+- Job: `6cb7637f-2044-4026-99de-3291829a868a`.
+- Passos: abrir a página e confirmar que o `h1` está visível.
+- Criação HTTP `202`; dois de dois passos aprovados.
+- Duração: 2.501 ms.
+- `journey-report.json` retornou HTTP `200`, schema `1.0` e status `passed`.
+- Os dois passos registraram evidências.
+- Tentativa de obter o relatório sem token retornou HTTP `401`.
+
+### Validação visual e interativa local
+
+Ambiente local: `http://127.0.0.1:4173`.
+
+- Home, Scanner, Jornadas e Documentação foram inspecionados no navegador em
+  viewport desktop.
+- As quatro rotas apresentaram navegação consistente, um único `h1`, ausência
+  de overflow horizontal e nenhum erro ou aviso no console.
+- As abas “Nova análise” e “Como funciona” do Scanner responderam corretamente.
+- Uma inspeção de `https://example.com` foi executada pela interface e terminou
+  aprovada, com HTTP `200`, zero erros, zero avisos e relatório HTML incorporado.
+- Uma Jornada de dois passos foi executada pela interface e terminou aprovada.
+- O botão “Cancelar jornada” substituiu corretamente o botão de execução durante
+  o processamento.
+- O modal “Gerar evidências” abriu corretamente, recebeu responsável e tipo
+  “Smoke” e gerou o relatório HTML.
+- O relatório apresentou responsável, classificação, resultado e os dois passos.
+  As quatro imagens Antes/Depois carregaram com largura natural de 1.440 px.
+- O link “Voltar para Jornadas” estava presente e nenhum erro ou aviso foi
+  registrado no console.
+
+### Validação visual e interativa no Render
+
+- As quatro rotas carregaram com um único `h1`, sem overflow no viewport
+  desktop e sem erros ou avisos no console.
+- O Scanner foi bloqueado pelo BUG-UI-002 usando os valores padrão.
+- Com “Máximo de páginas” alterado manualmente de `10` para `5`, a inspeção de
+  `https://example.com` concluiu aprovada em 4,3 s, com HTTP `200` e zero issues.
+- A Jornada pública concluiu dois de dois passos em 2,5 s.
+- O relatório HTML foi gerado com responsável “QA Smoke Render” e tipo “Smoke”.
+- As quatro imagens Antes/Depois terminaram o carregamento com largura natural
+  de 1.440 px e o console permaneceu limpo.
+
+### Ressalva
+
+O controle de viewport do navegador integrado não aplicou a dimensão solicitada
+de 390×844 e manteve `innerWidth` em 1.281 px. Por isso, a revalidação visual
+mobile não foi repetida nesta etapa; permanece válida a evidência automatizada
+anterior em 390 px, que confirmou `scrollWidth === innerWidth` nas quatro rotas.

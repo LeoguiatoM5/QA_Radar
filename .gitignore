@@ -6,5 +6,12 @@ qa-radar-results/
 qa-radar-report-test/
 qa-radar-report-test-axe/
 qa-radar-journey-test/
+qa-radar-checkpoint-test/
+qa-radar-exploration-evidence/
+qa-radar-functional-evidence/
+qa-radar-lighthouse/
+.vscode/
+CODEX_HANDOFF.md
+NEXT_SESSION_HANDOFF.md
 *.log
 .DS_Store

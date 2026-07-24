@@ -138,7 +138,7 @@ async function executeStep(
       return;
     }
     case "fill": {
-      const value = step.valueFromEnv ? secrets[step.valueFromEnv] : step.value;
+      const value = step.valueFromEnv ? secrets[step.valueFromEnv] : step.valueFromInput ? secrets[step.valueFromInput] : step.value;
       if (value === undefined) throw new Error("Secret obrigatório não foi configurado.");
       await page.locator(step.selector).fill(value, { timeout: timeoutMs });
       return;
@@ -195,7 +195,7 @@ export async function runJourney(
     try {
       if (evidence) await captureMasked(page, evidence.before, secretSelectors);
       await executeStep(page, step, allowed, secrets, timeoutMs);
-      if (step.action === "fill" && step.valueFromEnv) secretSelectors.add(step.selector);
+      if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) secretSelectors.add(step.selector);
       if (evidence) await captureMasked(page, evidence.after, secretSelectors);
       options.signal?.throwIfAborted();
       const result: JourneyStepResult = {
@@ -211,7 +211,7 @@ export async function runJourney(
     } catch (error) {
       options.signal?.throwIfAborted();
       if (evidence) {
-        if (step.action === "fill" && step.valueFromEnv) secretSelectors.add(step.selector);
+        if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) secretSelectors.add(step.selector);
         await captureMasked(page, evidence.after, secretSelectors).catch(() => undefined);
       }
       const result: JourneyStepResult = {

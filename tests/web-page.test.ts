@@ -12,6 +12,7 @@ describe("dashboard components", () => {
     const html = createHomePage();
 
     assert.match(html, /^<!doctype html>/);
+    assert.match(html, /Encontre problemas antes que cheguem ao/);
     assert.match(html, /Inspecionar aplicação/);
     assert.match(html, /href="\/scanner"/);
     assert.match(html, /href="\/journeys"/);
@@ -32,7 +33,8 @@ describe("dashboard components", () => {
     const html = createJourneyPage(true);
 
     assert.match(html, /id="journey-form"/);
-    assert.match(html, /<h1 class="journey-title">Jornada Playwright<\/h1>/);
+    assert.match(html, /<header class="tool-header">.*<h1>Jornada Playwright<\/h1>/);
+    assert.match(html, /<section class="tool-layout"><section class="panel journey-panel">/);
     assert.match(html, /\.nav-links\{display:flex;flex-wrap:wrap/);
     assert.match(html, /Modelo JSON/);
     assert.match(html, /playwright\.dev\/docs\/intro/);
@@ -45,12 +47,24 @@ describe("dashboard components", () => {
     const html = createWebPage();
 
     assert.match(html, /^<!doctype html>/);
+    assert.match(html, /<header class="tool-header">.*<h1>Inspeção<\/h1>/);
+    assert.match(html, /<section class="tool-layout"><form class="panel" id="scan-form">/);
+    assert.match(html, /Informe a URL e ajuste os critérios da análise/);
+    assert.doesNotMatch(html, /Encontre falhas antes que o/);
     assert.match(html, /\.progress-bar\{/);
     assert.match(html, /cancelButton\.addEventListener/);
     assert.match(html, /queuePosition/);
     assert.match(html, /Gerando relatórios/);
     assert.match(html, /Histórico desabilitado neste servidor/);
     assert.doesNotMatch(html, /id="history-button"/);
+  });
+
+  it("limita o valor inicial de páginas ao máximo configurado", () => {
+    const limitedHtml = createWebPage(undefined, false, 5);
+    const defaultHtml = createWebPage();
+
+    assert.match(limitedHtml, /id="maxPages"[^>]*max="5" value="5"/);
+    assert.match(defaultHtml, /id="maxPages"[^>]*max="20" value="10"/);
   });
 
   it("renderiza recursos opcionais sem expor atributos não escapados", () => {
@@ -63,10 +77,10 @@ describe("dashboard components", () => {
     assert.match(html, /Analisa até 5 páginas/);
     assert.match(html, /id="journey-form"/);
     assert.match(html, /\/api\/journeys/);
-    assert.match(html, /Informe a URL e descreva os passos que o navegador deve executar/);
     assert.match(html, /Como montar uma jornada/);
     assert.match(html, /description/);
     assert.match(html, /journey-controls/);
+    assert.match(html, /journeyProgress/);
     assert.match(html, /journeyActionLabels/);
     assert.match(html, /id="journey-evidence-modal"/);
     assert.match(html, /Gerar relatório de evidências/);

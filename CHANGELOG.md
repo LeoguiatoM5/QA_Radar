@@ -19,6 +19,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 - Artefatos agora usam política sem cache, sem referrer e sandbox para HTML.
 - Faixas IPv4 reservadas adicionais passaram a ser bloqueadas pela proteção SSRF.
+- Inspeção e Jornadas agora compartilham o mesmo padrão de cabeçalho funcional,
+  largura e cards; a apresentação do produto permanece concentrada na Home.
 - Jornadas do dashboard agora são jobs assíncronos protegidos por token, com
   consulta, cancelamento, timeout global e limites próprios de passos/payload.
 - Evidências e JSON de jornadas exigem autorização e não expõem caminhos internos.
@@ -27,6 +29,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Corrigido
 
+- O valor inicial de páginas do sitemap agora respeita o limite configurado no
+  servidor, evitando que a validação nativa bloqueie o Scanner no Render.
 - Jornadas no dashboard deixam de herdar o limite padrão de páginas do sitemap
   quando a cobertura multipágina não está habilitada.
 - O botão de cancelamento substitui temporariamente o botão de execução e deixa
