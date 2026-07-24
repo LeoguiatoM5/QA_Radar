@@ -10,7 +10,7 @@ import { createQaRadarServer } from "../src/server.js";
 describe("responsive integration", () => {
   it("mantém as páginas principais dentro do viewport mobile", async () => {
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-responsive-"));
-    const app = createQaRadarServer({ resultsDir });
+    const app = createQaRadarServer({ resultsDir, allowJourneys: true });
     await new Promise<void>((resolve) => app.listen(0, "127.0.0.1", resolve));
     const address = app.address() as AddressInfo;
     const appUrl = `http://127.0.0.1:${address.port}`;
@@ -43,6 +43,16 @@ describe("responsive integration", () => {
         assert.equal(layout.h1Count, 1, `${path}: deve conter um único h1`);
         assert.deepEqual(layout.controlsOutsideViewport, [], `${path}: possui controles fora da tela`);
       }
+
+      await page.goto(`${appUrl}/journeys`, { waitUntil: "domcontentloaded" });
+      await page.locator('[data-journey-example="saucedemo"]').click();
+      const selectedExample = await page.evaluate(() => ({
+        url: (document.querySelector("#journey-url") as HTMLInputElement).value,
+        journey: JSON.parse((document.querySelector("#journey-json") as HTMLTextAreaElement).value),
+      }));
+      assert.equal(selectedExample.url, "https://www.saucedemo.com/");
+      assert.equal(selectedExample.journey.name, "Login no SauceDemo");
+      assert.equal(selectedExample.journey.steps.length, 6);
     } finally {
       await browser?.close();
       await new Promise<void>((resolve, reject) =>

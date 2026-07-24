@@ -23,6 +23,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   largura e cards; a apresentação do produto permanece concentrada na Home.
 - O CI agora valida as páginas principais em um viewport mobile de 390×844,
   incluindo overflow horizontal, hierarquia de títulos e controles fora da tela.
+- Jornadas agora oferece exemplos rápidos de smoke básico e login no SauceDemo,
+  com preenchimento automático da URL e do JSON.
 - Jornadas do dashboard agora são jobs assíncronos protegidos por token, com
   consulta, cancelamento, timeout global e limites próprios de passos/payload.
 - Evidências e JSON de jornadas exigem autorização e não expõem caminhos internos.
@@ -33,6 +35,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 - O valor inicial de páginas do sitemap agora respeita o limite configurado no
   servidor, evitando que a validação nativa bloqueie o Scanner no Render.
+- A geração do relatório de Jornada renova o cookie protegido antes de abrir o
+  HTML, evitando falhas intermitentes de autorização em nova aba.
 - Jornadas no dashboard deixam de herdar o limite padrão de páginas do sitemap
   quando a cobertura multipágina não está habilitada.
 - O botão de cancelamento substitui temporariamente o botão de execução e deixa
