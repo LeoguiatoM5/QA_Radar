@@ -21,6 +21,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 - Faixas IPv4 reservadas adicionais passaram a ser bloqueadas pela proteção SSRF.
 - Inspeção e Jornadas agora compartilham o mesmo padrão de cabeçalho funcional,
   largura e cards; a apresentação do produto permanece concentrada na Home.
+- O CI agora valida as páginas principais em um viewport mobile de 390×844,
+  incluindo overflow horizontal, hierarquia de títulos e controles fora da tela.
 - Jornadas do dashboard agora são jobs assíncronos protegidos por token, com
   consulta, cancelamento, timeout global e limites próprios de passos/payload.
 - Evidências e JSON de jornadas exigem autorização e não expõem caminhos internos.

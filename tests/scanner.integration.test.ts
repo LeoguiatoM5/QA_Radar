@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { scan } from "../src/scanner.js";
 import type { ScanOptions, ScanStage } from "../src/types.js";
@@ -38,7 +39,8 @@ describe("scanner integration", () => {
       regressionsOnly: false,
       accessibility: true,
     };
-    const baselinePath = resolve("qa-radar-results", `scanner-baseline-${process.pid}.json`);
+    const baselineDir = await mkdtemp(join(tmpdir(), "qa-radar-scanner-baseline-"));
+    const baselinePath = join(baselineDir, "report.json");
     const stages: ScanStage[] = [];
 
     try {
@@ -60,7 +62,7 @@ describe("scanner integration", () => {
       assert.equal(compared.comparison?.newIssues, 0);
       assert.ok((compared.comparison?.existingIssues ?? 0) >= 2);
     } finally {
-      await rm(baselinePath, { force: true });
+      await rm(baselineDir, { recursive: true, force: true });
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
