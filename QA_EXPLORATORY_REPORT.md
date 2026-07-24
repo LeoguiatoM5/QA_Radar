@@ -1,8 +1,8 @@
 # Relatório de Análise Exploratória — QA Radar
 
-**Data:** 23/07/2026  
+**Data:** 23–24/07/2026
 **Tipo:** exploração funcional, visual, responsiva, acessibilidade, compatibilidade, segurança básica e desempenho percebido  
-**Status:** concluído; achados corrigidos e revalidados em 23/07/2026
+**Status:** concluído; achados corrigidos e revalidados em produção em 24/07/2026
 
 ## Resumo executivo
 
@@ -45,7 +45,7 @@ ou ações destrutivas executadas.
 | Área | Resultado |
 | --- | --- |
 | Rotas principais | Aprovado: HTTP 200 e títulos corretos |
-| Navegação | Aprovada no desktop; overflow encontrado no mobile |
+| Navegação | Overflow mobile encontrado inicialmente e corrigido |
 | Scanner | Formulário, abas, campos e validações HTML responderam |
 | Jornada | Formulário, JSON inválido e zero passos retornaram mensagens corretas |
 | Cancelamento | Coberto pela integração existente e sem regressão observada |
@@ -129,7 +129,7 @@ ou ações destrutivas executadas.
   o atributo `max` utiliza `maxSitemapPages`.
 - **Reprodutibilidade:** reproduzido no deploy; após alterar para `5`, o Scanner
   concluiu em 4,3 s, com HTTP `200` e zero issues.
-- **Status:** Corrigido localmente; aguardando publicação e revalidação no Render
+- **Status:** Corrigido, publicado e revalidado no Render
 
 ## Melhorias recomendadas
 
@@ -155,7 +155,6 @@ ou ações destrutivas executadas.
 
 ## Pontos não testados
 
-- Deploy real no Render.
 - Fluxo autenticado com `storageState` (ainda não implementado).
 - Testes em dispositivos físicos e leitores de tela reais.
 - Lighthouse completo pela interface web.
@@ -181,7 +180,7 @@ se comportaram de forma consistente.
 | --- | --- | --- | --- | --- | --- |
 | BUG-UI-001 | Navegação excede a largura no mobile | Responsividade / Visual / Usabilidade | Médio | Alta | Corrigido |
 | BUG-A11Y-001 | Jornada sem `h1` | Acessibilidade | Médio | Média | Corrigido |
-| BUG-UI-002 | Valor padrão excede o limite do Render e bloqueia o Scanner | Funcional / Validação | Alta | Alta | Corrigido localmente |
+| BUG-UI-002 | Valor padrão excede o limite do Render e bloqueia o Scanner | Funcional / Validação | Alta | Alta | Corrigido |
 
 Após a correção, a tabela de status vigente é:
 
@@ -189,6 +188,7 @@ Após a correção, a tabela de status vigente é:
 | --- | --- | --- |
 | BUG-UI-001 | Corrigido | `scrollWidth === innerWidth` em 390 px nas quatro rotas |
 | BUG-A11Y-001 | Corrigido | axe-core sem violações nas quatro rotas |
+| BUG-UI-002 | Corrigido | Campo publicado com `max="5"` e `value="5"`; Scanner aprovado sem ajuste manual |
 
 ## Conclusão
 
@@ -198,11 +198,10 @@ mobile e hierarquia de headings encontrados na exploração inicial foram
 corrigidos e revalidados.
 
 As correções foram implementadas após a análise de causa raiz. A validação
-posterior confirmou typecheck, build, 75 testes unitários, overflow eliminado em
-390 px e axe-core sem violações. A integração completa apresentou uma falha
-intermitente no fluxo protegido de evidências da Jornada sob carga; o teste
-isolado passou, indicando flutuação de ambiente não relacionada às correções de
-layout/acessibilidade.
+posterior confirmou typecheck, build, 76 testes unitários, 18 testes de
+integração, overflow eliminado em 390×844 e axe-core sem violações. O GitHub
+Actions passou em Ubuntu e Windows, incluindo Playwright, Lighthouse e a action
+composta.
 
 ## Smoke pós-deploy — 24/07/2026
 
@@ -210,7 +209,9 @@ layout/acessibilidade.
 
 **Método:** validação HTTP e execução não destrutiva pelas APIs públicas
 
-**Resultado:** reprovado para o fluxo padrão do Scanner; demais fluxos aprovados
+**Resultado inicial:** reprovado para o fluxo padrão do Scanner; demais fluxos aprovados
+
+**Resultado após correção:** aprovado
 
 ### Disponibilidade e rotas
 
@@ -268,17 +269,33 @@ Ambiente local: `http://127.0.0.1:4173`.
 
 - As quatro rotas carregaram com um único `h1`, sem overflow no viewport
   desktop e sem erros ou avisos no console.
-- O Scanner foi bloqueado pelo BUG-UI-002 usando os valores padrão.
-- Com “Máximo de páginas” alterado manualmente de `10` para `5`, a inspeção de
-  `https://example.com` concluiu aprovada em 4,3 s, com HTTP `200` e zero issues.
+- Antes da correção, o Scanner foi bloqueado pelo BUG-UI-002 usando os valores
+  padrão.
+- Após a publicação, “Máximo de páginas” passou a iniciar em `5`, respeitando
+  `max="5"`.
+- Uma nova inspeção da Home publicada concluiu aprovada em 4,2 s, com HTTP
+  `200`, zero erros, zero avisos, TTFB de 166 ms, LCP de 1.300 ms e CLS zero.
 - A Jornada pública concluiu dois de dois passos em 2,5 s.
 - O relatório HTML foi gerado com responsável “QA Smoke Render” e tipo “Smoke”.
 - As quatro imagens Antes/Depois terminaram o carregamento com largura natural
   de 1.440 px e o console permaneceu limpo.
 
+### Jornada SauceDemo após o deploy
+
+- Alvo: `https://www.saucedemo.com/`.
+- Job: `76b44b4f-2a11-4174-95c7-48a3731aef0d`.
+- Fluxo: abrir login, preencher usuário e senha de demonstração, autenticar,
+  aguardar produtos e confirmar o título “Products”.
+- Resultado: seis de seis passos aprovados em 11,8 s.
+- Relatório HTML gerado com responsável “QA pós-deploy” e tipo “Smoke”.
+- As 12 evidências Antes/Depois carregaram com largura natural de 1.440 px.
+- Usuário e senha não foram incluídos no HTML do relatório.
+
 ### Ressalva
 
 O controle de viewport do navegador integrado não aplicou a dimensão solicitada
-de 390×844 e manteve `innerWidth` em 1.281 px. Por isso, a revalidação visual
-mobile não foi repetida nesta etapa; permanece válida a evidência automatizada
-anterior em 390 px, que confirmou `scrollWidth === innerWidth` nas quatro rotas.
+de 390×844 e manteve `innerWidth` em 1.281 px. A lacuna foi coberta por uma
+integração Playwright dedicada, executada com viewport real de 390×844. Home,
+Inspeção, Jornadas e Documentação apresentaram `scrollWidth === innerWidth`, um
+único `h1` e nenhum controle visível fora da tela. A verificação passou a fazer
+parte de `npm run test:integration` e do GitHub Actions.
