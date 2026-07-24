@@ -196,6 +196,23 @@ function numberField(body: Record<string, unknown>, name: string): string | unde
   return typeof value === "number" && Number.isFinite(value) ? String(value) : undefined;
 }
 
+function journeyInputSecrets(body: Record<string, unknown>, definition: ReturnType<typeof parseJourney>): Record<string, string> {
+  const raw = body.inputSecrets;
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("As credenciais da jornada devem ser um objeto.");
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > 10) throw new Error("A jornada pode receber no máximo 10 credenciais.");
+  const expected = new Set(definition.steps.flatMap((step) => step.action === "fill" && step.valueFromInput ? [step.valueFromInput] : []));
+  const secrets: Record<string, string> = {};
+  for (const [name, value] of entries) {
+    if (!/^QA_RADAR_INPUT_[A-Z0-9_]+$/.test(name)) throw new Error("As credenciais devem usar referências QA_RADAR_INPUT_*.");
+    if (!expected.has(name)) throw new Error(`A credencial ${name} não é usada pela jornada.`);
+    if (typeof value !== "string" || value.length > 2_000) throw new Error(`A credencial ${name} deve ser um texto com até 2000 caracteres.`);
+    secrets[name] = value;
+  }
+  return secrets;
+}
+
 function scanOptions(body: Record<string, unknown>, outputDir: string, config: ServerOptions): ScanOptions {
   const url = textField(body, "url");
   if (!url) throw new Error("Informe a URL da aplicação.");
@@ -572,6 +589,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           throw new Error(`A definição da jornada deve ter no máximo ${config.maxJourneyPayloadBytes} bytes.`);
         }
         const parsedDefinition = parseJourney(definition);
+        const inputSecrets = journeyInputSecrets(body, parsedDefinition);
         if (parsedDefinition.steps.length > config.maxJourneySteps) {
           throw new Error(`A jornada deve ter no máximo ${config.maxJourneySteps} passos neste servidor.`);
         }
@@ -603,7 +621,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         deadline.unref();
         void (async () => {
           try {
-            const result = await config.journeyRunner(options, parsedDefinition, process.env, job.controller.signal);
+            const result = await config.journeyRunner(options, parsedDefinition, { ...process.env, ...inputSecrets }, job.controller.signal);
             job.controller.signal.throwIfAborted();
             job.report = publicJourney(result.report);
             await writeFile(join(outputDir, "journey-report.json"), `${JSON.stringify(job.report, null, 2)}\n`, "utf8");

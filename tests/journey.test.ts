@@ -30,8 +30,11 @@ describe("journey contract", () => {
 
   it("não aceita secret literal ambíguo nem variável fora do namespace", () => {
     const base = { schemaVersion: "1.0", name: "Login" };
-    assert.throws(() => parseJourney({ ...base, steps: [{ action: "fill", selector: "#x", value: "a", valueFromEnv: "TOKEN" }] }), /somente value ou valueFromEnv/);
+    assert.throws(() => parseJourney({ ...base, steps: [{ action: "fill", selector: "#x", value: "a", valueFromEnv: "TOKEN" }] }), /somente value, valueFromEnv ou valueFromInput/);
     assert.throws(() => parseJourney({ ...base, steps: [{ action: "fill", selector: "#x", valueFromEnv: "PASSWORD" }] }), /QA_RADAR_SECRET/);
+    const input = parseJourney({ ...base, steps: [{ action: "fill", selector: "#password", valueFromInput: "QA_RADAR_INPUT_PASSWORD" }] });
+    assert.equal(input.steps[0]?.action, "fill");
+    assert.throws(() => parseJourney({ ...base, steps: [{ action: "fill", selector: "#x", valueFromInput: "PASSWORD" }] }), /QA_RADAR_INPUT/);
   });
 
   it("limita a descrição opcional apresentada ao usuário", () => {

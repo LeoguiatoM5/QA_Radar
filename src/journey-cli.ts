@@ -12,7 +12,7 @@ function browserType(name: ScanOptions["browser"]): BrowserType {
 function journeySecrets(environment: NodeJS.ProcessEnv): Record<string, string> {
   return Object.fromEntries(
     Object.entries(environment)
-      .filter((entry): entry is [string, string] => entry[0].startsWith("QA_RADAR_SECRET_") && entry[1] !== undefined),
+      .filter((entry): entry is [string, string] => (entry[0].startsWith("QA_RADAR_SECRET_") || entry[0].startsWith("QA_RADAR_INPUT_")) && entry[1] !== undefined),
   );
 }
 

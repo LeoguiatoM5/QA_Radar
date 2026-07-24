@@ -321,6 +321,12 @@ Cada passo pode declarar `description` com até 200 caracteres. Essa descrição
 exibida no resultado para explicar a intenção do teste; quando ausente, o
 dashboard apresenta um nome amigável baseado na ação.
 
+Para Jornadas executadas por usuários do dashboard, um passo `fill` pode usar
+`valueFromInput` com uma referência `QA_RADAR_INPUT_*`. O formulário cria um
+campo de senha para cada referência, envia o valor somente durante o job e o
+descarta ao final. As credenciais não são gravadas no JSON, nos logs, nos
+relatórios ou nas capturas de evidência.
+
 Depois da execução, **Gerar relatório de evidências** abre um formulário para
 informar o responsável e classificar o teste como funcional, smoke, regressão,
 aceitação ou exploratório. O HTML protegido resultante usa a identidade visual
