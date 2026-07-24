@@ -74,6 +74,11 @@ let completedJourneyId;
 let completedJourneyToken;
 const journeyCancel=document.querySelector('#journey-cancel');
 const journeyJson=document.querySelector('#journey-json');
+const journeyUrl=document.querySelector('#journey-url');
+const journeyExamples={
+  basic:{url:'https://example.com/',journey:{schemaVersion:'1.0',name:'Smoke básico',steps:[{action:'goto',url:'https://example.com/',description:'Abrir a página inicial'},{action:'assertVisible',selector:'h1',description:'Confirmar título visível'}]}},
+  saucedemo:{url:'https://www.saucedemo.com/',journey:{schemaVersion:'1.0',name:'Login no SauceDemo',steps:[{action:'goto',url:'https://www.saucedemo.com/',description:'Abrir a página de login'},{action:'fill',selector:'#user-name',value:'standard_user',description:'Informar o usuário de demonstração'},{action:'fill',selector:'#password',value:'secret_sauce',description:'Informar a senha de demonstração'},{action:'click',selector:'#login-button',description:'Entrar no sistema'},{action:'waitFor',selector:'.inventory_list',description:'Aguardar os produtos'},{action:'assertText',selector:'.title',text:'Products',description:'Confirmar login realizado'}]}}
+};
 const journeyCredentials=document.createElement('div');
 journeyCredentials.className='journey-credentials';
 journeyCredentials.style.cssText='display:none;margin-top:16px;padding:12px;background:#07101d;border:1px solid var(--line);border-radius:10px';
@@ -88,6 +93,7 @@ function refreshJourneyCredentials(){
 }
 journeyJson?.addEventListener('input',refreshJourneyCredentials);
 refreshJourneyCredentials();
+for(const button of document.querySelectorAll('[data-journey-example]'))button.addEventListener('click',()=>{const example=journeyExamples[button.dataset.journeyExample];if(!example||!journeyJson||!journeyUrl)return;journeyUrl.value=example.url;journeyJson.value=JSON.stringify(example.journey,null,2);refreshJourneyCredentials();journeyUrl.focus()});
 const journeyProgress=document.createElement('div');
 journeyProgress.className='journey-progress';
 journeyProgress.setAttribute('role','status');

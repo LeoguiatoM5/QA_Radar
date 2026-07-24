@@ -78,6 +78,11 @@ describe("dashboard components", () => {
     assert.match(html, /id="journey-form"/);
     assert.match(html, /\/api\/journeys/);
     assert.match(html, /Como montar uma jornada/);
+    assert.match(html, /data-journey-example="basic"/);
+    assert.match(html, /data-journey-example="saucedemo"/);
+    assert.match(html, /Login SauceDemo/);
+    assert.match(html, /valueFromInput/);
+    assert.match(html, /standard_user/);
     assert.match(html, /description/);
     assert.match(html, /journey-controls/);
     assert.match(html, /journeyProgress/);

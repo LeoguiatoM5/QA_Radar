@@ -702,6 +702,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           return;
         }
         if (!requireAccess(request, response, job.accessTokenHash)) return;
+        const accessToken = requestToken(request);
         if (job.status !== "completed" || !job.report) {
           json(response, 409, { error: "A jornada precisa estar concluída para gerar evidências." });
           return;
@@ -709,6 +710,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         const metadata = parseJourneyEvidenceMetadata(await readJson(request));
         const html = createJourneyEvidenceHtml(job.report, metadata);
         await writeFile(join(job.outputDir, "journey-evidence.html"), html, "utf8");
+        if (accessToken) {
+          response.setHeader("set-cookie", accessCookie(request, "/api/journeys", accessToken, config.retentionMs, config.trustProxy));
+        }
         json(response, 201, { url: `/api/journeys/${id}/journey-evidence.html` });
         return;
       }
