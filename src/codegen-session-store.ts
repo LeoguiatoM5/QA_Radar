@@ -10,7 +10,7 @@ export interface CodegenSession {
 }
 
 export class CodegenSessionStore {
-  #sessions = new Map<string, CodegenSession>();
+  readonly #sessions = new Map<string, CodegenSession>();
 
   get(id: string): CodegenSession | undefined {
     return this.#sessions.get(id);

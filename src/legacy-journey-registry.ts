@@ -20,7 +20,7 @@ export interface JourneyJob {
  * Playwright" (code-execution) state on purpose.
  */
 export class LegacyJourneyRegistry {
-  #jobs = new Map<string, JourneyJob>();
+  readonly #jobs = new Map<string, JourneyJob>();
   #active = false;
 
   isActive(): boolean {
