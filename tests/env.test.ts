@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { codeModeEnabledForHost, loadEnvironmentConfig } from "../src/env.js";
+
+describe("configuração de ambiente", () => {
+  it("habilita o Modo Jornada de Playwright por padrão somente em host local", () => {
+    assert.equal(codeModeEnabledForHost("127.0.0.1"), true);
+    assert.equal(codeModeEnabledForHost("localhost"), true);
+    assert.equal(codeModeEnabledForHost("::1"), true);
+    assert.equal(codeModeEnabledForHost("0.0.0.0"), false);
+    assert.equal(codeModeEnabledForHost("0.0.0.0", "true"), true);
+    assert.equal(codeModeEnabledForHost("127.0.0.1", "false"), false);
+    assert.throws(
+      () => codeModeEnabledForHost("127.0.0.1", "yes"),
+      /deve ser true ou false/,
+    );
+  });
+
+  it("aplica os valores padrão quando nenhuma variável é informada", () => {
+    const env = loadEnvironmentConfig({});
+    assert.equal(env.host, "127.0.0.1");
+    assert.equal(env.port, 4173);
+    assert.equal(env.sandbox, undefined);
+    assert.equal(env.serverOptions.allowPrivateTargets, false);
+    assert.equal(env.serverOptions.trustProxy, false);
+    assert.equal(env.serverOptions.allowHistory, false);
+    assert.equal(env.serverOptions.allowCodeMode, true);
+    assert.equal(env.serverOptions.concurrency, 2);
+    assert.equal(env.serverOptions.maxQueueSize, 20);
+    assert.equal(env.serverOptions.rateLimitMax, 10);
+    assert.equal(env.serverOptions.retentionMs, 60 * 60_000);
+    assert.equal(env.serverOptions.maxJobDurationMs, 5 * 60_000);
+    assert.equal(env.serverOptions.maxCodeExecutionDurationMs, 5 * 60_000);
+    assert.equal(env.serverOptions.maxCodeOutputBytes, 1024 * 1024);
+    assert.equal(env.serverOptions.maxCodeMemoryMiB, 512);
+    assert.equal(env.serverOptions.maxCodegenDurationMs, 10 * 60_000);
+    assert.equal(env.serverOptions.maxSitemapPages, 20);
+  });
+
+  it("lê host, porta e as flags booleanas quando informadas", () => {
+    const env = loadEnvironmentConfig({
+      HOST: "0.0.0.0",
+      PORT: "8080",
+      QA_RADAR_ALLOW_PRIVATE_TARGETS: "true",
+      QA_RADAR_TRUST_PROXY: "true",
+      QA_RADAR_ENABLE_HISTORY: "true",
+      QA_RADAR_ENABLE_CODE_MODE: "true",
+      QA_RADAR_CODE_MODE_ADMIN_TOKEN: "token-admin",
+      TURNSTILE_SITE_KEY: "site-key",
+      TURNSTILE_SECRET_KEY: "secret-key",
+    });
+    assert.equal(env.host, "0.0.0.0");
+    assert.equal(env.port, 8080);
+    assert.equal(env.serverOptions.allowPrivateTargets, true);
+    assert.equal(env.serverOptions.trustProxy, true);
+    assert.equal(env.serverOptions.allowHistory, true);
+    assert.equal(env.serverOptions.allowCodeMode, true);
+    assert.equal(env.serverOptions.codeModeAdminToken, "token-admin");
+    assert.equal(env.serverOptions.turnstileSiteKey, "site-key");
+    assert.equal(env.serverOptions.turnstileSecretKey, "secret-key");
+  });
+
+  it("valida PORT e os limites numéricos", () => {
+    assert.throws(() => loadEnvironmentConfig({ PORT: "0" }), /PORT deve ser um número entre 1 e 65535/);
+    assert.throws(() => loadEnvironmentConfig({ PORT: "70000" }), /PORT deve ser um número entre 1 e 65535/);
+    assert.throws(() => loadEnvironmentConfig({ PORT: "abc" }), /PORT deve ser um número entre 1 e 65535/);
+    assert.throws(
+      () => loadEnvironmentConfig({ QA_RADAR_CONCURRENCY: "0" }),
+      /QA_RADAR_CONCURRENCY deve ser um número inteiro positivo/,
+    );
+    assert.throws(
+      () => loadEnvironmentConfig({ QA_RADAR_MAX_SITEMAP_PAGES: "3.5" }),
+      /QA_RADAR_MAX_SITEMAP_PAGES deve ser um número inteiro positivo/,
+    );
+  });
+
+  it("exige QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto", () => {
+    assert.equal(loadEnvironmentConfig({}).sandbox, undefined);
+    assert.throws(
+      () => loadEnvironmentConfig({ QA_RADAR_SANDBOX_URL: "https://sandbox.example.com" }),
+      /QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto/,
+    );
+    assert.throws(
+      () => loadEnvironmentConfig({ QA_RADAR_SANDBOX_SIGNING_SECRET: "segredo-com-32-bytes-no-minimo-ok" }),
+      /QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto/,
+    );
+    const env = loadEnvironmentConfig({
+      QA_RADAR_SANDBOX_URL: " https://sandbox.example.com ",
+      QA_RADAR_SANDBOX_SIGNING_SECRET: "segredo-com-32-bytes-no-minimo-ok",
+    });
+    assert.deepEqual(env.sandbox, {
+      url: "https://sandbox.example.com",
+      signingSecret: "segredo-com-32-bytes-no-minimo-ok",
+    });
+  });
+});
