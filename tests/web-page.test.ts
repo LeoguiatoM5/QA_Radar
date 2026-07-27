@@ -26,21 +26,35 @@ describe("dashboard components", () => {
     assert.match(html, /Como usar o QA Radar/);
     assert.match(html, /href="\/scanner"/);
     assert.match(html, /href="\/journeys"/);
+    assert.match(html, /Modo Jornada de Playwright/);
+    assert.doesNotMatch(html, /Jornada visual|Modelo JSON/);
+    assert.equal((html.match(/<h1>/g) ?? []).length, 1);
     assert.doesNotMatch(html, /id="scan-form"/);
   });
 
-  it("compõe a Jornada isolada do scanner", () => {
+  it("compõe somente o Modo Jornada de Playwright na página de automação", () => {
     const html = createJourneyPage(true);
 
-    assert.match(html, /id="journey-form"/);
-    assert.match(html, /<header class="tool-header">.*<h1>Jornada Playwright<\/h1>/);
-    assert.match(html, /<section class="tool-layout"><section class="panel journey-panel">/);
+    assert.match(html, /<header class="tool-header">.*<h1>Modo Jornada de Playwright<\/h1>/);
+    assert.match(html, /id="code-mode-panel"/);
+    assert.match(html, /id="playwright-code"/);
+    assert.match(html, /id="code-execute"/);
     assert.match(html, /\.nav-links\{display:flex;flex-wrap:wrap/);
-    assert.match(html, /Modelo JSON/);
-    assert.match(html, /playwright\.dev\/docs\/intro/);
-    assert.match(html, /WEB_CLIENT_SCRIPT|journeyForm/);
+    assert.match(html, />Executar<\/button>/);
+    assert.doesNotMatch(html, /somente local|Executar localmente/);
+    assert.doesNotMatch(html, /id="visual-mode-tab"|id="journey-form"|Modelo JSON/);
     assert.doesNotMatch(html, /id="scan-form"/);
     assert.doesNotMatch(html, /id="results"/);
+  });
+
+  it("mantém o Modo Jornada indisponível quando o ambiente não habilita execução", () => {
+    const html = createJourneyPage();
+
+    assert.match(html, /Recurso indisponível neste ambiente/);
+    assert.doesNotMatch(html, /id="code-mode-tab"/);
+    assert.doesNotMatch(html, /id="code-execution"/);
+    assert.doesNotMatch(html, /id="playwright-code"/);
+    assert.doesNotMatch(html, /id="journey-form"|Modelo JSON/);
   });
 
   it("compõe estrutura, estilos e comportamento do cliente", () => {
@@ -68,28 +82,14 @@ describe("dashboard components", () => {
   });
 
   it("renderiza recursos opcionais sem expor atributos não escapados", () => {
-    const html = createWebPage('site"><script>alert(1)</script>', true, 5, true);
+    const html = createWebPage('site"><script>alert(1)</script>', true, 5);
 
     assert.match(html, /data-sitekey="site&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt;"/);
     assert.doesNotMatch(html, /data-sitekey="site"><script>/);
     assert.match(html, /id="history-button"/);
     assert.match(html, /max="5"/);
     assert.match(html, /Analisa até 5 páginas/);
-    assert.match(html, /id="journey-form"/);
-    assert.match(html, /\/api\/journeys/);
-    assert.match(html, /Como montar uma jornada/);
-    assert.match(html, /data-journey-example="basic"/);
-    assert.match(html, /data-journey-example="saucedemo"/);
-    assert.match(html, /Login SauceDemo/);
-    assert.match(html, /valueFromInput/);
-    assert.match(html, /standard_user/);
-    assert.match(html, /description/);
-    assert.match(html, /journey-controls/);
-    assert.match(html, /journeyProgress/);
-    assert.match(html, /journeyActionLabels/);
-    assert.match(html, /id="journey-evidence-modal"/);
-    assert.match(html, /Gerar relatório de evidências/);
-    assert.doesNotMatch(html, /Secrets são lidos somente/);
+    assert.doesNotMatch(html, /id="journey-form"|\/api\/journeys|Modelo JSON/);
   });
 
   it("mantém os componentes principais no fragmento do dashboard", () => {
@@ -98,7 +98,6 @@ describe("dashboard components", () => {
       maxSitemapPages: 3,
       turnstileWidget: "",
       historyWidget: "",
-      allowJourneys: false,
     });
 
     for (const id of ["scan-form", "scan-panel", "help-panel", "results", "progress", "issues"]) {
@@ -110,7 +109,6 @@ describe("dashboard components", () => {
       maxSitemapPages: 3,
       turnstileWidget: "",
       historyWidget: "",
-      allowJourneys: false,
     }), /id="scan-form"/);
     assert.match(renderResultsPanel(), /id="results"/);
   });

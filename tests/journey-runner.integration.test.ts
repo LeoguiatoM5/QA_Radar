@@ -177,6 +177,8 @@ describe("journey runner integration", () => {
       assert.equal(result.report.status, "passed");
       assert.equal(JSON.parse(await readFile(result.reportPath, "utf8")).name, "Smoke CLI");
       await access(join(outputDir, "journey-evidence", "001-goto-before.png"));
+      await access(join(outputDir, "journey-evidence", "journey.webm"));
+      assert.equal(result.report.steps.every((step) => Boolean(step.evidence?.video)), true);
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

@@ -116,7 +116,7 @@ As funcionalidades ficam separadas por rota:
 
 - `/`: Home e orientação inicial;
 - `/scanner`: inspeção segura por URL;
-- `/journeys`: Jornadas Playwright experimentais, quando habilitadas;
+- `/journeys`: Modo Jornada de Playwright;
 - `/docs`: documentação resumida e exemplos.
 
 Para executar uma inspeção, acesse `/scanner` e informe a URL.
@@ -289,68 +289,25 @@ O resumo é incorporado aos relatórios do QA Radar e o resultado bruto fica em
 com jornadas e permanece bloqueado no servidor público enquanto o isolamento de
 rede e os limites de infraestrutura não forem homologados.
 
-### Jornadas Playwright experimentais
-
-Crie `journey.json`:
-
-```json
-{
-  "schemaVersion": "1.0",
-  "name": "Login",
-  "steps": [
-    { "action": "goto", "url": "https://staging.example.com/login", "description": "Abrir a página de login" },
-    { "action": "fill", "selector": "#email", "value": "qa@example.com", "description": "Informar o usuário" },
-    { "action": "fill", "selector": "#password", "valueFromEnv": "QA_RADAR_SECRET_PASSWORD", "description": "Informar a senha" },
-    { "action": "click", "selector": "button[type=submit]", "description": "Entrar no sistema" },
-    { "action": "assertVisible", "selector": "[data-testid=dashboard]", "description": "Confirmar que o painel foi exibido" }
-  ]
-}
-```
-
-No PowerShell, configure o secret apenas no ambiente e execute:
+### Modo Jornada de Playwright
 
 ```powershell
-$env:QA_RADAR_SECRET_PASSWORD="valor-protegido"
-npm run dev -- https://staging.example.com --journey journey.json --output qa-radar-journey
-```
-
-O modo é opt-in, aceita somente a origem informada e gera `journey-report.json`
-e screenshots em `journey-evidence/`.
-
-Cada passo pode declarar `description` com até 200 caracteres. Essa descrição é
-exibida no resultado para explicar a intenção do teste; quando ausente, o
-dashboard apresenta um nome amigável baseado na ação.
-
-Para Jornadas executadas por usuários do dashboard, um passo `fill` pode usar
-`valueFromInput` com uma referência `QA_RADAR_INPUT_*`. O formulário cria um
-campo de senha para cada referência, envia o valor somente durante o job e o
-descarta ao final. As credenciais não são gravadas no JSON, nos logs, nos
-relatórios ou nas capturas de evidência.
-
-Depois da execução, **Gerar relatório de evidências** abre um formulário para
-informar o responsável e classificar o teste como funcional, smoke, regressão,
-aceitação ou exploratório. O HTML protegido resultante usa a identidade visual
-do QA Radar e reúne o resumo, as descrições, durações, resultados e imagens de
-antes/depois de cada passo.
-
-Para desabilitar explicitamente as jornadas no dashboard local, use `QA_RADAR_ENABLE_JOURNEYS=false`. Por padrão, acesse `/journeys` para usar o recurso:
-
-```powershell
-$env:QA_RADAR_ENABLE_JOURNEYS="true" # opcional; true é o padrão
-$env:QA_RADAR_ALLOW_PRIVATE_TARGETS="true" # somente se o alvo for localhost/rede privada
 npm run web
 ```
 
-O painel **Jornada Playwright** aparecerá abaixo do scanner. O recurso permanece
-disponível no dashboard por padrão; use `QA_RADAR_ENABLE_JOURNEYS=false` em uma
-implantação que ainda não queira expor a funcionalidade.
+A rota `/journeys` apresenta a experiência baseada em arquivos
+Playwright TypeScript `.spec.ts`. Nela é possível iniciar o Codegen, importar,
+editar, exportar e executar o teste, além de gerar o relatório de evidências.
 
-No dashboard, jornadas são executadas como jobs assíncronos. A criação retorna
-um token usado no acompanhamento, cancelamento, relatório JSON e evidências. O
-servidor limita passos, payload e duração total; no Blueprint Render os limites
-preparados são 10 passos, 16 KiB e 120 segundos. O Blueprint habilita Jornadas
-para homologação controlada; qualquer aplicação dessa configuração continua
-dependendo de deploy manual e validação operacional no Render.
+O Modo Jornada de Playwright está sendo preparado para execução hospedada. A API
+e o executor já são processos separados, possuem timeout, limite de saída,
+quota, autenticação administrativa e tokens próprios para os artefatos. O
+Blueprint de produção mantém a execução desabilitada até o worker receber o
+sandbox de CPU, memória total, processos, rede e filesystem exigido para a
+oferta comercial.
+
+O executor declarativo baseado em JSON é legado, fica desabilitado por padrão e
+não faz parte do produto, da interface ou da direção comercial.
 
 ## Como interpretar os resultados
 
@@ -477,12 +434,20 @@ As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeit
 O plano incremental, as regras de compatibilidade e as evidências de validação de
 cada etapa são mantidos em [`docs/EVOLUTION_LOG.md`](docs/EVOLUTION_LOG.md).
 
-### Exploração configurável
+### Modo Jornada de Playwright
 
-- Permitir que o QA descreva jornadas com cliques e preenchimento de campos.
-- Criar uma lista explícita de ações permitidas e bloquear ações destrutivas.
-- Capturar evidências antes e depois de cada etapa.
-- Suportar login por cookies ou storage state do Playwright.
+- Consolidar a jornada baseada no Playwright Codegen: o usuário informa a URL,
+  abre uma sessão de gravação e realiza o fluxo diretamente no navegador.
+- Converter automaticamente cliques, preenchimentos, navegações e demais ações
+  gravadas em um teste Playwright TypeScript com a API e a sintaxe oficiais.
+- Ao encerrar a gravação, preencher o editor do QA Radar com o código gerado
+  para revisão e edição antes da execução.
+- Oferecer autocomplete, validação, templates e execução com logs, screenshots,
+  traces, vídeos e relatório de evidências.
+- Permitir salvar, importar e exportar arquivos `.spec.ts`, sem formato de
+  jornada proprietário.
+- Habilitar a execução hospedada após concluir sandbox, limites de recursos e
+  isolamento de sessões, rede, filesystem e processos.
 
 ### Cobertura
 
@@ -496,11 +461,24 @@ cada etapa são mantidos em [`docs/EVOLUTION_LOG.md`](docs/EVOLUTION_LOG.md).
 - Detectar problemas de layout, conteúdo cortado e overflow.
 - Evoluir o agrupamento de sintomas em causas-raiz.
 - Permitir configurar severidade, regras e falsos positivos por projeto.
+- Integrar o OWASP ZAP para análises dinâmicas de segurança controladas.
+- Usar Inteligência Artificial para apoiar diagnósticos, explicar causas
+  prováveis e sugerir correções, sempre mantendo as evidências originais.
+
+### Automação e regressões
+
+- Executar jornadas completas em ambientes autenticados.
+- Comparar execuções e identificar regressões após deploys.
+- Associar resultados a versões, commits e ambientes.
+- Permitir testes agendados e alertas configuráveis.
+- Integrar o QA Radar com GitHub, Jira, Slack e pipelines CI/CD.
 
 ### Colaboração e histórico
 
 - Evoluir o histórico local para PostgreSQL e armazenamento de artefatos compatível com S3.
+- Comparar execuções e destacar mudanças de severidade, regras e evidências.
 - Adicionar autenticação, organizações e permissões por projeto.
+- Gerenciar projetos, equipes e ambientes de teste.
 - Criar gráficos de tendência e filtros avançados no histórico.
 
 ## Limitações da Beta
@@ -536,11 +514,52 @@ Não habilite histórico compartilhado em uma implantação pública antes de ad
 
 Ainda são necessários autenticação, HTTPS e persistência antes de uma implantação aberta ao público. A API já aplica política de destinos públicos, rate limit, limite de fila e tetos de duração como primeiras camadas de proteção.
 
-Cada análise criada pela API recebe um token aleatório. O dashboard preserva esse
-token em cookie `HttpOnly`, restrito às rotas da própria análise. Clientes da API
-devem enviar o valor retornado em `accessToken` pelo cabeçalho
-`Authorization: Bearer <token>` para consultar o estado, cancelar ou baixar
-artefatos. O servidor guarda somente o hash do token durante a retenção.
+Cada análise, execução Playwright e sessão Codegen recebe um token aleatório. O
+dashboard preserva o token em cookie `HttpOnly`, restrito às rotas do próprio
+recurso. Clientes da API devem enviar o valor retornado em `accessToken` pelo
+cabeçalho `Authorization: Bearer <token>` para consultar estado, cancelar,
+recuperar código ou baixar artefatos. O servidor guarda somente o hash do token
+durante a retenção.
+
+Em uma homologação controlada, a criação remota de uma execução Playwright exige
+também `QA_RADAR_ENABLE_CODE_MODE=true` e um
+`QA_RADAR_CODE_MODE_ADMIN_TOKEN` de 32 a 512 bytes enviado como Bearer token. O
+token administrativo não é repassado ao worker. Também são obrigatórios
+`QA_RADAR_SANDBOX_URL` em HTTPS e `QA_RADAR_SANDBOX_SIGNING_SECRET`; sem esse
+runner externo, a API falha fechado com `503` e nunca usa o worker local como
+fallback. Essa autenticação é uma camada de controle de acesso e não substitui
+o sandbox; portanto, o Blueprint mantém o recurso desabilitado por padrão.
+
+Nesse caminho hospedado, um preflight aceita imports apenas de
+`@playwright/test` ou `playwright/test` e rejeita acesso direto a filesystem,
+processos, `process.env`, `require`, `eval`, importação dinâmica e construção
+dinâmica de funções. Essa política reduz vetores triviais, mas não é tratada
+como fronteira de segurança contra código deliberadamente ofuscado.
+
+O contrato versionado, a assinatura HMAC, a proteção contra replay e os
+requisitos obrigatórios do ambiente descartável estão em
+[`docs/SANDBOX_RUNNER_PROTOCOL.md`](docs/SANDBOX_RUNNER_PROTOCOL.md).
+
+O repositório também contém uma implementação de referência do runner Docker.
+Ela cria um container por job com CPU, memória, PIDs e tempo limitados, rootfs
+somente leitura, `tmpfs` exclusivo, usuário sem privilégios, seccomp,
+capabilities zeradas e destruição forçada. O job permanece em `--network none`.
+Quando `QA_RADAR_SANDBOX_NETWORK_POLICY=public-egress`, um sidecar confiável
+oferece HTTPS público por socket Unix efêmero, bloqueando host, metadata, redes
+privadas, faixas reservadas e DNS rebinding. O job nunca recebe bridge ou rota
+externa direta.
+
+```bash
+npm run sandbox:image
+npm run sandbox:homologate
+QA_RADAR_SANDBOX_NETWORK_POLICY=public-egress \
+QA_RADAR_SANDBOX_SIGNING_SECRET='secret-aleatorio-com-32-bytes-ou-mais' \
+npm run sandbox
+```
+
+O Blueprint público continua desabilitado porque ainda precisa apontar para uma
+instância dedicada desse runner, protegida por HTTPS. Não monte o socket Docker
+no processo HTTP público.
 
 O servidor limita por padrão cada endereço a 10 novas análises por minuto,
 retorna os cabeçalhos `X-RateLimit-Limit`, `X-RateLimit-Remaining` e
@@ -594,6 +613,11 @@ repositório no GitHub:
 4. Ao final, use o endereço HTTPS `qa-radar-....onrender.com` fornecido pela plataforma.
 
 O plano gratuito possui recursos limitados, armazenamento efêmero e suspensão por inatividade. Ele é adequado para demonstração e validação da Beta, não para uma operação com garantia de disponibilidade.
+
+Decisão de produto: a Beta e os pilotos permanecerão gratuitos. Não haverá
+cobrança, assinatura, fatura ou captura de pagamento até que o produto cumpra
+integralmente os critérios de pronto para comercialização, incluindo segurança,
+persistência, isolamento por organização, operação e suporte.
 
 Como as métricas de CPU e memória do painel podem exigir uma instância paga, o
 servidor também registra telemetria operacional em JSON no log padrão. Procure

@@ -1,0 +1,4 @@
+{$SANDBOX_RUNNER_DOMAIN} {
+    encode gzip
+    reverse_proxy sandbox-runner:4180
+}
