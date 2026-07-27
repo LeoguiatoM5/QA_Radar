@@ -62,7 +62,8 @@ function mimeType(path: string): string {
   return path.endsWith(".webm") ? "video/webm" : "image/png";
 }
 
-async function dataUri(readAsset: AssetReader, relativePath: string): Promise<string | undefined> {
+async function dataUri(readAsset: AssetReader, relativePath: string | undefined): Promise<string | undefined> {
+  if (!relativePath) return undefined;
   try {
     const buffer = await readAsset(relativePath);
     return `data:${mimeType(relativePath)};base64,${buffer.toString("base64")}`;

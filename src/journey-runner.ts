@@ -11,8 +11,8 @@ export interface JourneyStepResult {
   durationMs: number;
   error?: string;
   evidence?: {
-    before: string;
-    after: string;
+    before?: string;
+    after?: string;
     video?: { path: string; startMs: number; endMs: number };
   };
 }
