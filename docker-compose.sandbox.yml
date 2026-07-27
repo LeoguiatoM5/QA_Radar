@@ -1,0 +1,54 @@
+services:
+  sandbox-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox-runner
+      args:
+        DOCKER_GID: "${DOCKER_GID:?set DOCKER_GID to the host docker.sock group id}"
+    image: qa-radar-sandbox-runner:3.1.0
+    env_file:
+      - .env.runner
+    environment:
+      QA_RADAR_SANDBOX_HOST: 0.0.0.0
+      QA_RADAR_SANDBOX_PORT: 4180
+      QA_RADAR_SANDBOX_JOB_IMAGE: qa-radar-sandbox-job:3.1.0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    expose:
+      - "4180"
+    restart: unless-stopped
+    networks:
+      - sandbox-control
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4180/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    image: caddy:2.9-alpine
+    environment:
+      SANDBOX_RUNNER_DOMAIN: "${SANDBOX_RUNNER_DOMAIN:?set SANDBOX_RUNNER_DOMAIN to a DNS name}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.sandbox:/etc/caddy/Caddyfile:ro
+      - sandbox-caddy-data:/data
+      - sandbox-caddy-config:/config
+    depends_on:
+      sandbox-runner:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sandbox-control
+
+networks:
+  sandbox-control:
+    driver: bridge
+    internal: true
+
+volumes:
+  sandbox-caddy-data:
+  sandbox-caddy-config:

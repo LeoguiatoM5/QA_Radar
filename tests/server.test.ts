@@ -2,11 +2,17 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import type { Server } from "node:http";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { createQaRadarServer } from "../src/server.js";
+import { EventEmitter } from "node:events";
+import type { ChildProcess } from "node:child_process";
+import {
+  codeModeEnabledForHost,
+  createQaRadarServer,
+} from "../src/server.js";
+import { codeExecutionEnvironment } from "../src/code-execution.js";
 import type { OperationalEvent } from "../src/server.js";
 
 async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 1_000): Promise<void> {
@@ -42,7 +48,7 @@ describe("web server", () => {
     assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.match(html, /Inspecionar aplicação/);
-    assert.match(html, /Executar jornada/);
+    assert.match(html, /Modo Jornada de Playwright/);
     assert.doesNotMatch(html, /id="scan-form"/);
   });
 
@@ -68,11 +74,11 @@ describe("web server", () => {
     assert.match(html, /href="\/scanner"/);
   });
 
-  it("separa a Jornada do scanner e mostra indisponibilidade com segurança", async () => {
+  it("separa o Modo Jornada de Playwright do scanner e mostra indisponibilidade com segurança", async () => {
     const response = await fetch(`${baseUrl}/journeys`);
     const html = await response.text();
     assert.equal(response.status, 200);
-    assert.match(html, /Recurso indisponível/);
+    assert.match(html, /Recurso indisponível neste ambiente/);
     assert.doesNotMatch(html, /id="scan-form"/);
     assert.doesNotMatch(html, /id="journey-form"/);
   });
@@ -85,6 +91,440 @@ describe("web server", () => {
     });
     assert.equal(response.status, 403);
     assert.match((await response.json() as { error: string }).error, /desabilitadas/);
+  });
+
+  it("bloqueia endpoints de código quando desabilitados e restringe o acesso ao host local", async () => {
+    const disabled = await fetch(`${baseUrl}/api/code-execution`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: "test('x', () => {});" }),
+    });
+    assert.equal(disabled.status, 403);
+    assert.match((await disabled.json() as { error: string }).error, /desabilitado/);
+
+    const protectedServer = createQaRadarServer({
+      allowCodeMode: true,
+      allowPrivateTargets: true,
+      trustProxy: true,
+    });
+    await new Promise<void>((resolve) => protectedServer.listen(0, "127.0.0.1", resolve));
+    const address = protectedServer.address() as AddressInfo;
+    const protectedUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const remote = await fetch(`${protectedUrl}/api/code-execution`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.10",
+        },
+        body: JSON.stringify({}),
+      });
+      assert.equal(remote.status, 403);
+      assert.match((await remote.json() as { error: string }).error, /execução hospedada/);
+
+      const local = await fetch(`${protectedUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      assert.equal(local.status, 400);
+      assert.match((await local.json() as { error: string }).error, /arquivo \.spec\.ts/);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        protectedServer.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it("habilita o Modo Jornada de Playwright por padrão somente em host local", () => {
+    assert.equal(codeModeEnabledForHost("127.0.0.1"), true);
+    assert.equal(codeModeEnabledForHost("localhost"), true);
+    assert.equal(codeModeEnabledForHost("::1"), true);
+    assert.equal(codeModeEnabledForHost("0.0.0.0"), false);
+    assert.equal(codeModeEnabledForHost("0.0.0.0", "true"), true);
+    assert.equal(codeModeEnabledForHost("127.0.0.1", "false"), false);
+    assert.throws(
+      () => codeModeEnabledForHost("127.0.0.1", "yes"),
+      /deve ser true ou false/,
+    );
+  });
+
+  it("exige token administrativo para execução remota e token próprio para seus artefatos", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-access-"));
+    const adminToken = "admin-token-seguro-com-mais-de-32-caracteres";
+    let executionCount = 0;
+    const protectedServer = createQaRadarServer({
+      allowCodeMode: true,
+      trustProxy: true,
+      codeModeAdminToken: adminToken,
+      resultsDir,
+      hostedCodeRunner: async () => {
+        executionCount += 1;
+        return {
+          exitCode: 0,
+          stdout: '{"stats":{"expected":1,"duration":10}}',
+          stderr: "",
+        };
+      },
+    });
+    await new Promise<void>((resolve) => protectedServer.listen(0, "127.0.0.1", resolve));
+    const address = protectedServer.address() as AddressInfo;
+    const protectedUrl = `http://127.0.0.1:${address.port}`;
+    const body = JSON.stringify({
+      code: "import { test } from '@playwright/test'; test('protegido', async () => {});",
+      headed: false,
+    });
+    const remoteHeaders = {
+      "content-type": "application/json",
+      "x-forwarded-for": "203.0.113.20",
+    };
+
+    try {
+      const missingAdmin = await fetch(`${protectedUrl}/api/code-execution`, {
+        method: "POST",
+        headers: remoteHeaders,
+        body,
+      });
+      assert.equal(missingAdmin.status, 401);
+
+      const wrongAdmin = await fetch(`${protectedUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { ...remoteHeaders, authorization: "Bearer token-incorreto" },
+        body,
+      });
+      assert.equal(wrongAdmin.status, 403);
+
+      const executionResponse = await fetch(`${protectedUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { ...remoteHeaders, authorization: `Bearer ${adminToken}` },
+        body,
+      });
+      assert.equal(executionResponse.status, 200);
+      assert.match(
+        executionResponse.headers.get("set-cookie") ?? "",
+        /HttpOnly; SameSite=Strict; Path=\/api\/code-executions\//,
+      );
+      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      assert.match(execution.accessToken, /^[A-Za-z0-9_-]{40,}$/);
+      assert.notEqual(execution.accessToken, adminToken);
+
+      const evidenceUrl = `${protectedUrl}/api/code-executions/${execution.id}/evidence-report`;
+      const evidenceBody = JSON.stringify({ testerName: "QA", testType: "smoke" });
+      const missingExecutionToken = await fetch(evidenceUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: evidenceBody,
+      });
+      assert.equal(missingExecutionToken.status, 401);
+
+      const wrongExecutionToken = await fetch(evidenceUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer token-incorreto",
+        },
+        body: evidenceBody,
+      });
+      assert.equal(wrongExecutionToken.status, 403);
+
+      const authorization = { authorization: `Bearer ${execution.accessToken}` };
+      const createdEvidence = await fetch(evidenceUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: evidenceBody,
+      });
+      assert.equal(createdEvidence.status, 201);
+
+      const artifactUrl = `${protectedUrl}/api/code-executions/${execution.id}/code-evidence.html`;
+      assert.equal((await fetch(artifactUrl)).status, 401);
+      const artifact = await fetch(artifactUrl, { headers: authorization });
+      assert.equal(artifact.status, 200);
+      assert.match(await artifact.text(), /Relatório de evidências/);
+
+      for (const maliciousCode of [
+        'import { readFile } from "node:fs/promises";',
+        "const secret = process.env.QA_RADAR_CODE_MODE_ADMIN_TOKEN;",
+        'import { spawn } from "node:child_process";',
+      ]) {
+        const blocked = await fetch(`${protectedUrl}/api/code-execution`, {
+          method: "POST",
+          headers: { ...remoteHeaders, authorization: `Bearer ${adminToken}` },
+          body: JSON.stringify({ code: maliciousCode, headed: false }),
+        });
+        assert.equal(blocked.status, 400);
+        assert.match((await blocked.json() as { error: string }).error, /não (?:é )?permitid[ao]/);
+      }
+      assert.equal(executionCount, 1);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        protectedServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejeita token administrativo curto", () => {
+    assert.throws(
+      () => createQaRadarServer({ codeModeAdminToken: "curto" }),
+      /entre 32 e 512 bytes/,
+    );
+  });
+
+  it("falha fechado quando execução remota não possui runner sandbox", async () => {
+    const adminToken = "admin-token-seguro-com-mais-de-32-caracteres";
+    const serverWithoutSandbox = createQaRadarServer({
+      allowCodeMode: true,
+      trustProxy: true,
+      codeModeAdminToken: adminToken,
+    });
+    await new Promise<void>((resolve) => serverWithoutSandbox.listen(0, "127.0.0.1", resolve));
+    const address = serverWithoutSandbox.address() as AddressInfo;
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/code-execution`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.30",
+          authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          code: "import { test } from 'playwright/test'; test('x', async () => {});",
+        }),
+      });
+      assert.equal(response.status, 503);
+      assert.match((await response.json() as { error: string }).error, /sandbox.+não está configurado/i);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        serverWithoutSandbox.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it("protege o código gravado pelo Codegen com token próprio", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-codegen-access-"));
+    const processEvents = new EventEmitter();
+    Object.assign(processEvents, {
+      pid: 1234,
+      kill: () => true,
+    });
+    const codegenServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codegenSpawner: () => processEvents as unknown as ChildProcess,
+    });
+    await new Promise<void>((resolve) => codegenServer.listen(0, "127.0.0.1", resolve));
+    const address = codegenServer.address() as AddressInfo;
+    const codegenUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const createdResponse = await fetch(`${codegenUrl}/api/codegen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com" }),
+      });
+      assert.equal(createdResponse.status, 201);
+      assert.match(
+        createdResponse.headers.get("set-cookie") ?? "",
+        /HttpOnly; SameSite=Strict; Path=\/api\/codegen\//,
+      );
+      const created = await createdResponse.json() as { id: string; accessToken: string };
+      const statusUrl = `${codegenUrl}/api/codegen/${created.id}`;
+
+      assert.equal((await fetch(statusUrl)).status, 401);
+      assert.equal((await fetch(statusUrl, {
+        headers: { authorization: "Bearer token-incorreto" },
+      })).status, 403);
+      const authorized = await fetch(statusUrl, {
+        headers: { authorization: `Bearer ${created.accessToken}` },
+      });
+      assert.equal(authorized.status, 200);
+      assert.deepEqual(await authorized.json(), { status: "recording" });
+    } finally {
+      processEvents.emit("exit", 0);
+      await new Promise<void>((resolve, reject) =>
+        codegenServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("repassa somente variáveis permitidas ao processo de código", () => {
+    const environment = codeExecutionEnvironment({
+      PATH: "bin",
+      TEMP: "temp",
+      PLAYWRIGHT_BROWSERS_PATH: "browsers",
+      DATABASE_URL: "postgres://secret",
+      API_TOKEN: "secret",
+      QA_RADAR_CODE_MODE_ADMIN_TOKEN: "admin-secret",
+    });
+
+    assert.deepEqual(environment, {
+      CI: "1",
+      PATH: "bin",
+      TEMP: "temp",
+      PLAYWRIGHT_BROWSERS_PATH: "browsers",
+    });
+  });
+
+  it("aplica quota de uma execução de código e remove seus artefatos após a retenção", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-"));
+    let releaseExecution: (() => void) | undefined;
+    let signalStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const release = new Promise<void>((resolve) => { releaseExecution = resolve; });
+    const codeServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      retentionMs: 25,
+      codeRunner: async () => {
+        signalStarted?.();
+        await release;
+        return { exitCode: 0, stdout: '{"stats":{"expected":1}}', stderr: "" };
+      },
+    });
+    await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
+    const address = codeServer.address() as AddressInfo;
+    const codeUrl = `http://127.0.0.1:${address.port}`;
+    const execute = () => fetch(`${codeUrl}/api/code-execution`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('ok', async () => {});" }),
+    });
+
+    try {
+      const firstRequest = execute();
+      await started;
+      const concurrent = await execute();
+      assert.equal(concurrent.status, 429);
+      assert.match((await concurrent.json() as { error: string }).error, /execução.+andamento/i);
+
+      releaseExecution?.();
+      const completed = await firstRequest;
+      assert.equal(completed.status, 200);
+      const payload = await completed.json() as { id: string };
+      const executionDir = join(resultsDir, `code-${payload.id}`);
+      await access(executionDir);
+      await waitFor(async () => {
+        try {
+          await access(executionDir);
+          return false;
+        } catch {
+          return true;
+        }
+      });
+    } finally {
+      releaseExecution?.();
+      await new Promise<void>((resolve, reject) =>
+        codeServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("serve o vídeo da execução de código com content-length, sem transfer-encoding chunked", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-video-"));
+    const codeServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codeRunner: async ({ outputDir }) => {
+        const mediaDir = join(outputDir, "test-results", "qa-radar-teste");
+        await mkdir(mediaDir, { recursive: true });
+        await writeFile(join(mediaDir, "video.webm"), Buffer.from("video-falso-para-teste"));
+        return { exitCode: 0, stdout: '{"stats":{"expected":1}}', stderr: "" };
+      },
+    });
+    await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
+    const address = codeServer.address() as AddressInfo;
+    const codeUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const executionResponse = await fetch(`${codeUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('ok', async () => {});" }),
+      });
+      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      const authorization = { authorization: `Bearer ${execution.accessToken}` };
+
+      const evidenceResponse = await fetch(`${codeUrl}/api/code-executions/${execution.id}/evidence-report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: JSON.stringify({ testerName: "QA", testType: "smoke" }),
+      });
+      assert.equal(evidenceResponse.status, 201);
+      const evidencePage = await fetch(`${codeUrl}/api/code-executions/${execution.id}/code-evidence.html`, { headers: authorization });
+      assert.match(evidencePage.headers.get("content-security-policy") ?? "", /sandbox[^;]*\ballow-downloads\b/);
+      const evidenceHtml = await evidencePage.text();
+      assert.match(evidenceHtml, /Vídeo da jornada/);
+      assert.doesNotMatch(evidenceHtml, /src="\.?\/?test-results/);
+      const embedded = /src="data:video\/webm;base64,([^"]+)"/.exec(evidenceHtml);
+      assert.ok(embedded, "o vídeo deve estar embutido em base64 no relatório baixado");
+      assert.equal(Buffer.from(embedded[1] ?? "", "base64").toString("utf8"), "video-falso-para-teste");
+
+      const videoResponse = await fetch(`${codeUrl}/api/code-executions/${execution.id}/test-results/qa-radar-teste/video.webm`, { headers: authorization });
+      assert.equal(videoResponse.status, 200);
+      assert.equal(videoResponse.headers.get("content-type"), "video/webm");
+      assert.equal(videoResponse.headers.get("content-length"), "video-falso-para-teste".length.toString());
+      assert.notEqual(videoResponse.headers.get("transfer-encoding"), "chunked");
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        codeServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("expõe os passos derivados do código e permite sobrescrever a descrição no relatório", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-steps-"));
+    const codeServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codeRunner: async () => ({ exitCode: 0, stdout: '{"stats":{"expected":1}}', stderr: "" }),
+    });
+    await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
+    const address = codeServer.address() as AddressInfo;
+    const codeUrl = `http://127.0.0.1:${address.port}`;
+    const code = "import { test } from '@playwright/test';\n"
+      + "test('busca', async ({ page }) => {\n"
+      + "  await page.goto('https://example.com');\n"
+      + "  await page.getByRole('button', { name: 'Estou com sorte' }).click();\n"
+      + "});\n";
+    try {
+      const executionResponse = await fetch(`${codeUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      const authorization = { authorization: `Bearer ${execution.accessToken}` };
+
+      const stepsResponse = await fetch(`${codeUrl}/api/code-executions/${execution.id}/steps`, { headers: authorization });
+      assert.equal(stepsResponse.status, 200);
+      const { steps } = await stepsResponse.json() as { steps: Array<{ index: number; action: string; description: string }> };
+      assert.equal(steps.length, 2);
+      assert.match(steps[1]?.description ?? "", /Clicar em await page\.getByRole/);
+
+      const overriddenReport = await fetch(`${codeUrl}/api/code-executions/${execution.id}/evidence-report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: JSON.stringify({ testerName: "QA", testType: "smoke", stepDescriptions: ["", "Clicar em Estou com sorte"] }),
+      });
+      assert.equal(overriddenReport.status, 201);
+      const html = await (await fetch(`${codeUrl}/api/code-executions/${execution.id}/code-evidence.html`, { headers: authorization })).text();
+      assert.match(html, /Clicar em Estou com sorte/);
+      assert.doesNotMatch(html, /Clicar em await page\.getByRole/);
+
+      const rejected = await fetch(`${codeUrl}/api/code-executions/${execution.id}/evidence-report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: JSON.stringify({ testerName: "QA", testType: "smoke", stepDescriptions: "não é lista" }),
+      });
+      assert.equal(rejected.status, 400);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        codeServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
   });
 
   it("protege, limita e cancela jornadas assíncronas", async () => {

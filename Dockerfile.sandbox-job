@@ -1,0 +1,30 @@
+FROM mcr.microsoft.com/playwright:v1.61.1-noble AS build
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build && npm prune --omit=dev
+
+FROM mcr.microsoft.com/playwright:v1.61.1-noble
+
+ENV NODE_ENV=production \
+    CI=1 \
+    HOME=/tmp \
+    TMPDIR=/tmp \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+WORKDIR /app
+COPY --from=build /app/package.json /app/package-lock.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+RUN groupadd --gid 10001 sandbox \
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin sandbox \
+    && mkdir -p /work /run/egress \
+    && touch /run/egress/.volume-owner \
+    && chown -R 10001:10001 /work /run/egress
+
+USER 10001:10001
+WORKDIR /work
+ENTRYPOINT ["node", "/app/dist/sandbox-job.js"]

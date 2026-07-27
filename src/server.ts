@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { spawn, type ChildProcess } from "node:child_process";
 import { parseCli } from "./cli.js";
 import { writeReports } from "./reporters.js";
 import { scan } from "./scanner.js";
@@ -15,7 +16,11 @@ import { RateLimiter } from "./rate-limit.js";
 import { runJourneyDefinition } from "./journey-cli.js";
 import type { JourneyRunResult } from "./journey-runner.js";
 import { parseJourney } from "./journey.js";
-import { createJourneyEvidenceHtml, parseJourneyEvidenceMetadata } from "./journey-evidence-report.js";
+import { applyStepDescriptionOverrides, createJourneyEvidenceHtml, parseJourneyEvidenceMetadata, parseStepDescriptionOverrides } from "./journey-evidence-report.js";
+import { terminateProcessTree, type SpawnProcess } from "./code-execution.js";
+import { runPlaywrightCodeWorker } from "./code-worker-client.js";
+import { assertHostedPlaywrightCode } from "./code-policy.js";
+import type { HostedCodeRunner } from "./sandbox-client.js";
 
 type JourneyJobStatus = "running" | "completed" | "failed" | "cancelled";
 
@@ -29,6 +34,57 @@ interface JourneyJob {
   cancelRequested: boolean;
   report?: JourneyRunResult;
   error?: string;
+}
+
+interface CodegenSession {
+  id: string;
+  outputDir: string;
+  outputPath: string;
+  process: ChildProcess;
+  active: boolean;
+  accessTokenHash: string;
+}
+interface CodeExecutionJob {
+  id: string;
+  outputDir: string;
+  status: "passed" | "failed";
+  report: unknown;
+  accessTokenHash: string;
+  failureDetails?: string;
+}
+
+const MAX_CODE_FILE_BYTES = 256 * 1024;
+// Reserva espaço para o envelope JSON que transporta um arquivo no limite.
+const MAX_JSON_BODY_BYTES = MAX_CODE_FILE_BYTES + 64 * 1024;
+export function codeModeEnabledForHost(host: string, setting?: string): boolean {
+  if (setting === "true") return true;
+  if (setting === "false") return false;
+  if (setting !== undefined) {
+    throw new Error("QA_RADAR_ENABLE_CODE_MODE deve ser true ou false.");
+  }
+  return host === "127.0.0.1" || host === "localhost" || host === "::1";
+}
+
+function explainCodeFailure(details: string | undefined): string | undefined {
+  if (!details) return undefined;
+  if (/security verification|verify you are not a bot|cloudflare|captcha|challenge/i.test(details)) {
+    return `${details}\n\nDiagnóstico QA Radar: o site exibiu uma verificação anti-bot antes do fluxo. O teste não alcançou o elemento solicitado. Execute novamente com o navegador visível, conclua a verificação manualmente e repita o teste.`;
+  }
+  return details;
+}
+
+async function readCodeFailureDetails(outputDir: string): Promise<string | undefined> {
+  try {
+    const resultsDir = join(outputDir, "test-results");
+    const entries = await readdir(resultsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      try {
+        return explainCodeFailure((await readFile(join(resultsDir, entry.name, "error-context.md"), "utf8")).slice(-20_000));
+      } catch { /* Try the next test result directory. */ }
+    }
+  } catch { /* JSON report remains available. */ }
+  return undefined;
 }
 
 export interface OperationalEvent {
@@ -74,13 +130,22 @@ export interface ServerOptions {
   turnstileSecretKey: string | undefined;
   allowHistory: boolean;
   allowJourneys: boolean;
+  allowCodeMode: boolean;
+  codeModeAdminToken: string | undefined;
   historyDir: string;
   maxSitemapPages: number;
   maxJourneySteps: number;
   maxJourneyPayloadBytes: number;
   maxJourneyDurationMs: number;
+  maxCodeExecutionDurationMs: number;
+  maxCodeOutputBytes: number;
+  maxCodeMemoryMiB: number;
+  maxCodegenDurationMs: number;
   scanRunner: typeof scan;
   journeyRunner: typeof runJourneyDefinition;
+  codegenSpawner: SpawnProcess;
+  codeRunner: HostedCodeRunner;
+  hostedCodeRunner: HostedCodeRunner | undefined;
   operationalLogger: (event: OperationalEvent) => void;
 }
 
@@ -103,13 +168,22 @@ const DEFAULT_OPTIONS: ServerOptions = {
   turnstileSecretKey: undefined,
   allowHistory: false,
   allowJourneys: false,
+  allowCodeMode: false,
+  codeModeAdminToken: undefined,
   historyDir: join(process.cwd(), ".qa-radar-history"),
   maxSitemapPages: 20,
   maxJourneySteps: 20,
   maxJourneyPayloadBytes: 32 * 1024,
   maxJourneyDurationMs: 3 * 60_000,
+  maxCodeExecutionDurationMs: 5 * 60_000,
+  maxCodeOutputBytes: 1024 * 1024,
+  maxCodeMemoryMiB: 512,
+  maxCodegenDurationMs: 10 * 60_000,
   scanRunner: scan,
   journeyRunner: runJourneyDefinition,
+  codegenSpawner: spawn,
+  codeRunner: runPlaywrightCodeWorker,
+  hostedCodeRunner: undefined,
   operationalLogger: defaultOperationalLogger,
 };
 
@@ -135,9 +209,16 @@ function tokenMatches(token: string, expectedHash: string): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-function requestToken(request: IncomingMessage): string | undefined {
+function bearerToken(request: IncomingMessage): string | undefined {
   const authorization = request.headers.authorization;
-  if (authorization?.startsWith("Bearer ")) return authorization.slice(7).trim() || undefined;
+  return authorization?.startsWith("Bearer ")
+    ? authorization.slice(7).trim() || undefined
+    : undefined;
+}
+
+function requestToken(request: IncomingMessage): string | undefined {
+  const authorization = bearerToken(request);
+  if (authorization) return authorization;
   const cookie = request.headers.cookie?.split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith("qa_radar_access="));
@@ -174,7 +255,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, unknow
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > 64 * 1024) throw new Error("Requisição muito grande.");
+    if (size > MAX_JSON_BODY_BYTES) throw new Error("Requisição muito grande.");
     chunks.push(buffer);
   }
   try {
@@ -308,10 +389,56 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   if (!Number.isInteger(config.maxJourneyDurationMs) || config.maxJourneyDurationMs < 1) {
     throw new Error("maxJourneyDurationMs deve ser um número inteiro positivo.");
   }
+  if (!Number.isInteger(config.maxCodeExecutionDurationMs) || config.maxCodeExecutionDurationMs < 1) {
+    throw new Error("maxCodeExecutionDurationMs deve ser um número inteiro positivo.");
+  }
+  if (!Number.isInteger(config.maxCodeOutputBytes) || config.maxCodeOutputBytes < 1) {
+    throw new Error("maxCodeOutputBytes deve ser um número inteiro positivo.");
+  }
+  if (!Number.isInteger(config.maxCodeMemoryMiB) || config.maxCodeMemoryMiB < 1) {
+    throw new Error("maxCodeMemoryMiB deve ser um número inteiro positivo.");
+  }
+  if (!Number.isInteger(config.maxCodegenDurationMs) || config.maxCodegenDurationMs < 1) {
+    throw new Error("maxCodegenDurationMs deve ser um número inteiro positivo.");
+  }
+  if (
+    config.codeModeAdminToken !== undefined
+    && (Buffer.byteLength(config.codeModeAdminToken, "utf8") < 32
+      || Buffer.byteLength(config.codeModeAdminToken, "utf8") > 512)
+  ) {
+    throw new Error("codeModeAdminToken deve ter entre 32 e 512 bytes.");
+  }
+  const codeModeAdminTokenHash = config.codeModeAdminToken
+    ? tokenHash(config.codeModeAdminToken)
+    : undefined;
   const jobQueue = new JobQueue();
   const rateLimiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
   let journeyActive = false;
   const journeyJobs = new Map<string, JourneyJob>();
+  const codegenSessions = new Map<string, CodegenSession>();
+  const codeExecutionJobs = new Map<string, CodeExecutionJob>();
+  let codeExecutionActive = false;
+  const loadCodeExecutionJob = async (id: string): Promise<CodeExecutionJob | undefined> => {
+    const memoryJob = codeExecutionJobs.get(id);
+    if (memoryJob) return memoryJob;
+    try {
+      const directoryName = `code-${id}`;
+      const saved = JSON.parse(await readFile(join(config.resultsDir, directoryName, "code-report.json"), "utf8")) as { status?: unknown; report?: unknown; failureDetails?: unknown };
+      const accessTokenHash = await storedAccessHash(config.resultsDir, directoryName);
+      if (saved.status !== "passed" && saved.status !== "failed") return undefined;
+      if (!accessTokenHash) return undefined;
+      return {
+        id,
+        outputDir: join(config.resultsDir, directoryName),
+        status: saved.status,
+        report: saved.report,
+        accessTokenHash,
+        ...(typeof saved.failureDetails === "string" ? { failureDetails: saved.failureDetails } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  };
 
   const publicJourney = (report: JourneyRunResult): JourneyRunResult => ({
     ...report,
@@ -322,6 +449,70 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       } : {}),
     })),
   });
+
+  const codeReportAsJourney = async (job: CodeExecutionJob): Promise<JourneyRunResult> => {
+    const record = job.report && typeof job.report === "object" && !Array.isArray(job.report) ? job.report as Record<string, unknown> : {};
+    const stats = record.stats && typeof record.stats === "object" && !Array.isArray(record.stats) ? record.stats as Record<string, unknown> : {};
+    const durationMs = typeof stats.duration === "number" ? stats.duration : 0;
+    const expected = typeof stats.expected === "number" ? stats.expected : 0;
+    let source = "";
+    try { source = await readFile(join(job.outputDir, "qa-radar.spec.ts"), "utf8"); } catch { /* The report can still be generated from the JSON result. */ }
+    const sourceSteps: Array<{ action: "goto" | "click" | "fill" | "select" | "waitFor" | "assertVisible" | "assertText"; description: string }> = [];
+    for (const rawLine of source.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("//")) continue;
+      const goto = /\.goto\((['"`])(.+?)\1/.exec(line);
+      const click = /(?:page|locator|[\w.]+)\.locator\((['"`])(.+?)\1\)\.click\(/.exec(line);
+      const genericClick = /(.+)\.click\(/.exec(line);
+      const fill = /\.locator\((['"`])(.+?)\1\)\.fill\(/.exec(line);
+      const select = /\.locator\((['"`])(.+?)\1\)\.selectOption\(/.exec(line);
+      const visible = /expect\((.+?)\)\.toBeVisible\(/.exec(line);
+      const text = /expect\((.+?)\)\.toHaveText\(/.exec(line);
+      const wait = /\.waitFor\(/.exec(line);
+      if (goto) sourceSteps.push({ action: "goto", description: `Abrir página ${goto[2]}` });
+      else if (click) sourceSteps.push({ action: "click", description: `Clicar em ${click[2]}` });
+      else if (genericClick) sourceSteps.push({ action: "click", description: `Clicar em ${(genericClick[1] ?? line).trim()}` });
+      else if (fill) sourceSteps.push({ action: "fill", description: `Preencher ${fill[2]}` });
+      else if (select) sourceSteps.push({ action: "select", description: `Selecionar opção em ${select[2]}` });
+      else if (visible) sourceSteps.push({ action: "assertVisible", description: `Confirmar elemento visível: ${visible[1]}` });
+      else if (text) sourceSteps.push({ action: "assertText", description: `Confirmar texto em ${text[1]}` });
+      else if (wait) sourceSteps.push({ action: "waitFor", description: "Aguardar elemento" });
+    }
+    const stepDefinitions = sourceSteps.length > 0 ? sourceSteps : [{ action: "assertVisible" as const, description: `${expected} teste(s) executado(s)` }];
+    const stepDuration = durationMs / stepDefinitions.length;
+    let screenshotPath: string | undefined;
+    let videoPath: string | undefined;
+    try {
+      const mediaFiles = await readdir(join(job.outputDir, "test-results"), { recursive: true });
+      for (const relative of mediaFiles) {
+        if (typeof relative !== "string") continue;
+        const normalized = `test-results/${relative.replaceAll("\\", "/")}`;
+        if (!screenshotPath && normalized.endsWith(".png")) screenshotPath = normalized;
+        if (!videoPath && normalized.endsWith(".webm")) videoPath = normalized;
+      }
+    } catch { /* A failed run may not produce media. */ }
+    const steps = stepDefinitions.map((step, index) => ({
+      index,
+      action: step.action,
+      description: step.description,
+      status: job.status === "passed" || index < stepDefinitions.length - 1 ? "passed" as const : "failed" as const,
+      durationMs: stepDuration,
+      ...(job.status === "failed" && index === stepDefinitions.length - 1 && job.failureDetails ? { error: job.failureDetails } : {}),
+      ...((screenshotPath || videoPath) ? { evidence: {
+        before: screenshotPath ?? videoPath ?? "",
+        after: screenshotPath ?? videoPath ?? "",
+        ...(videoPath ? { video: { path: videoPath, startMs: index * stepDuration, endMs: (index + 1) * stepDuration } } : {}),
+      } } : {}),
+    }));
+    return {
+      schemaVersion: "1.0",
+      name: "Teste Playwright (.spec.ts)",
+      status: job.status,
+      startedAt: new Date(Date.now() - durationMs).toISOString(),
+      durationMs,
+      steps,
+    };
+  };
 
   const logOperational = (event: OperationalEvent): void => {
     try {
@@ -358,6 +549,34 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     }
     return request.socket.remoteAddress ?? "unknown";
   };
+  const isLocalRequest = (request: IncomingMessage): boolean => {
+    const address = clientAddress(request);
+    return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+  };
+  const requireCodeModeEnabled = (response: ServerResponse): boolean => {
+    if (!config.allowCodeMode) {
+      json(response, 403, { error: "Modo Jornada de Playwright está desabilitado neste ambiente." });
+      return false;
+    }
+    return true;
+  };
+  const requireCodeModeCreation = (
+    request: IncomingMessage,
+    response: ServerResponse,
+    allowRemoteAdmin: boolean,
+  ): boolean => {
+    if (!requireCodeModeEnabled(response)) return false;
+    if (isLocalRequest(request)) return true;
+    if (!allowRemoteAdmin || !codeModeAdminTokenHash) {
+      json(response, 403, { error: "A execução hospedada do Modo Jornada de Playwright ainda não está habilitada neste servidor." });
+      return false;
+    }
+    const token = bearerToken(request);
+    if (token && tokenMatches(token, codeModeAdminTokenHash)) return true;
+    response.setHeader("www-authenticate", 'Bearer realm="QA Radar code mode"');
+    json(response, token ? 403 : 401, { error: "Token administrativo do Modo Jornada ausente ou inválido." });
+    return false;
+  };
 
   const consumeRateLimit = (request: IncomingMessage, response: ServerResponse): boolean => {
     const decision = rateLimiter.consume(clientAddress(request));
@@ -389,6 +608,22 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const expireJourney = (job: JourneyJob): void => {
     const timer = setTimeout(() => {
       journeyJobs.delete(job.id);
+      void rm(job.outputDir, { recursive: true, force: true });
+    }, config.retentionMs);
+    timer.unref();
+  };
+
+  const expireCodegen = (session: CodegenSession): void => {
+    const timer = setTimeout(() => {
+      codegenSessions.delete(session.id);
+      void rm(session.outputDir, { recursive: true, force: true });
+    }, config.retentionMs);
+    timer.unref();
+  };
+
+  const expireCodeExecution = (job: CodeExecutionJob): void => {
+    const timer = setTimeout(() => {
+      codeExecutionJobs.delete(job.id);
       void rm(job.outputDir, { recursive: true, force: true });
     }, config.retentionMs);
     timer.unref();
@@ -519,6 +754,171 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         json(response, 200, await listProjectHistory(config.historyDir, project, environment));
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/codegen") {
+        if (!requireCodeModeCreation(request, response, false)) return;
+        if (!consumeRateLimit(request, response)) return;
+        if ([...codegenSessions.values()].some((session) => session.active)) {
+          json(response, 429, { error: "Já existe uma gravação do Playwright Codegen em andamento." });
+          return;
+        }
+        const body = await readJson(request);
+        const target = textField(body, "url");
+        if (!target) throw new Error("Informe a URL para iniciar o Codegen.");
+        const parsed = new URL(target);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("A URL deve usar http ou https.");
+        const id = randomUUID();
+        const dir = join(config.resultsDir, `codegen-${id}`);
+        await mkdir(dir, { recursive: true });
+        const accessToken = randomBytes(32).toString("base64url");
+        const accessTokenHash = tokenHash(accessToken);
+        await writeFile(join(dir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
+        const outputPath = join(dir, "recorded.spec.ts");
+        const child = config.codegenSpawner(process.execPath, [join(process.cwd(), "node_modules", "playwright", "cli.js"), "codegen", "--target=playwright-test", `--output=${outputPath}`, target], {
+          stdio: "ignore",
+          windowsHide: true,
+          detached: process.platform !== "win32",
+        });
+        const session: CodegenSession = { id, outputDir: dir, outputPath, process: child, active: true, accessTokenHash };
+        codegenSessions.set(id, session);
+        let finished = false;
+        const deadline = setTimeout(() => {
+          void terminateProcessTree(child);
+        }, config.maxCodegenDurationMs);
+        deadline.unref();
+        const finish = (): void => {
+          if (finished) return;
+          finished = true;
+          session.active = false;
+          clearTimeout(deadline);
+          expireCodegen(session);
+        };
+        child.once("error", finish);
+        child.once("exit", finish);
+        response.setHeader("set-cookie", accessCookie(request, `/api/codegen/${id}`, accessToken, config.retentionMs, config.trustProxy));
+        json(response, 201, { id, accessToken });
+        return;
+      }
+      const codegenMatch = /^\/api\/codegen\/([0-9a-f-]+)$/.exec(url.pathname);
+      if (request.method === "GET" && codegenMatch) {
+        if (!requireCodeModeEnabled(response)) return;
+        const session = codegenSessions.get(codegenMatch[1] ?? "");
+        if (!session) { json(response, 404, { error: "Sessão de Codegen não encontrada." }); return; }
+        if (!requireAccess(request, response, session.accessTokenHash)) return;
+        try { json(response, 200, { status: "completed", code: await readFile(session.outputPath, "utf8") }); }
+        catch { json(response, 200, { status: "recording" }); }
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/code-execution") {
+        if (!requireCodeModeCreation(request, response, true)) return;
+        if (!consumeRateLimit(request, response)) return;
+        if (codeExecutionActive) {
+          json(response, 429, { error: "Já existe uma execução do Modo Jornada de Playwright em andamento." });
+          return;
+        }
+        const body = await readJson(request);
+        const code = body.code;
+        const hostedExecution = !isLocalRequest(request);
+        const headed = hostedExecution ? false : body.headed !== false;
+        if (typeof code !== "string" || !code.trim()) throw new Error("Informe o conteúdo do arquivo .spec.ts.");
+        if (Buffer.byteLength(code, "utf8") > MAX_CODE_FILE_BYTES) throw new Error("O arquivo .spec.ts deve ter no máximo 256 KB.");
+        if (hostedExecution) {
+          assertHostedPlaywrightCode(code);
+          if (!config.hostedCodeRunner) {
+            json(response, 503, { error: "Runner sandbox hospedado não está configurado neste servidor." });
+            return;
+          }
+        }
+        const runner = hostedExecution ? config.hostedCodeRunner : config.codeRunner;
+        if (!runner) throw new Error("Runner Playwright indisponível.");
+        const id = randomUUID();
+        const outputDir = join(config.resultsDir, `code-${id}`);
+        const accessToken = randomBytes(32).toString("base64url");
+        const accessTokenHash = tokenHash(accessToken);
+        codeExecutionActive = true;
+        let retained = false;
+        try {
+          await mkdir(outputDir, { recursive: true });
+          await writeFile(join(outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
+          const specPath = join(outputDir, "qa-radar.spec.ts");
+          const runtimeCode = code.replaceAll("@playwright/test", "playwright/test");
+          await writeFile(specPath, runtimeCode, { encoding: "utf8", mode: 0o600 });
+          await writeFile(join(outputDir, "playwright.config.ts"), `import { defineConfig } from "playwright/test";\nexport default defineConfig({ use: { screenshot: "on", video: "on" } });\n`, { encoding: "utf8", mode: 0o600 });
+          const execution = await runner({
+            outputDir,
+            code: runtimeCode,
+            headed,
+            timeoutMs: config.maxCodeExecutionDurationMs,
+            maxOutputBytes: config.maxCodeOutputBytes,
+            maxMemoryMiB: config.maxCodeMemoryMiB,
+          });
+          let report: unknown;
+          try { report = JSON.parse(execution.stdout); } catch { report = { output: execution.stdout.slice(-20_000), errorOutput: execution.stderr.slice(-20_000) }; }
+          let failureDetails: string | undefined;
+          if (execution.exitCode !== 0) {
+            failureDetails = await readCodeFailureDetails(outputDir);
+          }
+          const executionStatus = execution.exitCode === 0 ? "passed" : "failed";
+          const job: CodeExecutionJob = { id, outputDir, status: executionStatus, report, accessTokenHash, ...(failureDetails ? { failureDetails } : {}) };
+          codeExecutionJobs.set(id, job);
+          await writeFile(join(outputDir, "code-report.json"), JSON.stringify({ status: executionStatus, report, ...(failureDetails ? { failureDetails } : {}) }), { encoding: "utf8", mode: 0o600 });
+          retained = true;
+          expireCodeExecution(job);
+          response.setHeader("set-cookie", accessCookie(request, `/api/code-executions/${id}`, accessToken, config.retentionMs, config.trustProxy));
+          json(response, execution.exitCode === 0 ? 200 : 422, { id, status: executionStatus, report, accessToken, ...(failureDetails ? { failureDetails } : {}) });
+        } finally {
+          codeExecutionActive = false;
+          if (!retained) await rm(outputDir, { recursive: true, force: true });
+        }
+        return;
+      }
+      const codeSteps = /^\/api\/code-executions\/([0-9a-f-]+)\/steps$/.exec(url.pathname);
+      if (request.method === "GET" && codeSteps) {
+        if (!requireCodeModeEnabled(response)) return;
+        const job = await loadCodeExecutionJob(codeSteps[1] ?? "");
+        if (!job) { json(response, 404, { error: "Execução de código não encontrada ou já expirada." }); return; }
+        if (!requireAccess(request, response, job.accessTokenHash)) return;
+        const journey = await codeReportAsJourney(job);
+        json(response, 200, { steps: journey.steps.map((step) => ({ index: step.index, action: step.action, description: step.description ?? step.action })) });
+        return;
+      }
+      const codeEvidence = /^\/api\/code-executions\/([0-9a-f-]+)\/evidence-report$/.exec(url.pathname);
+      if (request.method === "POST" && codeEvidence) {
+        if (!requireCodeModeEnabled(response)) return;
+        const job = await loadCodeExecutionJob(codeEvidence[1] ?? "");
+        if (!job) { json(response, 404, { error: "Execução de código não encontrada ou já expirada." }); return; }
+        if (!requireAccess(request, response, job.accessTokenHash)) return;
+        const body = await readJson(request);
+        const metadata = parseJourneyEvidenceMetadata({ testerName: body.testerName, testType: body.testType });
+        const overrides = parseStepDescriptionOverrides(body.stepDescriptions);
+        const journey = applyStepDescriptionOverrides(await codeReportAsJourney(job), overrides);
+        const html = await createJourneyEvidenceHtml(journey, metadata, (relative) => readFile(join(job.outputDir, relative)));
+        await writeFile(join(job.outputDir, "code-evidence.html"), html, "utf8");
+        json(response, 201, { url: `/api/code-executions/${job.id}/code-evidence.html` });
+        return;
+      }
+      const codeArtifact = /^\/api\/code-executions\/([0-9a-f-]+)\/(code-evidence\.html|test-results\/.+\.(?:png|webm))$/.exec(url.pathname);
+      if (request.method === "GET" && codeArtifact) {
+        if (!requireCodeModeEnabled(response)) return;
+        const job = await loadCodeExecutionJob(codeArtifact[1] ?? "");
+        if (!job) { json(response, 404, { error: "Execução de código não encontrada ou já expirada." }); return; }
+        if (!requireAccess(request, response, job.accessTokenHash)) return;
+        try {
+          const name = decodeURIComponent(codeArtifact[2] ?? "");
+          if (name !== "code-evidence.html" && (!name.startsWith("test-results/") || name.includes(".."))) { json(response, 404, { error: "Artefato inválido" }); return; }
+          const artifactPath = name === "code-evidence.html" ? join(job.outputDir, name) : join(job.outputDir, ...name.split("/"));
+          const content = await readFile(artifactPath);
+          const isHtml = name === "code-evidence.html";
+          response.writeHead(200, {
+            "content-type": isHtml ? "text/html; charset=utf-8" : name.endsWith(".webm") ? "video/webm" : "image/png",
+            "content-length": content.length,
+            "cache-control": "no-store",
+            "x-content-type-options": "nosniff",
+            ...(isHtml ? { "content-security-policy": "sandbox allow-popups allow-same-origin allow-downloads; default-src 'none'; img-src data:; media-src data:; style-src 'unsafe-inline'" } : {}),
+          });
+          response.end(content);
+        } catch { json(response, 404, { error: "O relatório HTML ainda não foi gerado." }); }
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, {
           "content-type": "text/html; charset=utf-8",
@@ -553,7 +953,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           "permissions-policy": "camera=(), microphone=(), geolocation=()",
           "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
         });
-        response.end(createJourneyPage(config.allowJourneys));
+        response.end(createJourneyPage(config.allowCodeMode));
         return;
       }
       if (request.method === "GET" && url.pathname === "/scanner") {
@@ -566,7 +966,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           "permissions-policy": "camera=(), microphone=(), geolocation=()",
           "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
         });
-        response.end(createWebPage(config.turnstileSiteKey, config.allowHistory, config.maxSitemapPages, false));
+        response.end(createWebPage(config.turnstileSiteKey, config.allowHistory, config.maxSitemapPages));
         return;
       }
 
@@ -708,7 +1108,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           return;
         }
         const metadata = parseJourneyEvidenceMetadata(await readJson(request));
-        const html = createJourneyEvidenceHtml(job.report, metadata);
+        const html = await createJourneyEvidenceHtml(job.report, metadata, (relative) => readFile(join(job.outputDir, "journey-evidence", relative)));
         await writeFile(join(job.outputDir, "journey-evidence.html"), html, "utf8");
         if (accessToken) {
           response.setHeader("set-cookie", accessCookie(request, "/api/journeys", accessToken, config.retentionMs, config.trustProxy));
@@ -717,7 +1117,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         return;
       }
 
-      const journeyArtifact = /^\/api\/journeys\/([0-9a-f-]+)\/(journey-report\.json|journey-evidence\.html|[0-9]{3}-[a-zA-Z]+-(?:before|after)\.png)$/.exec(url.pathname);
+      const journeyArtifact = /^\/api\/journeys\/([0-9a-f-]+)\/(journey-report\.json|journey-evidence\.html|journey\.webm|[0-9]{3}-[a-zA-Z]+-(?:before|after)\.png)$/.exec(url.pathname);
       if (request.method === "GET" && journeyArtifact) {
         if (!config.allowJourneys) {
           json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
@@ -744,13 +1144,13 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         response.writeHead(200, {
           "content-type": name.endsWith(".json")
             ? "application/json; charset=utf-8"
-            : name.endsWith(".html") ? "text/html; charset=utf-8" : "image/png",
+            : name.endsWith(".html") ? "text/html; charset=utf-8" : name.endsWith(".webm") ? "video/webm" : "image/png",
           "content-length": content.length,
           "x-content-type-options": "nosniff",
           "cache-control": "private, no-store",
           "referrer-policy": "no-referrer",
           ...(name.endsWith(".html") ? {
-            "content-security-policy": "sandbox allow-popups allow-same-origin; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
+            "content-security-policy": "sandbox allow-popups allow-same-origin allow-downloads; default-src 'none'; img-src data:; media-src data:; style-src 'unsafe-inline'",
           } : {}),
         });
         response.end(content);

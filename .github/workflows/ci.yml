@@ -62,6 +62,22 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:lighthouse
 
+  sandbox:
+    name: Homologação do sandbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run sandbox:image
+      - run: npm run sandbox:homologate
+
   action-smoke:
     name: Composite action
     runs-on: ubuntu-latest

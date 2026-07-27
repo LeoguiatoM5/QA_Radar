@@ -13,6 +13,7 @@ export interface JourneyStepResult {
   evidence?: {
     before: string;
     after: string;
+    video?: { path: string; startMs: number; endMs: number };
   };
 }
 
@@ -32,6 +33,7 @@ export interface JourneyRunOptions {
   signal?: AbortSignal;
   onStep?: (result: JourneyStepResult) => void;
   evidenceDir?: string;
+  videoPath?: string;
   validateNavigationUrl?: (url: string) => Promise<void>;
 }
 
@@ -177,6 +179,9 @@ export async function runJourney(
   const secretSelectors = new Set<string>();
   const secrets = options.secrets ?? {};
   if (options.evidenceDir) await mkdir(options.evidenceDir, { recursive: true });
+  if (options.videoPath) {
+    await page.addStyleTag({ content: `[data-qa-radar-secret-mask]{filter:blur(10px)!important}` }).catch(() => undefined);
+  }
 
   const navigationGuard = (route: Route) => guardNavigation(route, allowed, options.validateNavigationUrl);
   await page.context().route("**/*", navigationGuard);
@@ -191,11 +196,15 @@ export async function runJourney(
     const evidence = options.evidenceDir ? {
       before: join(options.evidenceDir, `${prefix}-before.png`),
       after: join(options.evidenceDir, `${prefix}-after.png`),
+      ...(options.videoPath ? { video: { path: options.videoPath, startMs: stepStarted - startedAt.getTime(), endMs: 0 } } : {}),
     } : undefined;
     try {
       if (evidence) await captureMasked(page, evidence.before, secretSelectors);
       await executeStep(page, step, allowed, secrets, timeoutMs);
-      if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) secretSelectors.add(step.selector);
+      if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) {
+        secretSelectors.add(step.selector);
+        if (options.videoPath) await page.locator(step.selector).evaluateAll((elements) => elements.forEach((element) => element.setAttribute("data-qa-radar-secret-mask", "true"))).catch(() => undefined);
+      }
       if (evidence) await captureMasked(page, evidence.after, secretSelectors);
       options.signal?.throwIfAborted();
       const result: JourneyStepResult = {
@@ -204,14 +213,17 @@ export async function runJourney(
         ...(step.description ? { description: step.description } : {}),
         status: "passed",
         durationMs: Date.now() - stepStarted,
-        ...(evidence ? { evidence } : {}),
+        ...(evidence ? { evidence: evidence.video ? { ...evidence, video: { ...evidence.video, endMs: Date.now() - startedAt.getTime() } } : evidence } : {}),
       };
       results.push(result);
       options.onStep?.(result);
     } catch (error) {
       options.signal?.throwIfAborted();
       if (evidence) {
-        if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) secretSelectors.add(step.selector);
+        if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) {
+          secretSelectors.add(step.selector);
+          if (options.videoPath) await page.locator(step.selector).evaluateAll((elements) => elements.forEach((element) => element.setAttribute("data-qa-radar-secret-mask", "true"))).catch(() => undefined);
+        }
         await captureMasked(page, evidence.after, secretSelectors).catch(() => undefined);
       }
       const result: JourneyStepResult = {
@@ -221,7 +233,7 @@ export async function runJourney(
         status: "failed",
         durationMs: Date.now() - stepStarted,
         error: safeError(error, secrets),
-        ...(evidence ? { evidence } : {}),
+        ...(evidence ? { evidence: evidence.video ? { ...evidence, video: { ...evidence.video, endMs: Date.now() - startedAt.getTime() } } : evidence } : {}),
       };
       results.push(result);
       options.onStep?.(result);
