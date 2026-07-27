@@ -8,7 +8,7 @@ export interface CodeExecutionJob {
 }
 
 export class CodeExecutionJobStore {
-  #jobs = new Map<string, CodeExecutionJob>();
+  readonly #jobs = new Map<string, CodeExecutionJob>();
   #active = false;
 
   isActive(): boolean {

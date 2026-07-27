@@ -76,7 +76,7 @@ export async function readJson(request: IncomingMessage, maxBytes: number): Prom
   }
   try {
     const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error();
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("O corpo deve ser um objeto JSON.");
     return value as Record<string, unknown>;
   } catch {
     throw new Error("Corpo JSON inválido.");
