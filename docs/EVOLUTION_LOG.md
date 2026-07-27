@@ -397,6 +397,153 @@ condicionada à homologação do primeiro pipeline em uma instância GitLab real
   mesmo job.
 - Retenção: o HTML e as imagens seguem a mesma expiração da Jornada.
 
+### 2026-07-24 — Decisão de produto: Modo Código Playwright
+
+- Objetivo: permitir testes completos na linguagem oficial do Playwright sem
+  retirar a experiência simples das Jornadas declarativas.
+- Estratégia: manter dois modos complementares — Jornada visual/JSON para fluxos
+  rápidos e Modo Código com arquivos Playwright `.spec.ts` em TypeScript.
+-
+
+### 2026-07-24 — Consolidação do roadmap de produto
+
+- Motores: preservar Playwright, axe-core e Lighthouse; planejar OWASP ZAP para
+  análises dinâmicas controladas e IA como apoio aos diagnósticos.
+- Testes: evoluir jornadas completas e ambientes autenticados, incluindo o Modo
+  Código Playwright em TypeScript.
+- Resultados: histórico, comparação entre execuções, associação a deploys e
+  identificação de regressões.
+- Automação: testes agendados, alertas e integrações com GitHub, Jira, Slack e
+  pipelines CI/CD.
+- Plataforma: gestão de projetos, equipes, ambientes, organizações e permissões.
+- Estado: alguns fundamentos já existem de forma local ou parcial; este registro
+  não declara como concluídos os recursos que continuam planejados.
+
+### 2026-07-25 — Modo Código Playwright e relatório de evidências
+
+Estado ao encerrar a sessão:
+
+- Jornadas usam o Modo Avançado como experiência principal, com Codegen, edição,
+  importação/exportação de `.spec.ts` e execução local.
+- Execuções persistem `code-report.json`, permitindo gerar o relatório após
+  expiração do estado em memória ou reinício do servidor.
+- O relatório HTML recebe responsável e tipo de teste.
+- Corrigido o UUID da execução no frontend, que estava sendo concatenado com a
+  duração e causava “Execução de código não encontrada ou já expirada”.
+- O relatório avançado identifica ações do `.spec.ts` e gera descrições separadas
+  para `goto`, `fill`, `click`, `selectOption`, asserts e `waitFor`.
+- Incluído link para baixar o relatório HTML.
+
+Validações:
+
+- TypeScript aprovado.
+- Testes de componentes e evidências: 9 aprovados.
+- Teste end-to-end local: execução aprovada, relatório gerado e metadados preservados.
+- Teste com quatro ações: quatro passos distintos no relatório.
+
+Pendências para a próxima sessão:
+
+- As imagens ainda não são inseridas no relatório do Modo Código; aparece
+  “Nenhuma imagem foi gerada para este passo”.
+- Implementar screenshots automáticos por teste/ação ou integrar anexos oficiais
+  do Playwright (screenshots, trace e vídeo).
+- Copiar/servir anexos pela execução sem expor caminhos absolutos do filesystem.
+- Validar o download em Chrome e Firefox e decidir entre HTML único ou pacote com
+  imagens/anexos.
+- Criar teste de regressão para múltiplas ações, anexos e download.
+- Atualizar testes de integração antigos que ainda esperam a interface JSON removida.
+
+### 2026-07-25 — Dois modos de Jornada e gate de integração
+
+> Registro supersedido pela consolidação descrita em “Correção da direção do
+> produto”. A reintrodução da Jornada visual foi revertida.
+
+- Objetivo: estabilizar a experiência de Jornadas e transformar a suíte de
+  integração em requisito do processo de release.
+- Interface: a rota `/journeys` voltou a oferecer Jornada visual/JSON e Código
+  Playwright, com indicação explícita de que a execução de código é somente
+  local e não faz parte da Beta pública.
+- Documentação: removida a duplicação em `/docs`, mantido um único `<h1>` e
+  alinhadas as descrições da interface e do README.
+- Compatibilidade: os testes de integração foram atualizados para o fluxo atual
+  do relatório de evidências, que navega na mesma página.
+- CI/CD: o workflow de release agora instala Chromium e executa
+  `npm run test:integration` antes da publicação.
+- Validações: `npm run check` aprovado com 76 testes; integração Playwright
+  aprovada com 18 testes; os dois modos foram homologados manualmente no
+  navegador.
+- Próximo passo: iniciar os controles de segurança específicos do Modo Código.
+
+### 2026-07-25 — Isolamento inicial do Modo Código
+
+> A descrição de dois modos abaixo foi supersedida pela consolidação posterior.
+
+- Flag: criada `QA_RADAR_ENABLE_CODE_MODE`, desabilitada por padrão e
+  independente de `QA_RADAR_ENABLE_JOURNEYS`.
+- Acesso: Codegen, execução e relatórios de código aceitam somente requisições
+  locais; `QA_RADAR_ALLOW_PRIVATE_TARGETS` não altera essa regra.
+- Interface: sem a flag, a página exibe apenas a Jornada visual; com a flag, os
+  dois modos ficam disponíveis.
+- Segredos: o processo de teste não herda mais todo o `process.env`; somente
+  variáveis operacionais explicitamente permitidas são repassadas.
+- Limites: o corpo HTTP passou a comportar o envelope JSON de um `.spec.ts` de
+  até 256 KB, eliminando o limite contraditório anterior de 64 KB.
+- Proteção: os endpoints de criação de Codegen e execução usam o rate limit do
+  servidor.
+- Testes: adicionados casos para flag padrão, acesso remoto simulado, ausência
+  de bypass por alvo privado e remoção de secrets do ambiente.
+- Validações: `npm run check` aprovado com 79 testes e integração Playwright
+  aprovada com 18 testes; estados habilitado e desabilitado homologados no
+  navegador.
+- Próximo passo: limites de recursos/processos, limpeza de artefatos e tokens
+  específicos para relatórios do Modo Código.
+
+### 2026-07-25 — Correção da direção do produto
+
+- Decisão vigente: a interface comercial oferece somente o Modo Avançado
+  Playwright baseado em arquivos `.spec.ts`.
+- Correção: removidos da Home, Documentação e `/journeys` o formulário visual,
+  o modelo JSON, o seletor entre modos e suas promessas de produto.
+- Frontend: removidos também handlers, exemplos, credenciais e polling do fluxo
+  JSON; o recurso não foi apenas escondido por CSS ou flag.
+- Legado: o executor declarativo não faz parte do produto e fica desabilitado
+  por padrão enquanto seu código interno aguarda remoção.
+- Testes: os fluxos legados da interface foram substituídos por regressão real
+  de importação e exportação de `.spec.ts`.
+- Validações: `npm run check` aprovado com 79 testes; integração Playwright
+  aprovada com 17 testes; interface e documentação homologadas no navegador sem
+  referências ao JSON.
+- Próximo passo: evoluir execução, evidências, limites de recursos e experiência
+  de edição do Modo Avançado.
+
+### 2026-07-25 — Modo Avançado como padrão local
+
+- Produto: o JSON não é um modo do produto; a única experiência de automação é
+  o Modo Avançado Playwright.
+- Runtime: em `127.0.0.1`, `localhost` e `::1`, o Modo Avançado é habilitado
+  automaticamente sem configuração adicional.
+- Produção: hosts públicos permanecem bloqueados por padrão e o Blueprint Render
+  define `QA_RADAR_ENABLE_CODE_MODE=false` explicitamente.
+- Independência: o Modo Avançado não depende de `QA_RADAR_ENABLE_JOURNEYS`; o
+  servidor web não oferece mais configuração para habilitar o fluxo JSON.
+- Segurança: os endpoints de código continuam restritos a requisições locais,
+  mesmo quando a flag é habilitada explicitamente.
+- Validações: `npm run check` aprovado com 80 testes; integração Playwright
+  aprovada com 17 testes; o runtime foi iniciado em `127.0.0.1` sem flags e
+  entregou o editor avançado, sem JSON e sem mensagem de bloqueio.
+
+### 2026-07-25 — Nome oficial: Modo Jornada de Playwright
+
+- Produto: “Modo Jornada de Playwright” passa a ser o nome oficial em navegação,
+  Home, página da ferramenta, documentação e testes.
+- Interface: removidas as expressões “somente local”, “instalação local” e
+  “Executar localmente”; a ação principal agora se chama “Executar”.
+- Deploy: a experiência está desenhada para execução hospedada, mas a liberação
+  do executor público continua condicionada ao worker isolado com autenticação,
+  quotas e limites de CPU, memória, tempo, processos, rede e filesystem.
+- Segurança: o bloqueio atual do backend público foi preservado para não expor
+  execução remota arbitrária de `.spec.ts` no processo da aplicação.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown

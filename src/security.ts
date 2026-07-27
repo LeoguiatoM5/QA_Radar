@@ -1,37 +1,74 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { BlockList, isIP } from "node:net";
 
-function blockedIpv4(address: string): boolean {
-  const parts = address.split(".").map(Number);
-  const a = parts[0] ?? 0;
-  const b = parts[1] ?? 0;
-  const c = parts[2] ?? 0;
-  return a === 0 || a === 10 || a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && ((b === 0 && (c === 0 || c === 2)) || b === 168)) ||
-    (a === 198 && b === 51 && c === 100) ||
-    (a === 198 && (b === 18 || b === 19)) ||
-    (a === 203 && b === 0 && c === 113) ||
-    a >= 224;
+const BLOCKED_ADDRESSES = new BlockList();
+
+for (const [address, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.88.99.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4],
+] as const) {
+  BLOCKED_ADDRESSES.addSubnet(address, prefix, "ipv4");
 }
 
-function blockedIp(address: string): boolean {
-  if (isIP(address) === 4) return blockedIpv4(address);
+for (const [address, prefix] of [
+  ["::", 128],
+  ["::1", 128],
+  ["64:ff9b::", 96],
+  ["64:ff9b:1::", 48],
+  ["100::", 64],
+  ["2001::", 32],
+  ["2001:2::", 48],
+  ["2001:10::", 28],
+  ["2001:20::", 28],
+  ["2001:db8::", 32],
+  ["fc00::", 7],
+  ["fe80::", 10],
+  ["ff00::", 8],
+] as const) {
+  BLOCKED_ADDRESSES.addSubnet(address, prefix, "ipv6");
+}
+
+export function isBlockedNetworkAddress(address: string): boolean {
   const normalized = address.toLowerCase().split("%")[0] ?? "";
-  if (normalized === "::" || normalized === "::1") return true;
-  if (normalized.startsWith("::ffff:")) return blockedIpv4(normalized.slice(7));
-  return normalized.startsWith("fc") || normalized.startsWith("fd") ||
-    /^fe[89ab]/.test(normalized) || normalized.startsWith("2001:db8");
+  const family = isIP(normalized);
+  if (family === 4) return BLOCKED_ADDRESSES.check(normalized, "ipv4");
+  if (family === 6) {
+    if (normalized.startsWith("::ffff:")) return true;
+    return BLOCKED_ADDRESSES.check(normalized, "ipv6");
+  }
+  return true;
 }
 
-export type PublicUrlResolver = (hostname: string) => Promise<Array<{ address: string }>>;
+export interface ResolvedAddress {
+  address: string;
+  family?: number;
+}
+
+export interface PublicResolution {
+  hostname: string;
+  addresses: ResolvedAddress[];
+  fingerprint: string;
+}
+
+export type PublicUrlResolver = (hostname: string) => Promise<ResolvedAddress[]>;
 
 const systemResolver: PublicUrlResolver = async (hostname) =>
   isIP(hostname) ? [{ address: hostname }] : lookup(hostname, { all: true, verbatim: true });
 
-async function publicResolution(rawUrl: string, resolver: PublicUrlResolver): Promise<{ hostname: string; fingerprint: string }> {
+async function publicResolution(rawUrl: string, resolver: PublicUrlResolver): Promise<PublicResolution> {
   const url = new URL(rawUrl);
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("O destino deve utilizar HTTP ou HTTPS.");
@@ -41,17 +78,18 @@ async function publicResolution(rawUrl: string, resolver: PublicUrlResolver): Pr
   if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
     throw new Error("Endereços locais ou privados não são permitidos.");
   }
-  let addresses: Array<{ address: string }>;
+  let addresses: ResolvedAddress[];
   try {
     addresses = await resolver(hostname);
   } catch {
     throw new Error("Não foi possível resolver o endereço informado.");
   }
-  if (!addresses.length || addresses.some(({ address }) => blockedIp(address))) {
+  if (!addresses.length || addresses.some(({ address }) => isBlockedNetworkAddress(address))) {
     throw new Error("Endereços locais ou privados não são permitidos.");
   }
   return {
     hostname,
+    addresses,
     fingerprint: [...new Set(addresses.map(({ address }) => address.toLowerCase()))].sort().join(","),
   };
 }
@@ -61,13 +99,18 @@ export class PublicNetworkGuard {
 
   constructor(private readonly resolver: PublicUrlResolver = systemResolver) {}
 
-  async assert(rawUrl: string): Promise<void> {
+  async resolve(rawUrl: string): Promise<PublicResolution> {
     const resolution = await publicResolution(rawUrl, this.resolver);
     const previous = this.#resolutions.get(resolution.hostname);
     if (previous !== undefined && previous !== resolution.fingerprint) {
       throw new Error("O endereço do destino mudou durante a análise; possível DNS rebinding bloqueado.");
     }
     this.#resolutions.set(resolution.hostname, resolution.fingerprint);
+    return resolution;
+  }
+
+  async assert(rawUrl: string): Promise<void> {
+    await this.resolve(rawUrl);
   }
 }
 
