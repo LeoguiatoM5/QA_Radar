@@ -210,7 +210,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     steps: report.steps.map((step) => ({
       ...step,
       ...(step.evidence ? {
-        evidence: { before: basename(step.evidence.before), after: basename(step.evidence.after) },
+        evidence: {
+          ...(step.evidence.before ? { before: basename(step.evidence.before) } : {}),
+          ...(step.evidence.after ? { after: basename(step.evidence.after) } : {}),
+        },
       } : {}),
     })),
   });
@@ -256,19 +259,25 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         if (!videoPath && normalized.endsWith(".webm")) videoPath = normalized;
       }
     } catch { /* A failed run may not produce media. */ }
-    const steps = stepDefinitions.map((step, index) => ({
-      index,
-      action: step.action,
-      description: step.description,
-      status: job.status === "passed" || index < stepDefinitions.length - 1 ? "passed" as const : "failed" as const,
-      durationMs: stepDuration,
-      ...(job.status === "failed" && index === stepDefinitions.length - 1 && job.failureDetails ? { error: job.failureDetails } : {}),
-      ...((screenshotPath || videoPath) ? { evidence: {
-        before: screenshotPath ?? videoPath ?? "",
-        after: screenshotPath ?? videoPath ?? "",
-        ...(videoPath ? { video: { path: videoPath, startMs: index * stepDuration, endMs: (index + 1) * stepDuration } } : {}),
-      } } : {}),
-    }));
+    const steps = stepDefinitions.map((step, index) => {
+      const isLastStep = index === stepDefinitions.length - 1;
+      return {
+        index,
+        action: step.action,
+        description: step.description,
+        status: job.status === "passed" || index < stepDefinitions.length - 1 ? "passed" as const : "failed" as const,
+        durationMs: stepDuration,
+        ...(job.status === "failed" && isLastStep && job.failureDetails ? { error: job.failureDetails } : {}),
+        // O Playwright captura só uma screenshot ao final do arquivo .spec.ts
+        // (não uma por ação nem uma para "antes"), então a evidência fica só
+        // no último passo, com uma única imagem, em vez de repetir a mesma
+        // captura como Antes/Depois em todos os passos.
+        ...(isLastStep && (screenshotPath || videoPath) ? { evidence: {
+          ...(screenshotPath ? { after: screenshotPath } : {}),
+          ...(videoPath ? { video: { path: videoPath, startMs: 0, endMs: durationMs } } : {}),
+        } } : {}),
+      };
+    });
     return {
       schemaVersion: "1.0",
       name: "Teste Playwright (.spec.ts)",

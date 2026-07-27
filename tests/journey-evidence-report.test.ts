@@ -42,6 +42,21 @@ describe("journey evidence HTML", () => {
     assert.doesNotMatch(html, /<script>/);
   });
 
+  it("não repete a mesma imagem quando só há evidência 'depois' (execução de código)", async () => {
+    const html = await createJourneyEvidenceHtml({
+      schemaVersion: "1.0", name: "Teste Playwright (.spec.ts)", status: "passed", startedAt: "2026-07-22T00:00:00Z", durationMs: 100,
+      steps: [
+        { index: 0, action: "goto", description: "Abrir página https://example.com", status: "passed", durationMs: 50 },
+        { index: 1, action: "click", description: "Clicar em heading", status: "passed", durationMs: 50,
+          evidence: { after: "test-results/qa-radar-teste/final.png" } },
+      ],
+    }, { testerName: "QA", testType: "smoke" }, readFakeAsset, new Date("2026-07-22T12:00:00Z"));
+    assert.match(html, /Nenhuma imagem foi gerada para este passo\./);
+    assert.equal(html.match(/<img/g)?.length, 1);
+    assert.doesNotMatch(html, /Antes<\/figcaption>/);
+    assert.match(html, /Depois<\/figcaption>/);
+  });
+
   it("mostra uma mensagem quando o artefato não está mais disponível", async () => {
     const html = await createJourneyEvidenceHtml({
       schemaVersion: "1.0", name: "Jornada expirada", status: "passed", startedAt: "2026-07-22T00:00:00Z", durationMs: 100,
