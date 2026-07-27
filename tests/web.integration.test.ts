@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -207,113 +207,46 @@ describe("web scan integration", () => {
     }
   });
 
-  it("cancela uma jornada em execução pelo dashboard", async () => {
-    const target = createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end("<!doctype html><html lang=pt-BR><main>Jornada longa</main>");
+  it("importa e exporta um arquivo no Modo Jornada de Playwright", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-code-mode-"));
+    const app = createQaRadarServer({
+      resultsDir,
+      allowCodeMode: true,
     });
-    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-journey-cancel-"));
-    const app = createQaRadarServer({ resultsDir, allowJourneys: true, allowPrivateTargets: true });
-    const targetUrl = await listen(target);
     const appUrl = await listen(app);
     let browser: Browser | undefined;
     try {
       browser = await chromium.launch({ headless: true });
       const page = await browser.newPage();
-      await page.goto(`${appUrl}/journeys`);
-      await page.locator("#journey-url").fill(targetUrl);
-      await page.locator("#journey-json").fill(JSON.stringify({ schemaVersion: "1.0", name: "Cancelar", steps: [
-        { action: "goto", url: targetUrl },
-        { action: "waitFor", selector: "#nunca-existe", timeoutMs: 120000 },
-      ] }));
-      await page.locator("#journey-submit").click();
-      await page.locator("#journey-cancel").waitFor();
-      await page.locator("#journey-cancel").click();
-      await page.getByText("A jornada foi cancelada.", { exact: true }).waitFor({ timeout: 20_000 });
-    } finally {
-      await browser?.close();
-      await close(app);
-      await close(target);
-      await rm(resultsDir, { recursive: true, force: true });
-    }
-  });
+      const source = [
+        "import { test, expect } from '@playwright/test';",
+        "",
+        "test('fluxo avançado', async ({ page }) => {",
+        "  await page.goto('https://example.com');",
+        "  await expect(page.locator('h1')).toBeVisible();",
+        "});",
+        "",
+      ].join("\n");
 
-  it("executa jornada experimental pelo dashboard quando habilitada", async () => {
-    const target = createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end('<!doctype html><html lang="pt-BR"><main><button id="go" onclick="document.querySelector(\'#done\').textContent=\'Concluído\'">Ir</button><p id="done"></p></main>');
-    });
-    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-journey-"));
-    const app = createQaRadarServer({ resultsDir, allowJourneys: true, allowPrivateTargets: true, retentionMs: 3_000 });
-    const targetUrl = await listen(target);
-    const appUrl = await listen(app);
-    let browser: Browser | undefined;
-    try {
-      browser = await chromium.launch({ headless: true });
-      const page = await browser.newPage();
       await page.goto(`${appUrl}/journeys`);
-      await page.locator("#journey-url").fill(targetUrl);
-      await page.locator("#journey-json").fill(JSON.stringify({ schemaVersion: "1.0", name: "Jornada Web", steps: [
-        { action: "goto", url: targetUrl },
-        { action: "click", selector: "#go" },
-        { action: "assertText", selector: "#done", text: "Concluído", description: "Confirmar a conclusão" },
-      ] }));
-      const creationPromise = page.waitForResponse((response) =>
-        response.url() === `${appUrl}/api/journeys` && response.request().method() === "POST");
-      await page.locator("#journey-submit").click();
-      const creation = await creationPromise;
-      const createdJourney = await creation.json() as { id: string; accessToken: string };
-      await page.waitForTimeout(200);
-      const journeyCookies = await page.context().cookies(`${appUrl}/api/journeys/status`);
-      const journeyCookie = journeyCookies.find((cookie) => cookie.name === "qa_radar_access");
-      assert.ok(journeyCookie, "Cookie HttpOnly da jornada ausente.");
-      assert.ok(journeyCookie.value === createdJourney.accessToken, "Cookie da jornada não corresponde ao token criado.");
-      try {
-        await page.locator("#journey-status.pass").waitFor({ timeout: 20_000 });
-      } catch (error) {
-        const detail = await page.locator("#journey-error").textContent();
-        throw new Error(`A jornada não apareceu como aprovada: ${detail || "sem detalhe na interface"}`, { cause: error });
-      }
-      assert.equal(await page.locator("#journey-status").textContent(), "APROVADA");
-      assert.match((await page.locator("#journey-steps").textContent()) ?? "", /assertText/);
-      assert.match((await page.locator("#journey-steps").textContent()) ?? "", /Confirmar a conclusão/);
-      assert.equal(await page.locator("#journey-cancel").isHidden(), true);
-      assert.equal(await page.locator("#journey-submit").isVisible(), true);
-      const evidenceHref = await page.locator("#journey-steps a").first().getAttribute("href");
-      assert.match(evidenceHref ?? "", /^\/api\/journeys\//);
-      const evidenceUrl = new URL(evidenceHref ?? "", appUrl).toString();
-      assert.equal((await fetch(evidenceUrl)).status, 401);
-      const artifactHeaders = { authorization: `Bearer ${createdJourney.accessToken}` };
-      assert.equal((await page.context().request.get(evidenceUrl, { headers: artifactHeaders })).status(), 200);
-      const journeyBase = evidenceUrl.slice(0, evidenceUrl.lastIndexOf("/") + 1);
-      assert.equal((await page.context().request.get(`${journeyBase}journey-report.json`, { headers: artifactHeaders })).status(), 200);
-      await page.locator("#journey-evidence-button").click();
-      await page.locator("#journey-tester-name").fill("QA Integração");
-      await page.locator("#journey-test-type").selectOption("regression");
-      const popupPromise = page.waitForEvent("popup");
-      const evidenceCreationPromise = page.waitForResponse((response) => response.url().endsWith("/evidence-report"));
-      await page.locator("#journey-evidence-form button[type=submit]").click();
-      const evidenceReport = await popupPromise;
-      const evidenceCreation = await evidenceCreationPromise;
-      assert.equal(evidenceCreation.status(), 201, await evidenceCreation.text());
-      await evidenceReport.waitForURL(/journey-evidence\.html/, { timeout: 10_000 });
-      await evidenceReport.waitForLoadState("domcontentloaded");
-      assert.match((await evidenceReport.locator("body").textContent()) ?? "", /QA RADAR/);
-      assert.match((await evidenceReport.locator("body").textContent()) ?? "", /QA Integração/);
-      assert.match((await evidenceReport.locator("body").textContent()) ?? "", /Regressão/);
-      assert.match((await evidenceReport.locator("body").textContent()) ?? "", /Confirmar a conclusão/);
-      assert.equal(await evidenceReport.locator("img").count() > 0, true);
-      assert.equal(await evidenceReport.locator("img").evaluateAll((images) => images.every((img) => {
-        const image = img as HTMLImageElement;
-        return image.complete && image.naturalWidth > 0;
-      })), true);
-      await evidenceReport.close();
-      await new Promise((resolve) => setTimeout(resolve, 3_100));
-      assert.equal((await page.context().request.get(evidenceUrl, { headers: artifactHeaders })).status(), 404);
+      assert.equal(await page.locator("#journey-json").count(), 0);
+      await page.locator("#code-import").setInputFiles({
+        name: "fluxo.spec.ts",
+        mimeType: "text/typescript",
+        buffer: Buffer.from(source),
+      });
+      assert.equal(await page.locator("#playwright-code").inputValue(), source);
+
+      const downloadPromise = page.waitForEvent("download");
+      await page.locator("#code-save").click();
+      const download = await downloadPromise;
+      assert.equal(download.suggestedFilename(), "qa-radar.spec.ts");
+      const downloadPath = await download.path();
+      assert.ok(downloadPath);
+      assert.equal(await readFile(downloadPath, "utf8"), source);
     } finally {
       await browser?.close();
       await close(app);
-      await close(target);
       await rm(resultsDir, { recursive: true, force: true });
     }
   });

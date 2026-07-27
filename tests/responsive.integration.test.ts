@@ -10,7 +10,7 @@ import { createQaRadarServer } from "../src/server.js";
 describe("responsive integration", () => {
   it("mantém as páginas principais dentro do viewport mobile", async () => {
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-responsive-"));
-    const app = createQaRadarServer({ resultsDir, allowJourneys: true });
+    const app = createQaRadarServer({ resultsDir, allowCodeMode: true });
     await new Promise<void>((resolve) => app.listen(0, "127.0.0.1", resolve));
     const address = app.address() as AddressInfo;
     const appUrl = `http://127.0.0.1:${address.port}`;
@@ -45,14 +45,9 @@ describe("responsive integration", () => {
       }
 
       await page.goto(`${appUrl}/journeys`, { waitUntil: "domcontentloaded" });
-      await page.locator('[data-journey-example="saucedemo"]').click();
-      const selectedExample = await page.evaluate(() => ({
-        url: (document.querySelector("#journey-url") as HTMLInputElement).value,
-        journey: JSON.parse((document.querySelector("#journey-json") as HTMLTextAreaElement).value),
-      }));
-      assert.equal(selectedExample.url, "https://www.saucedemo.com/");
-      assert.equal(selectedExample.journey.name, "Login no SauceDemo");
-      assert.equal(selectedExample.journey.steps.length, 6);
+      assert.equal(await page.locator("#playwright-code").isVisible(), true);
+      assert.equal(await page.locator("#code-execute").isVisible(), true);
+      assert.equal(await page.locator("#journey-json").count(), 0);
     } finally {
       await browser?.close();
       await new Promise<void>((resolve, reject) =>

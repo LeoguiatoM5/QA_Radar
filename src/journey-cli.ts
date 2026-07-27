@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium, firefox, webkit, type BrowserType } from "playwright";
 import { runJourney, type JourneyRunResult } from "./journey-runner.js";
@@ -42,7 +42,12 @@ export async function runJourneyDefinition(
   signal?.addEventListener("abort", abort, { once: true });
   try {
     signal?.throwIfAborted();
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const evidenceDir = join(options.outputDir, "journey-evidence");
+    await mkdir(evidenceDir, { recursive: true });
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      recordVideo: { dir: evidenceDir, size: { width: 1440, height: 900 } },
+    });
     const page = await context.newPage();
     const networkGuard = options.publicNetworkOnly ? new PublicNetworkGuard() : undefined;
     if (options.publicNetworkOnly) {
@@ -61,9 +66,14 @@ export async function runJourneyDefinition(
       secrets: journeySecrets(environment),
       timeoutMs: options.timeoutMs,
       ...(signal ? { signal } : {}),
-      evidenceDir: join(options.outputDir, "journey-evidence"),
+      evidenceDir,
+      videoPath: join(evidenceDir, "journey.webm"),
       ...(networkGuard ? { validateNavigationUrl: (url: string) => networkGuard.assert(url) } : {}),
     });
+    const video = page.video();
+    await context.close();
+    const videoPath = await video?.path();
+    if (videoPath && videoPath !== join(evidenceDir, "journey.webm")) await rename(videoPath, join(evidenceDir, "journey.webm"));
     const reportPath = join(options.outputDir, "journey-report.json");
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     return { report, reportPath };
