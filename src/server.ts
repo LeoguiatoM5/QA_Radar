@@ -274,7 +274,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       }
       const stepFiles = await readdir(join(job.outputDir, "test-results", "qa-radar-steps"));
       stepScreenshots.push(
-        ...stepFiles.filter((name) => name.endsWith(".png")).sort()
+        ...stepFiles.filter((name) => name.endsWith(".png")).sort((a, b) => a.localeCompare(b))
           .map((name) => `test-results/qa-radar-steps/${name}`),
       );
     } catch { /* A failed run may not produce media. */ }
