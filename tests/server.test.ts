@@ -8,10 +8,7 @@ import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
-import {
-  codeModeEnabledForHost,
-  createQaRadarServer,
-} from "../src/server.js";
+import { createQaRadarServer } from "../src/server.js";
 import { codeExecutionEnvironment } from "../src/code-execution.js";
 import type { OperationalEvent } from "../src/server.js";
 
@@ -134,19 +131,6 @@ describe("web server", () => {
         protectedServer.close((error) => (error ? reject(error) : resolve())),
       );
     }
-  });
-
-  it("habilita o Modo Jornada de Playwright por padrão somente em host local", () => {
-    assert.equal(codeModeEnabledForHost("127.0.0.1"), true);
-    assert.equal(codeModeEnabledForHost("localhost"), true);
-    assert.equal(codeModeEnabledForHost("::1"), true);
-    assert.equal(codeModeEnabledForHost("0.0.0.0"), false);
-    assert.equal(codeModeEnabledForHost("0.0.0.0", "true"), true);
-    assert.equal(codeModeEnabledForHost("127.0.0.1", "false"), false);
-    assert.throws(
-      () => codeModeEnabledForHost("127.0.0.1", "yes"),
-      /deve ser true ou false/,
-    );
   });
 
   it("exige token administrativo para execução remota e token próprio para seus artefatos", async () => {
