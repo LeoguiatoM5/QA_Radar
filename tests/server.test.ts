@@ -679,6 +679,60 @@ describe("web server", () => {
     }
   });
 
+  it("associa cada passo capturado pelo fixture à sua própria screenshot, sem desalinhar", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-step-images-"));
+    const codeServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codeRunner: async ({ outputDir }) => {
+        // Simula o que o fixture (src/code-step-fixtures.ts) realmente produz:
+        // uma screenshot numerada por ação instrumentada (goto e click aqui).
+        const stepsDir = join(outputDir, "test-results", "qa-radar-steps");
+        await mkdir(stepsDir, { recursive: true });
+        await writeFile(join(stepsDir, "000.png"), Buffer.from("screenshot-do-goto"));
+        await writeFile(join(stepsDir, "001.png"), Buffer.from("screenshot-do-click"));
+        return { exitCode: 0, stdout: '{"stats":{"expected":1}}', stderr: "" };
+      },
+    });
+    await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
+    const address = codeServer.address() as AddressInfo;
+    const codeUrl = `http://127.0.0.1:${address.port}`;
+    const code = "import { test } from '@playwright/test';\n"
+      + "test('busca', async ({ page }) => {\n"
+      + "  await page.goto('https://example.com');\n"
+      + "  await page.getByRole('button', { name: 'Buscar' }).click();\n"
+      + "});\n";
+    try {
+      const executionResponse = await fetch(`${codeUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      const authorization = { authorization: `Bearer ${execution.accessToken}` };
+
+      const stepsResponse = await fetch(`${codeUrl}/api/code-executions/${execution.id}/steps`, { headers: authorization });
+      const { steps } = await stepsResponse.json() as { steps: Array<{ index: number; action: string }> };
+      assert.equal(steps.length, 2);
+      assert.equal(steps[0]?.action, "goto");
+      assert.equal(steps[1]?.action, "click");
+
+      await fetch(`${codeUrl}/api/code-executions/${execution.id}/evidence-report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: JSON.stringify({ testerName: "QA", testType: "smoke" }),
+      });
+      const html = await (await fetch(`${codeUrl}/api/code-executions/${execution.id}/code-evidence.html`, { headers: authorization })).text();
+      const images = [...html.matchAll(/src="data:image\/png;base64,([^"]+)"/g)].map((match) => Buffer.from(match[1] ?? "", "base64").toString("utf8"));
+      assert.deepEqual(images, ["screenshot-do-goto", "screenshot-do-click"]);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        codeServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
   it("protege, limita e cancela jornadas assíncronas", async () => {
     const journeyServer = createQaRadarServer({
       allowJourneys: true,
