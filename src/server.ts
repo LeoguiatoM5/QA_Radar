@@ -56,15 +56,6 @@ interface CodeExecutionJob {
 const MAX_CODE_FILE_BYTES = 256 * 1024;
 // Reserva espaço para o envelope JSON que transporta um arquivo no limite.
 const MAX_JSON_BODY_BYTES = MAX_CODE_FILE_BYTES + 64 * 1024;
-export function codeModeEnabledForHost(host: string, setting?: string): boolean {
-  if (setting === "true") return true;
-  if (setting === "false") return false;
-  if (setting !== undefined) {
-    throw new Error("QA_RADAR_ENABLE_CODE_MODE deve ser true ou false.");
-  }
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
-}
-
 function explainCodeFailure(details: string | undefined): string | undefined {
   if (!details) return undefined;
   if (/security verification|verify you are not a bot|cloudflare|captcha|challenge/i.test(details)) {
@@ -120,6 +111,7 @@ export interface ServerOptions {
   concurrency: number;
   maxQueueSize: number;
   allowPrivateTargets: boolean;
+  // Sem variável de ambiente própria em produção; só usado com override em testes.
   allowCustomIgnorePatterns: boolean;
   rateLimitMax: number;
   rateLimitWindowMs: number;
@@ -129,6 +121,10 @@ export interface ServerOptions {
   turnstileSiteKey: string | undefined;
   turnstileSecretKey: string | undefined;
   allowHistory: boolean;
+  // allowJourneys e os limites maxJourney* abaixo não são lidos de nenhuma
+  // variável de ambiente em produção: a jornada declarativa em JSON é legado
+  // e não faz parte do produto. Permanecem aqui apenas para os testes que
+  // ainda exercitam essa rota; ver docs/EVOLUTION_LOG.md.
   allowJourneys: boolean;
   allowCodeMode: boolean;
   codeModeAdminToken: string | undefined;
