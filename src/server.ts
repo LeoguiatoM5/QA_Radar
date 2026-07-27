@@ -233,15 +233,23 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       const click = /(?:page|locator|[\w.]+)\.locator\((['"`])(.+?)\1\)\.click\(/.exec(line);
       const genericClick = /(.+)\.click\(/.exec(line);
       const fill = /\.locator\((['"`])(.+?)\1\)\.fill\(/.exec(line);
+      const genericFill = /(.+)\.fill\(/.exec(line);
       const select = /\.locator\((['"`])(.+?)\1\)\.selectOption\(/.exec(line);
+      const genericSelect = /(.+)\.selectOption\(/.exec(line);
       const visible = /expect\((.+?)\)\.toBeVisible\(/.exec(line);
       const text = /expect\((.+?)\)\.toHaveText\(/.exec(line);
       const wait = /\.waitFor\(/.exec(line);
+      // As variantes "genericas" cobrem localizadores como getByRole/getByLabel,
+      // não só page.locator(...) — sem elas, o passo some do relatório mesmo
+      // a ação tendo sido executada (e instrumentada) de verdade, e a
+      // correlação com a screenshot capturada desalinha.
       if (goto) sourceSteps.push({ action: "goto", description: `Abrir página ${goto[2]}` });
       else if (click) sourceSteps.push({ action: "click", description: `Clicar em ${click[2]}` });
       else if (genericClick) sourceSteps.push({ action: "click", description: `Clicar em ${(genericClick[1] ?? line).trim()}` });
       else if (fill) sourceSteps.push({ action: "fill", description: `Preencher ${fill[2]}` });
+      else if (genericFill) sourceSteps.push({ action: "fill", description: `Preencher ${(genericFill[1] ?? line).trim()}` });
       else if (select) sourceSteps.push({ action: "select", description: `Selecionar opção em ${select[2]}` });
+      else if (genericSelect) sourceSteps.push({ action: "select", description: `Selecionar opção em ${(genericSelect[1] ?? line).trim()}` });
       else if (visible) sourceSteps.push({ action: "assertVisible", description: `Confirmar elemento visível: ${visible[1]}` });
       else if (text) sourceSteps.push({ action: "assertText", description: `Confirmar texto em ${text[1]}` });
       else if (wait) sourceSteps.push({ action: "waitFor", description: "Aguardar elemento" });
@@ -250,17 +258,38 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     const stepDuration = durationMs / stepDefinitions.length;
     let screenshotPath: string | undefined;
     let videoPath: string | undefined;
+    const stepScreenshots: string[] = [];
     try {
       const mediaFiles = await readdir(join(job.outputDir, "test-results"), { recursive: true });
       for (const relative of mediaFiles) {
         if (typeof relative !== "string") continue;
         const normalized = `test-results/${relative.replaceAll("\\", "/")}`;
+        // O fixture qa-radar-fixtures.ts (src/code-step-fixtures.ts) grava uma
+        // screenshot real por ação em test-results/qa-radar-steps/, numeradas
+        // em ordem; tratadas à parte para não confundir com os artefatos
+        // padrão do próprio Playwright (ex.: test-finished-1.png).
+        if (normalized.startsWith("test-results/qa-radar-steps/")) continue;
         if (!screenshotPath && normalized.endsWith(".png")) screenshotPath = normalized;
         if (!videoPath && normalized.endsWith(".webm")) videoPath = normalized;
       }
+      const stepFiles = await readdir(join(job.outputDir, "test-results", "qa-radar-steps"));
+      stepScreenshots.push(
+        ...stepFiles.filter((name) => name.endsWith(".png")).sort((a, b) => a.localeCompare(b))
+          .map((name) => `test-results/qa-radar-steps/${name}`),
+      );
     } catch { /* A failed run may not produce media. */ }
+    // Só goto/click/fill/select correspondem a ações realmente instrumentadas
+    // pelo fixture; waitFor/assertVisible/assertText nunca disparam uma
+    // captura, então não avançam o cursor — senão a screenshot N ficaria
+    // associada ao passo errado sempre que uma asserção aparecesse no meio.
+    const CAPTURABLE_ACTIONS = new Set(["goto", "click", "fill", "select"]);
+    let screenshotCursor = 0;
     const steps = stepDefinitions.map((step, index) => {
       const isLastStep = index === stepDefinitions.length - 1;
+      const capturable = CAPTURABLE_ACTIONS.has(step.action);
+      const stepImage = capturable ? stepScreenshots[screenshotCursor] : undefined;
+      if (capturable) screenshotCursor += 1;
+      const image = stepImage ?? (isLastStep ? screenshotPath : undefined);
       return {
         index,
         action: step.action,
@@ -268,13 +297,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         status: job.status === "passed" || index < stepDefinitions.length - 1 ? "passed" as const : "failed" as const,
         durationMs: stepDuration,
         ...(job.status === "failed" && isLastStep && job.failureDetails ? { error: job.failureDetails } : {}),
-        // O Playwright captura só uma screenshot ao final do arquivo .spec.ts
-        // (não uma por ação nem uma para "antes"), então a evidência fica só
-        // no último passo, com uma única imagem, em vez de repetir a mesma
-        // captura como Antes/Depois em todos os passos.
-        ...(isLastStep && (screenshotPath || videoPath) ? { evidence: {
-          ...(screenshotPath ? { after: screenshotPath } : {}),
-          ...(videoPath ? { video: { path: videoPath, startMs: 0, endMs: durationMs } } : {}),
+        ...(image || (isLastStep && videoPath) ? { evidence: {
+          ...(image ? { after: image } : {}),
+          ...(isLastStep && videoPath ? { video: { path: videoPath, startMs: 0, endMs: durationMs } } : {}),
         } } : {}),
       };
     });

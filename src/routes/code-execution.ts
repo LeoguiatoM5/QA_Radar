@@ -5,6 +5,7 @@ import { assertHostedPlaywrightCode } from "../code-policy.js";
 import { applyStepDescriptionOverrides, createJourneyEvidenceHtml, parseJourneyEvidenceMetadata, parseStepDescriptionOverrides } from "../journey-evidence-report.js";
 import { ACCESS_HASH_FILE, accessCookie, json, readJson, requireAccess, tokenHash } from "../http-helpers.js";
 import { MAX_CODE_FILE_BYTES, MAX_JSON_BODY_BYTES } from "../code-limits.js";
+import { CODE_STEP_FIXTURES_SOURCE } from "../code-step-fixtures.js";
 import type { CodeExecutionJob } from "../code-execution-job-store.js";
 import type { RouteHandler } from "./context.js";
 
@@ -65,8 +66,17 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
       await mkdir(outputDir, { recursive: true });
       await writeFile(join(outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
       const specPath = join(outputDir, "qa-radar.spec.ts");
-      const runtimeCode = code.replaceAll("@playwright/test", "playwright/test");
+      // A execução hospedada recebe só a string de código (ver
+      // docs/SANDBOX_RUNNER_PROTOCOL.md) e nunca vê os arquivos irmãos
+      // gravados neste diretório, então só a execução local pode apontar o
+      // import para o fixture que captura screenshot por passo.
+      const runtimeCode = hostedExecution
+        ? code.replaceAll("@playwright/test", "playwright/test")
+        : code.replaceAll("@playwright/test", "./qa-radar-fixtures.js");
       await writeFile(specPath, runtimeCode, { encoding: "utf8", mode: 0o600 });
+      if (!hostedExecution) {
+        await writeFile(join(outputDir, "qa-radar-fixtures.ts"), CODE_STEP_FIXTURES_SOURCE, { encoding: "utf8", mode: 0o600 });
+      }
       await writeFile(join(outputDir, "playwright.config.ts"), `import { defineConfig } from "playwright/test";\nexport default defineConfig({ use: { screenshot: "on", video: "on" } });\n`, { encoding: "utf8", mode: 0o600 });
       const execution = await runner({
         outputDir,
