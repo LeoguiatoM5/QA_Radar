@@ -5,7 +5,7 @@ import type { Server } from "node:http";
 import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import {
@@ -519,6 +519,174 @@ describe("web server", () => {
         body: JSON.stringify({ testerName: "QA", testType: "smoke", stepDescriptions: "não é lista" }),
       });
       assert.equal(rejected.status, 400);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        codeServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("valida entrada e libera nova gravação do Codegen após falha do processo", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-codegen-validation-"));
+    const processEvents = new EventEmitter();
+    Object.assign(processEvents, { pid: 4321, kill: () => true });
+    const codegenServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codegenSpawner: () => processEvents as unknown as ChildProcess,
+    });
+    await new Promise<void>((resolve) => codegenServer.listen(0, "127.0.0.1", resolve));
+    const address = codegenServer.address() as AddressInfo;
+    const codegenUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const missingUrl = await fetch(`${codegenUrl}/api/codegen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      assert.equal(missingUrl.status, 400);
+      assert.match((await missingUrl.json() as { error: string }).error, /Informe a URL/);
+
+      const invalidProtocol = await fetch(`${codegenUrl}/api/codegen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "ftp://example.com" }),
+      });
+      assert.equal(invalidProtocol.status, 400);
+      assert.match((await invalidProtocol.json() as { error: string }).error, /http ou https/);
+
+      const unknownStatus = await fetch(`${codegenUrl}/api/codegen/${randomUUID()}`, {
+        headers: { authorization: "Bearer qualquer-coisa" },
+      });
+      assert.equal(unknownStatus.status, 404);
+
+      const started = await fetch(`${codegenUrl}/api/codegen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com" }),
+      });
+      assert.equal(started.status, 201);
+
+      const blockedWhileActive = await fetch(`${codegenUrl}/api/codegen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com" }),
+      });
+      assert.equal(blockedWhileActive.status, 429);
+
+      processEvents.emit("error", new Error("processo do Codegen falhou"));
+
+      const afterFailure = await fetch(`${codegenUrl}/api/codegen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com" }),
+      });
+      assert.equal(afterFailure.status, 201);
+    } finally {
+      processEvents.emit("exit", 0);
+      await new Promise<void>((resolve, reject) =>
+        codegenServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reporta falha da execução de código e rejeita corpo JSON malformado", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-failure-"));
+    const codeServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codeRunner: async () => ({ exitCode: 1, stdout: '{"stats":{"expected":1,"unexpected":1}}', stderr: "falhou" }),
+    });
+    await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
+    const address = codeServer.address() as AddressInfo;
+    const codeUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const malformed = await fetch(`${codeUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{ isto não é JSON",
+      });
+      assert.equal(malformed.status, 400);
+      assert.match((await malformed.json() as { error: string }).error, /Corpo JSON inválido/);
+
+      const failed = await fetch(`${codeUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('x', async () => { throw new Error('falhou'); });" }),
+      });
+      assert.equal(failed.status, 422);
+      const body = await failed.json() as { status: string; report: { stats: { unexpected: number } } };
+      assert.equal(body.status, "failed");
+      assert.equal(body.report.stats.unexpected, 1);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        codeServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("protege e valida os endpoints de artefatos e relatório do Modo Jornada", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-artifacts-"));
+    const codeServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codeRunner: async ({ outputDir }) => {
+        const mediaDir = join(outputDir, "test-results", "qa-radar-teste");
+        await mkdir(mediaDir, { recursive: true });
+        await writeFile(join(mediaDir, "screenshot.png"), Buffer.from("imagem-falsa-para-teste"));
+        return { exitCode: 0, stdout: '{"stats":{"expected":1}}', stderr: "" };
+      },
+    });
+    await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
+    const address = codeServer.address() as AddressInfo;
+    const codeUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const executionResponse = await fetch(`${codeUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('ok', async () => {});" }),
+      });
+      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      const authorization = { authorization: `Bearer ${execution.accessToken}` };
+      const wrongAuthorization = { authorization: "Bearer token-incorreto" };
+      const unknownId = randomUUID();
+
+      const missingStepsToken = await fetch(`${codeUrl}/api/code-executions/${execution.id}/steps`);
+      assert.equal(missingStepsToken.status, 401);
+      const wrongStepsToken = await fetch(`${codeUrl}/api/code-executions/${execution.id}/steps`, { headers: wrongAuthorization });
+      assert.equal(wrongStepsToken.status, 403);
+      const unknownSteps = await fetch(`${codeUrl}/api/code-executions/${unknownId}/steps`, { headers: authorization });
+      assert.equal(unknownSteps.status, 404);
+
+      const unknownEvidence = await fetch(`${codeUrl}/api/code-executions/${unknownId}/evidence-report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: JSON.stringify({ testerName: "QA", testType: "smoke" }),
+      });
+      assert.equal(unknownEvidence.status, 404);
+
+      const missingField = await fetch(`${codeUrl}/api/code-executions/${execution.id}/evidence-report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: JSON.stringify({ testerName: "QA" }),
+      });
+      assert.equal(missingField.status, 400);
+
+      const screenshotUrl = `${codeUrl}/api/code-executions/${execution.id}/test-results/qa-radar-teste/screenshot.png`;
+      const wrongScreenshotToken = await fetch(screenshotUrl, { headers: wrongAuthorization });
+      assert.equal(wrongScreenshotToken.status, 403);
+      const screenshot = await fetch(screenshotUrl, { headers: authorization });
+      assert.equal(screenshot.status, 200);
+      assert.equal(screenshot.headers.get("content-type"), "image/png");
+      assert.equal(screenshot.headers.get("content-length"), "imagem-falsa-para-teste".length.toString());
+
+      const unknownFile = await fetch(`${codeUrl}/api/code-executions/${execution.id}/test-results/qa-radar-teste/nao-existe.png`, { headers: authorization });
+      assert.equal(unknownFile.status, 404);
+      const unknownExecutionArtifact = await fetch(`${codeUrl}/api/code-executions/${unknownId}/code-evidence.html`, { headers: authorization });
+      assert.equal(unknownExecutionArtifact.status, 404);
     } finally {
       await new Promise<void>((resolve, reject) =>
         codeServer.close((error) => (error ? reject(error) : resolve())),
