@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
+import { randomBytes, randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import { parseCli } from "./cli.js";
 import { writeReports } from "./reporters.js";
 import { scan } from "./scanner.js";
@@ -21,37 +21,23 @@ import { terminateProcessTree, type SpawnProcess } from "./code-execution.js";
 import { runPlaywrightCodeWorker } from "./code-worker-client.js";
 import { assertHostedPlaywrightCode } from "./code-policy.js";
 import type { HostedCodeRunner } from "./sandbox-client.js";
-
-type JourneyJobStatus = "running" | "completed" | "failed" | "cancelled";
-
-interface JourneyJob {
-  id: string;
-  status: JourneyJobStatus;
-  createdAt: string;
-  outputDir: string;
-  accessTokenHash: string;
-  controller: AbortController;
-  cancelRequested: boolean;
-  report?: JourneyRunResult;
-  error?: string;
-}
-
-interface CodegenSession {
-  id: string;
-  outputDir: string;
-  outputPath: string;
-  process: ChildProcess;
-  active: boolean;
-  accessTokenHash: string;
-}
-interface CodeExecutionJob {
-  id: string;
-  outputDir: string;
-  status: "passed" | "failed";
-  report: unknown;
-  accessTokenHash: string;
-  failureDetails?: string;
-}
+import {
+  ACCESS_HASH_FILE,
+  accessCookie,
+  bearerToken,
+  json,
+  numberField,
+  readJson,
+  requestToken,
+  requireAccess,
+  storedAccessHash,
+  textField,
+  tokenHash,
+  tokenMatches,
+} from "./http-helpers.js";
+import { CodegenSessionStore, type CodegenSession } from "./codegen-session-store.js";
+import { CodeExecutionJobStore, type CodeExecutionJob } from "./code-execution-job-store.js";
+import { LegacyJourneyRegistry, type JourneyJob } from "./legacy-journey-registry.js";
 
 const MAX_CODE_FILE_BYTES = 256 * 1024;
 // Reserva espaço para o envelope JSON que transporta um arquivo no limite.
@@ -182,96 +168,6 @@ const DEFAULT_OPTIONS: ServerOptions = {
   hostedCodeRunner: undefined,
   operationalLogger: defaultOperationalLogger,
 };
-
-function json(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff",
-    "referrer-policy": "no-referrer",
-  });
-  response.end(JSON.stringify(body));
-}
-
-const ACCESS_HASH_FILE = ".access-token.sha256";
-
-function tokenHash(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-function tokenMatches(token: string, expectedHash: string): boolean {
-  const actual = Buffer.from(tokenHash(token), "hex");
-  const expected = Buffer.from(expectedHash, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
-function bearerToken(request: IncomingMessage): string | undefined {
-  const authorization = request.headers.authorization;
-  return authorization?.startsWith("Bearer ")
-    ? authorization.slice(7).trim() || undefined
-    : undefined;
-}
-
-function requestToken(request: IncomingMessage): string | undefined {
-  const authorization = bearerToken(request);
-  if (authorization) return authorization;
-  const cookie = request.headers.cookie?.split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith("qa_radar_access="));
-  return cookie ? decodeURIComponent(cookie.slice("qa_radar_access=".length)) : undefined;
-}
-
-function requireAccess(request: IncomingMessage, response: ServerResponse, expectedHash: string): boolean {
-  const token = requestToken(request);
-  if (token && tokenMatches(token, expectedHash)) return true;
-  response.setHeader("www-authenticate", 'Bearer realm="QA Radar report"');
-  json(response, token ? 403 : 401, { error: "Token de acesso da análise ausente ou inválido." });
-  return false;
-}
-
-function accessCookie(request: IncomingMessage, path: string, token: string, retentionMs: number, trustProxy: boolean): string {
-  const forwardedProto = request.headers["x-forwarded-proto"];
-  const secure = Boolean((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted) ||
-    (trustProxy && forwardedProto === "https");
-  return `qa_radar_access=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=${path}; Max-Age=${Math.ceil(retentionMs / 1000)}${secure ? "; Secure" : ""}`;
-}
-
-async function storedAccessHash(resultsDir: string, id: string): Promise<string | undefined> {
-  try {
-    const value = (await readFile(join(resultsDir, id, ACCESS_HASH_FILE), "utf8")).trim();
-    return /^[a-f0-9]{64}$/.test(value) ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    size += buffer.length;
-    if (size > MAX_JSON_BODY_BYTES) throw new Error("Requisição muito grande.");
-    chunks.push(buffer);
-  }
-  try {
-    const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error();
-    return value as Record<string, unknown>;
-  } catch {
-    throw new Error("Corpo JSON inválido.");
-  }
-}
-
-function textField(body: Record<string, unknown>, name: string): string | undefined {
-  const value = body[name];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function numberField(body: Record<string, unknown>, name: string): string | undefined {
-  const value = body[name];
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : undefined;
-}
 
 function journeyInputSecrets(body: Record<string, unknown>, definition: ReturnType<typeof parseJourney>): Record<string, string> {
   const raw = body.inputSecrets;
@@ -409,11 +305,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     : undefined;
   const jobQueue = new JobQueue();
   const rateLimiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
-  let journeyActive = false;
-  const journeyJobs = new Map<string, JourneyJob>();
-  const codegenSessions = new Map<string, CodegenSession>();
-  const codeExecutionJobs = new Map<string, CodeExecutionJob>();
-  let codeExecutionActive = false;
+  const legacyJourneys = new LegacyJourneyRegistry();
+  const codegenSessions = new CodegenSessionStore();
+  const codeExecutionJobs = new CodeExecutionJobStore();
   const loadCodeExecutionJob = async (id: string): Promise<CodeExecutionJob | undefined> => {
     const memoryJob = codeExecutionJobs.get(id);
     if (memoryJob) return memoryJob;
@@ -603,7 +497,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
 
   const expireJourney = (job: JourneyJob): void => {
     const timer = setTimeout(() => {
-      journeyJobs.delete(job.id);
+      legacyJourneys.delete(job.id);
       void rm(job.outputDir, { recursive: true, force: true });
     }, config.retentionMs);
     timer.unref();
@@ -753,11 +647,11 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       if (request.method === "POST" && url.pathname === "/api/codegen") {
         if (!requireCodeModeCreation(request, response, false)) return;
         if (!consumeRateLimit(request, response)) return;
-        if ([...codegenSessions.values()].some((session) => session.active)) {
+        if (codegenSessions.hasActive()) {
           json(response, 429, { error: "Já existe uma gravação do Playwright Codegen em andamento." });
           return;
         }
-        const body = await readJson(request);
+        const body = await readJson(request, MAX_JSON_BODY_BYTES);
         const target = textField(body, "url");
         if (!target) throw new Error("Informe a URL para iniciar o Codegen.");
         const parsed = new URL(target);
@@ -775,7 +669,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           detached: process.platform !== "win32",
         });
         const session: CodegenSession = { id, outputDir: dir, outputPath, process: child, active: true, accessTokenHash };
-        codegenSessions.set(id, session);
+        codegenSessions.set(session);
         let finished = false;
         const deadline = setTimeout(() => {
           void terminateProcessTree(child);
@@ -807,11 +701,11 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       if (request.method === "POST" && url.pathname === "/api/code-execution") {
         if (!requireCodeModeCreation(request, response, true)) return;
         if (!consumeRateLimit(request, response)) return;
-        if (codeExecutionActive) {
+        if (codeExecutionJobs.isActive()) {
           json(response, 429, { error: "Já existe uma execução do Modo Jornada de Playwright em andamento." });
           return;
         }
-        const body = await readJson(request);
+        const body = await readJson(request, MAX_JSON_BODY_BYTES);
         const code = body.code;
         const hostedExecution = !isLocalRequest(request);
         const headed = hostedExecution ? false : body.headed !== false;
@@ -830,7 +724,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         const outputDir = join(config.resultsDir, `code-${id}`);
         const accessToken = randomBytes(32).toString("base64url");
         const accessTokenHash = tokenHash(accessToken);
-        codeExecutionActive = true;
+        codeExecutionJobs.start();
         let retained = false;
         try {
           await mkdir(outputDir, { recursive: true });
@@ -855,14 +749,14 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           }
           const executionStatus = execution.exitCode === 0 ? "passed" : "failed";
           const job: CodeExecutionJob = { id, outputDir, status: executionStatus, report, accessTokenHash, ...(failureDetails ? { failureDetails } : {}) };
-          codeExecutionJobs.set(id, job);
+          codeExecutionJobs.set(job);
           await writeFile(join(outputDir, "code-report.json"), JSON.stringify({ status: executionStatus, report, ...(failureDetails ? { failureDetails } : {}) }), { encoding: "utf8", mode: 0o600 });
           retained = true;
           expireCodeExecution(job);
           response.setHeader("set-cookie", accessCookie(request, `/api/code-executions/${id}`, accessToken, config.retentionMs, config.trustProxy));
           json(response, execution.exitCode === 0 ? 200 : 422, { id, status: executionStatus, report, accessToken, ...(failureDetails ? { failureDetails } : {}) });
         } finally {
-          codeExecutionActive = false;
+          codeExecutionJobs.finish();
           if (!retained) await rm(outputDir, { recursive: true, force: true });
         }
         return;
@@ -883,7 +777,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         const job = await loadCodeExecutionJob(codeEvidence[1] ?? "");
         if (!job) { json(response, 404, { error: "Execução de código não encontrada ou já expirada." }); return; }
         if (!requireAccess(request, response, job.accessTokenHash)) return;
-        const body = await readJson(request);
+        const body = await readJson(request, MAX_JSON_BODY_BYTES);
         const metadata = parseJourneyEvidenceMetadata({ testerName: body.testerName, testType: body.testType });
         const overrides = parseStepDescriptionOverrides(body.stepDescriptions);
         const journey = applyStepDescriptionOverrides(await codeReportAsJourney(job), overrides);
@@ -973,11 +867,11 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         }
         if (!consumeRateLimit(request, response)) return;
         const stats = queueStats();
-        if (journeyActive || stats.active > 0 || stats.queued > 0) {
+        if (legacyJourneys.isActive() || stats.active > 0 || stats.queued > 0) {
           json(response, 429, { error: "Já existe uma execução usando o navegador neste servidor." });
           return;
         }
-        const body = await readJson(request);
+        const body = await readJson(request, MAX_JSON_BODY_BYTES);
         const definition = body.journey;
         if (!definition) throw new Error("Informe a definição da jornada.");
         const payloadBytes = Buffer.byteLength(JSON.stringify(definition), "utf8");
@@ -1009,8 +903,8 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           controller: new AbortController(),
           cancelRequested: false,
         };
-        journeyJobs.set(id, job);
-        journeyActive = true;
+        legacyJourneys.set(job);
+        legacyJourneys.start();
         const deadline = setTimeout(() => {
           job.controller.abort(new Error(`A jornada excedeu o limite global de ${config.maxJourneyDurationMs} ms.`));
         }, config.maxJourneyDurationMs);
@@ -1034,7 +928,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
             }
           } finally {
             clearTimeout(deadline);
-            journeyActive = false;
+            legacyJourneys.finish();
             expireJourney(job);
           }
         })();
@@ -1046,7 +940,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       const journeyCancel = /^\/api\/journeys\/([0-9a-f-]+)\/cancel$/.exec(url.pathname);
       if (request.method === "POST" && journeyCancel) {
         const id = journeyCancel[1];
-        const job = id ? journeyJobs.get(id) : undefined;
+        const job = id ? legacyJourneys.get(id) : undefined;
         if (!job) {
           json(response, 404, { error: "Jornada não encontrada ou já expirada." });
           return;
@@ -1069,7 +963,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           return;
         }
         const id = journeyStatus[1];
-        const job = id ? journeyJobs.get(id) : undefined;
+        const job = id ? legacyJourneys.get(id) : undefined;
         if (!job) {
           json(response, 404, { error: "Jornada não encontrada ou já expirada." });
           return;
@@ -1092,7 +986,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           return;
         }
         const id = journeyEvidenceReport[1];
-        const job = id ? journeyJobs.get(id) : undefined;
+        const job = id ? legacyJourneys.get(id) : undefined;
         if (!job) {
           json(response, 404, { error: "Jornada não encontrada ou já expirada." });
           return;
@@ -1103,7 +997,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           json(response, 409, { error: "A jornada precisa estar concluída para gerar evidências." });
           return;
         }
-        const metadata = parseJourneyEvidenceMetadata(await readJson(request));
+        const metadata = parseJourneyEvidenceMetadata(await readJson(request, MAX_JSON_BODY_BYTES));
         const html = await createJourneyEvidenceHtml(job.report, metadata, (relative) => readFile(join(job.outputDir, "journey-evidence", relative)));
         await writeFile(join(job.outputDir, "journey-evidence.html"), html, "utf8");
         if (accessToken) {
@@ -1122,7 +1016,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         const id = journeyArtifact[1];
         const name = journeyArtifact[2];
         if (!id || !name) throw new Error("Evidência inválida.");
-        const job = journeyJobs.get(id);
+        const job = legacyJourneys.get(id);
         const expectedHash = job?.accessTokenHash ?? await storedAccessHash(config.resultsDir, `journey-${id}`);
         if (!expectedHash) {
           json(response, 404, { error: "Jornada não encontrada ou já expirada." });
@@ -1154,7 +1048,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       }
 
       if (request.method === "POST" && url.pathname === "/api/scans") {
-        if (journeyActive) {
+        if (legacyJourneys.isActive()) {
           json(response, 429, { error: "Já existe uma jornada usando o navegador neste servidor." });
           return;
         }
@@ -1164,7 +1058,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           json(response, 429, { error: "O serviço está ocupado. Tente novamente em alguns instantes." });
           return;
         }
-        const body = await readJson(request);
+        const body = await readJson(request, MAX_JSON_BODY_BYTES);
         if (config.turnstileSecretKey) {
           const token = textField(body, "cf-turnstile-response");
           if (!token || token.length > 2048) throw new Error("Conclua a verificação de segurança.");
