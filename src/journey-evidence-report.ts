@@ -77,8 +77,14 @@ async function evidence(step: JourneyRunResult["steps"][number], readAsset: Asse
   const before = await dataUri(readAsset, step.evidence.before);
   const after = await dataUri(readAsset, step.evidence.after);
   if (!before && !after) return '<p class="empty">As imagens deste passo não estão mais disponíveis.</p>';
-  const beforeFigure = before ? `<figure><figcaption>Antes</figcaption><a href="${before}" target="_blank"><img src="${before}" alt="Evidência antes do passo ${step.index + 1}"></a></figure>` : "";
-  const afterFigure = after ? `<figure><figcaption>Depois</figcaption><a href="${after}" target="_blank"><img src="${after}" alt="Evidência depois do passo ${step.index + 1}"></a></figure>` : "";
+  // A legenda Antes/Depois só faz sentido quando as duas imagens existem de
+  // fato (jornada declarativa); com uma única imagem (Modo Código) o rótulo
+  // é ruído, então some.
+  const showLabels = Boolean(before) && Boolean(after);
+  const beforeCaption = showLabels ? "<figcaption>Antes</figcaption>" : "";
+  const afterCaption = showLabels ? "<figcaption>Depois</figcaption>" : "";
+  const beforeFigure = before ? `<figure>${beforeCaption}<a href="${before}" target="_blank"><img src="${before}" alt="Evidência antes do passo ${step.index + 1}"></a></figure>` : "";
+  const afterFigure = after ? `<figure>${afterCaption}<a href="${after}" target="_blank"><img src="${after}" alt="Evidência depois do passo ${step.index + 1}"></a></figure>` : "";
   return `<div class="evidence">${beforeFigure}${afterFigure}</div>`;
 }
 
