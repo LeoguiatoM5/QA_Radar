@@ -6,6 +6,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   codeExecutionArguments,
   codeExecutionEnvironment,
@@ -158,6 +159,11 @@ describe("executor de código Playwright", () => {
   });
 
   it("inicia um módulo worker separado com limites explícitos", () => {
+    // Constrói o moduleUrl e o loader a partir de caminhos nativos do SO atual,
+    // em vez de literais fixos de um único SO, para o teste valer tanto no
+    // Windows quanto no Linux/CI.
+    const moduleUrl = pathToFileURL(join(process.cwd(), "qa-radar", "src", "code-worker-client.ts")).href;
+    const loaderPath = join(process.cwd(), "qa-radar", "node_modules", "tsx", "dist", "loader.mjs");
     const args = codeWorkerArguments({
       outputDir: "resultado",
       headed: false,
@@ -165,13 +171,13 @@ describe("executor de código Playwright", () => {
       maxOutputBytes: 4_096,
       maxMemoryMiB: 256,
       projectRoot: "projeto",
-    }, "file:///C:/qa-radar/src/code-worker-client.ts", "C:\\qa-radar\\node_modules\\tsx\\dist\\loader.mjs");
+    }, moduleUrl, loaderPath);
 
     assert.deepEqual(args.slice(0, 4), [
       "--max-old-space-size=128",
       "--import",
-      "file:///C:/qa-radar/node_modules/tsx/dist/loader.mjs",
-      "C:\\qa-radar\\src\\code-worker.ts",
+      pathToFileURL(loaderPath).href,
+      fileURLToPath(new URL("./code-worker.ts", moduleUrl)),
     ]);
     assert.deepEqual(args.slice(-6), [
       "resultado",
