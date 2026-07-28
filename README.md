@@ -427,6 +427,63 @@ URLs e credenciais de ambientes reais não ficam no repositório. Cadastre-as co
 variáveis protegidas e mascaradas do GitLab antes de adaptar o smoke test para um
 ambiente autenticado.
 
+## Política de compatibilidade
+
+O QA Radar ainda está em Beta (`3.1.0`), mas os três contratos abaixo já têm
+regras de compatibilidade explícitas para reduzir o risco de quebrar scripts,
+pipelines de CI e integrações existentes.
+
+### Schema dos relatórios (JSON, JUnit, SARIF)
+
+- O relatório JSON declara `schemaVersion` (atualmente `"1.0"`) e `version`
+  (a versão do pacote que gerou o relatório).
+- Mudanças aditivas — novo campo opcional, nova categoria de `issue`, novo
+  valor possível para um campo já existente — **não** incrementam
+  `schemaVersion`. Um consumidor que ignora campos desconhecidos continua
+  funcionando.
+- Mudanças que quebram compatibilidade — remover ou renomear um campo, mudar
+  o tipo de um campo existente, mudar o significado de um valor já
+  documentado — exigem incrementar `schemaVersion` e são anunciadas no
+  `CHANGELOG.md` sob um item "Breaking", com orientação de migração.
+- `ruleId` e `fingerprint` (SHA-256) são estáveis entre execuções para a
+  mesma ocorrência normalizada; mudar o algoritmo de fingerprint é tratado
+  como mudança de schema.
+- JUnit XML segue o schema padrão do formato; SARIF é fixado em `2.1.0`
+  (versão do próprio formato SARIF, não controlada por nós). O conteúdo que
+  o QA Radar escreve dentro desses formatos segue a mesma regra acima.
+
+### CLI
+
+- Flags documentadas neste README são estáveis dentro de uma versão maior
+  (major) do pacote npm: não têm o comportamento alterado nem são removidas
+  sem uma major version.
+- Toda flag nova é opcional e tem um valor padrão que preserva o
+  comportamento anterior — um comando que funcionava numa versão menor
+  continua funcionando após atualizar para outra versão menor ou de patch.
+- Se uma flag for descontinuada, ela primeiro passa a emitir aviso (stderr)
+  por ao menos um ciclo de versão menor antes de ser considerada para
+  remoção numa major version, sempre documentado no `CHANGELOG.md`.
+- Exit codes (aprovação, reprovação, erro de execução) são parte do
+  contrato e seguem a mesma regra.
+
+### API HTTP do dashboard (`/api/...`)
+
+- As rotas HTTP do servidor web (`/api/scans`, `/api/code-execution`,
+  `/api/history`, etc.) ainda não são versionadas por caminho (não existe
+  `/api/v1` — isso está no roadmap de arquitetura, ver seção
+  "Limitações da Beta"). Enquanto isso, elas são tratadas como **pré-1.0
+  em evolução**: mudanças de formato são possíveis entre versões menores do
+  pacote, mas toda mudança que quebra um cliente existente é registrada no
+  `CHANGELOG.md` sob "Breaking" antes do release.
+- Assim que a API ganhar prefixo de versão (`/api/v1`), o contrato sob esse
+  prefixo passa a seguir a mesma regra do schema JSON: mudanças que quebram
+  compatibilidade exigem `/api/v2`, nunca uma alteração silenciosa em
+  `/api/v1`.
+- A GitHub Action composta já segue este modelo hoje: é publicada com uma
+  tag de versão maior (`@v3`) que os consumidores fixam no workflow, e seus
+  `inputs`/`outputs` documentados não mudam de formato dentro da mesma
+  major version.
+
 ## Roadmap da versão Beta
 
 As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeitas a mudanças conforme o uso e o feedback recebido.

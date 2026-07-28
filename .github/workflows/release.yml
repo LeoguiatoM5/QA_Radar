@@ -23,7 +23,7 @@ jobs:
 
       - run: npm ci
       - run: npm run check
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:integration
       - run: npm run sandbox:image
       - run: npm run sandbox:homologate
