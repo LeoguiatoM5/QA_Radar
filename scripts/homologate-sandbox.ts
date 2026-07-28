@@ -110,8 +110,9 @@ async function homologatePlaywrightJob(): Promise<void> {
 
 async function homologateTimeoutCleanup(): Promise<void> {
   const executionId = "66666666-6666-4666-8666-777777777777";
-  await assert.rejects(
-    runDockerSandbox(
+  const startedAt = Date.now();
+  try {
+    const result = await runDockerSandbox(
       {
         executionId,
         code: `
@@ -125,9 +126,16 @@ async function homologateTimeoutCleanup(): Promise<void> {
         },
       },
       CONFIG,
-    ),
-    /excedeu o limite de 15000 ms/,
-  );
+    );
+    console.error(`[diagnostic] runDockerSandbox resolved after ${Date.now() - startedAt}ms instead of rejecting: ${JSON.stringify(result)}`);
+    throw new Error("[diagnostic] Missing expected rejection.");
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("[diagnostic]")) throw error;
+    if (!(error instanceof Error) || !/excedeu o limite de 15000 ms/.test(error.message)) {
+      console.error(`[diagnostic] runDockerSandbox rejected after ${Date.now() - startedAt}ms with an unexpected message: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
   const inspect = await docker(["inspect", `qa-radar-job-${executionId}`]);
   const proxyInspect = await docker(["inspect", `qa-radar-egress-${executionId}`]);
   const volumeInspect = await docker(["volume", "inspect", `qa-radar-egress-${executionId}`]);
