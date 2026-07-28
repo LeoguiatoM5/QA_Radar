@@ -100,6 +100,68 @@ describe("journey evidence HTML", () => {
     assert.match(html, /não estão mais disponíveis/);
   });
 
+  it("renderiza evidência de passo de API com método, URL, status e corpos escapados", async () => {
+    const readApiAsset = async (relativePath: string): Promise<Buffer> => {
+      assert.equal(relativePath, "test-results/qa-radar-steps/001.json");
+      return Buffer.from(
+        JSON.stringify({
+          method: "POST",
+          url: "https://api.exemplo.com/login",
+          status: 401,
+          requestBody: '{"user":"<script>"}',
+          responseBody: '{"error":"unauthorized"}',
+        }),
+      );
+    };
+    const html = await createJourneyEvidenceHtml(
+      {
+        schemaVersion: "1.0",
+        name: "Teste Playwright (.spec.ts)",
+        status: "failed",
+        startedAt: "2026-07-22T00:00:00Z",
+        durationMs: 100,
+        steps: [
+          {
+            index: 0,
+            action: "apiRequest",
+            description: "Requisição POST https://api.exemplo.com/login",
+            status: "failed",
+            durationMs: 100,
+            evidence: { api: "test-results/qa-radar-steps/001.json" },
+          },
+        ],
+      },
+      { testerName: "QA", testType: "smoke" },
+      readApiAsset,
+      new Date("2026-07-22T12:00:00Z"),
+    );
+    assert.match(html, /class="api-evidence"/);
+    assert.match(html, /class="api-method">POST</);
+    assert.match(html, /https:\/\/api\.exemplo\.com\/login/);
+    assert.match(html, /class="api-status error">401/);
+    assert.match(html, /&lt;script&gt;/);
+    assert.doesNotMatch(html, /<script>/);
+    assert.doesNotMatch(html, /<img/);
+  });
+
+  it("mostra uma mensagem quando a evidência de API não está mais disponível", async () => {
+    const html = await createJourneyEvidenceHtml(
+      {
+        schemaVersion: "1.0",
+        name: "Jornada expirada",
+        status: "failed",
+        startedAt: "2026-07-22T00:00:00Z",
+        durationMs: 100,
+        steps: [{ index: 0, action: "apiRequest", status: "failed", durationMs: 100, evidence: { api: "sumiu.json" } }],
+      },
+      { testerName: "QA", testType: "smoke" },
+      async () => {
+        throw new Error("arquivo removido");
+      },
+    );
+    assert.match(html, /dados desta requisição não estão mais disponíveis/);
+  });
+
   it("valida e aplica descrições de passo informadas pelo usuário", () => {
     assert.equal(parseStepDescriptionOverrides(undefined), undefined);
     assert.deepEqual(parseStepDescriptionOverrides(["Clicar no botão de busca", "", "  "]), ["Clicar no botão de busca", undefined, undefined]);

@@ -1,6 +1,6 @@
 import { access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
-import { createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../web-page.js";
+import { createApiTestsPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../web-page.js";
 import { json } from "../http-helpers.js";
 import type { RouteHandler } from "./context.js";
 
@@ -63,6 +63,20 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
     });
     response.end(createJourneyPage(config.allowCodeMode));
+    return true;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api-tests") {
+    const turnstileSources = config.turnstileSiteKey ? " https://challenges.cloudflare.com" : "";
+    response.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
+      "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
+    });
+    response.end(createApiTestsPage(config.allowCodeMode));
     return true;
   }
 

@@ -20,6 +20,12 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   instância dedicada ser publicada.
 - Captura de screenshot real por passo na execução local do Modo Jornada de
   Playwright, sobrescrevendo o fixture `page` do Playwright Test.
+- Nova aba "Testes de API" (`/api-tests`), separada da Jornada, para testes de
+  API puros com o fixture `request` do Playwright Test. Reaproveita o mesmo
+  motor de execução, fila de jobs e relatório de evidências do Modo Jornada;
+  cada chamada `request.get/post/put/patch/delete/head/fetch(...)` vira um
+  passo nomeado com método, URL, status e corpo da requisição/resposta
+  capturados como evidência, na execução local.
 
 ### Alterado
 

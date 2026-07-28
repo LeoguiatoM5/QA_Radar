@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
-import { createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
+import { createApiTestsPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
 
 describe("dashboard components", () => {
   it("compõe a Home sem carregar o cliente do scanner", () => {
@@ -12,6 +12,7 @@ describe("dashboard components", () => {
     assert.match(html, /Inspecionar aplicação/);
     assert.match(html, /href="\/scanner"/);
     assert.match(html, /href="\/journeys"/);
+    assert.match(html, /href="\/api-tests"/);
     assert.doesNotMatch(html, /WEB_CLIENT_SCRIPT/);
     assert.doesNotMatch(html, /id="scan-form"/);
   });
@@ -22,6 +23,7 @@ describe("dashboard components", () => {
     assert.match(html, /Como usar o QA Radar/);
     assert.match(html, /href="\/scanner"/);
     assert.match(html, /href="\/journeys"/);
+    assert.match(html, /href="\/api-tests"/);
     assert.match(html, /Modo Jornada de Playwright/);
     assert.doesNotMatch(html, /Jornada visual|Modelo JSON/);
     assert.equal((html.match(/<h1>/g) ?? []).length, 1);
@@ -51,6 +53,28 @@ describe("dashboard components", () => {
     assert.doesNotMatch(html, /id="code-execution"/);
     assert.doesNotMatch(html, /id="playwright-code"/);
     assert.doesNotMatch(html, /id="journey-form"|Modelo JSON/);
+  });
+
+  it("compõe os Testes de API como página própria, separada da Jornada", () => {
+    const html = createApiTestsPage(true);
+
+    assert.match(html, /<header class="tool-header">.*<h1>Testes de API<\/h1>/);
+    assert.match(html, /id="code-mode-panel"/);
+    assert.match(html, /id="playwright-code"/);
+    assert.match(html, /id="code-api-step"/);
+    assert.match(html, /id="code-execute"/);
+    assert.match(html, />Executar<\/button>/);
+    assert.doesNotMatch(html, /id="codegen-start"|id="codegen-stop"|Grave o fluxo no navegador/);
+    assert.doesNotMatch(html, /id="scan-form"/);
+    assert.doesNotMatch(html, /id="results"/);
+  });
+
+  it("mantém os Testes de API indisponíveis quando o ambiente não habilita execução", () => {
+    const html = createApiTestsPage();
+
+    assert.match(html, /Recurso indisponível neste ambiente/);
+    assert.doesNotMatch(html, /id="playwright-code"/);
+    assert.doesNotMatch(html, /id="code-api-step"/);
   });
 
   it("compõe estrutura, estilos e comportamento do cliente", () => {

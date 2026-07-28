@@ -9,6 +9,7 @@ export type JourneyStep = JourneyStepDescription &
     | { action: "waitFor"; selector: string; timeoutMs?: number }
     | { action: "assertVisible"; selector: string }
     | { action: "assertText"; selector: string; text: string }
+    | { action: "apiRequest"; url: string }
   );
 
 export interface JourneyDefinition {
