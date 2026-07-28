@@ -436,16 +436,14 @@ cada etapa são mantidos em [`docs/EVOLUTION_LOG.md`](docs/EVOLUTION_LOG.md).
 
 ### Modo Jornada de Playwright
 
-- Consolidar a jornada baseada no Playwright Codegen: o usuário informa a URL,
-  abre uma sessão de gravação e realiza o fluxo diretamente no navegador.
-- Converter automaticamente cliques, preenchimentos, navegações e demais ações
-  gravadas em um teste Playwright TypeScript com a API e a sintaxe oficiais.
-- Ao encerrar a gravação, preencher o editor do QA Radar com o código gerado
-  para revisão e edição antes da execução.
-- Oferecer autocomplete, validação, templates e execução com logs, screenshots,
-  traces, vídeos e relatório de evidências.
-- Permitir salvar, importar e exportar arquivos `.spec.ts`, sem formato de
-  jornada proprietário.
+A gravação com Playwright Codegen, a conversão automática em `.spec.ts`, o
+preenchimento do editor com o código gerado, a execução com logs, screenshots
+e vídeo, o relatório de evidências e o salvar/importar/exportar `.spec.ts` já
+estão disponíveis (veja a seção [Modo Jornada de Playwright](#modo-jornada-de-playwright)).
+Continuam como roadmap:
+
+- Oferecer autocomplete, validação e templates no editor de código.
+- Capturar traces do Playwright junto com logs, screenshots e vídeo.
 - Habilitar a execução hospedada após concluir sandbox, limites de recursos e
   isolamento de sessões, rede, filesystem e processos.
 
