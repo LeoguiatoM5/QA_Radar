@@ -45,7 +45,7 @@ describe("Modo Jornada de Playwright ponta a ponta (execução real, sem mocks)"
       const executionResponse = await fetch(`${baseUrl}/api/code-execution`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, headed: false }),
       });
       const execution = (await executionResponse.json()) as {
         id: string;
