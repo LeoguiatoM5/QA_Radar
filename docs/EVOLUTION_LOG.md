@@ -544,6 +544,54 @@ Pendências para a próxima sessão:
 - Segurança: o bloqueio atual do backend público foi preservado para não expor
   execução remota arbitrária de `.spec.ts` no processo da aplicação.
 
+### 2026-07-27 — Sandbox hospedado, refatoração de server.ts e evidências reais por passo
+
+- Objetivo: publicar o runner de sandbox que já estava pronto localmente,
+  reduzir a complexidade de `server.ts` (item de Fase 0/1 do checklist
+  comercial) e corrigir a evidência visual do Modo Jornada de Playwright, que
+  não refletia de fato o que aconteceu em cada passo.
+- Arquivos/contratos afetados: `src/server.ts` (1318 → ~540 linhas),
+  novos `src/env.ts`, `src/http-helpers.ts`, `src/codegen-session-store.ts`,
+  `src/code-execution-job-store.ts`, `src/legacy-journey-registry.ts`,
+  `src/routes/{pages,scans,codegen,code-execution,journeys-legacy}.ts`,
+  `src/code-step-fixtures.ts`; `src/journey-evidence-report.ts` e
+  `src/journey-runner.ts` (evidência `before`/`after` ficou opcional).
+- Decisões e compatibilidade: nenhuma mudança de contrato HTTP pretendida —
+  headers, cookies, CSP e mensagens de erro preservados byte a byte; validado
+  rota por rota contra um servidor real antes e depois da divisão. Execução
+  hospedada (`hostedCodeRunner`) permanece intocada de propósito: só recebe a
+  string de código (ver `docs/SANDBOX_RUNNER_PROTOCOL.md`), então a captura
+  de screenshot por passo é exclusiva da execução local.
+- Riscos: a divisão de `server.ts` era o item de maior risco do plano (feito
+  por último, protegido pela suíte de testes ampliada primeiro). A captura de
+  screenshot por passo usa `base.extend` para sobrescrever o fixture `page`
+  do Playwright Test — validado com um teste isolado antes de integrar ao
+  restante, e a correlação passo↔screenshot foi corrigida depois de um erro
+  real encontrado (parser de descrição não reconhecia `getByRole(...).fill()`,
+  só `page.locator(...).fill()`, o que desalinhava a ordem).
+- Testes adicionados: cobertura HTTP para os endpoints do Modo Jornada que
+  não tinham teste (404, corpo inválido, falha de processo, token errado);
+  `tests/env.test.ts`; um arquivo de teste por store novo
+  (`codegen-session-store`, `code-execution-job-store`,
+  `legacy-journey-registry`, `http-helpers`); teste de correlação
+  passo↔screenshot; teste de que a legenda Antes/Depois some com uma imagem só.
+- Comandos executados e resultados: `npm run check` (134 testes, typecheck,
+  build) e `npm run test:integration` (18 testes) aprovados a cada PR (#26 a
+  #33); zero regressão.
+- Teste manual/homologação: cada etapa validada contra um servidor real
+  (`npx tsx src/web.ts`) e Playwright real, não só os testes automatizados —
+  incluindo abrir o relatório baixado via `file://` (100% offline) e
+  confirmar visualmente que a screenshot de cada passo corresponde ao estado
+  real da página naquele momento (ex.: campo de busca preenchido no passo
+  "Preencher").
+- Pendências e próximo passo: ver a seção "Handoff mais recente — 27/07/2026"
+  em `CODEX_HANDOFF.md` para a lista priorizada completa. Resumo: itens P0
+  restantes da Fase 0 (lint automático, cobertura mínima de testes, política
+  de compatibilidade de schema/CLI/API) e da Fase 1 (máquina de estados
+  explícita para jobs, idempotência, `/api/v1`, contrato OpenAPI,
+  tratamento padronizado de erros); execução hospedada continua sem runner
+  implantado em lugar nenhum.
+
 ## Modelo para registrar próximas etapas
 
 ```markdown
