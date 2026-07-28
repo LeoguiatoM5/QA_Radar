@@ -64,10 +64,10 @@ do deploy.
 - [x] Corrigir o limite divergente entre corpo HTTP de 64 KB e arquivo `.spec.ts` de 256 KB.
 - [ ] Definir uma única fonte para as flags e valores padrão do servidor.
 - [ ] Corrigir divergências entre README, `render.yaml`, testes e comportamento de runtime.
-- [ ] Criar validação centralizada das variáveis de ambiente.
+- [x] Criar validação centralizada das variáveis de ambiente.
 - [ ] Adicionar lint e formatação automática.
 - [ ] Adicionar cobertura de testes e meta mínima para módulos críticos.
-- [ ] Criar testes específicos para todos os endpoints do Modo Jornada de Playwright.
+- [x] Criar testes específicos para todos os endpoints do Modo Jornada de Playwright.
 - [ ] Criar uma política de compatibilidade para schema, CLI e API.
 
 ---
@@ -76,7 +76,7 @@ do deploy.
 
 ### P0 — Arquitetura
 
-- [ ] Dividir `server.ts` em módulos de rotas, aplicação, domínio e infraestrutura.
+- [x] Dividir `server.ts` em módulos de rotas, aplicação, domínio e infraestrutura.
 - [x] Separar o processo HTTP do processo que executa navegadores.
 - [ ] Criar uma máquina de estados explícita para jobs.
 - [ ] Tornar criação e cancelamento de jobs idempotentes.
