@@ -9,9 +9,7 @@ export interface HostedCodeExecutionOptions extends CodeExecutionOptions {
   code: string;
 }
 
-export type HostedCodeRunner = (
-  options: HostedCodeExecutionOptions,
-) => Promise<CodeExecutionResult>;
+export type HostedCodeRunner = (options: HostedCodeExecutionOptions) => Promise<CodeExecutionResult>;
 
 export interface SandboxClientOptions {
   baseUrl: string;
@@ -28,21 +26,11 @@ export interface SandboxSignatureInput {
   body: string;
 }
 
-export function sandboxRequestSignature(
-  secret: string,
-  input: SandboxSignatureInput,
-): string {
-  return createHmac("sha256", secret)
-    .update(`${input.timestamp}\n${input.requestId}\n${input.body}`, "utf8")
-    .digest("hex");
+export function sandboxRequestSignature(secret: string, input: SandboxSignatureInput): string {
+  return createHmac("sha256", secret).update(`${input.timestamp}\n${input.requestId}\n${input.body}`, "utf8").digest("hex");
 }
 
-export function verifySandboxRequestSignature(
-  secret: string,
-  input: SandboxSignatureInput & { signature: string },
-  now = Date.now(),
-  maxClockSkewMs = DEFAULT_CLOCK_SKEW_MS,
-): boolean {
+export function verifySandboxRequestSignature(secret: string, input: SandboxSignatureInput & { signature: string }, now = Date.now(), maxClockSkewMs = DEFAULT_CLOCK_SKEW_MS): boolean {
   const issuedAt = Date.parse(input.timestamp);
   if (!Number.isFinite(issuedAt) || Math.abs(now - issuedAt) > maxClockSkewMs) return false;
   if (!/^[0-9a-f-]{36}$/i.test(input.requestId)) return false;
@@ -61,10 +49,7 @@ export class SandboxRequestVerifier {
     private readonly maxRememberedRequests = 10_000,
   ) {}
 
-  verifyAndConsume(
-    input: SandboxSignatureInput & { signature: string },
-    now = Date.now(),
-  ): boolean {
+  verifyAndConsume(input: SandboxSignatureInput & { signature: string }, now = Date.now()): boolean {
     for (const [requestId, expiresAt] of this.consumed) {
       if (expiresAt < now) this.consumed.delete(requestId);
     }
@@ -114,11 +99,7 @@ function sandboxResult(value: unknown, executionId: string, maxOutputBytes: numb
   if (record.schemaVersion !== SANDBOX_PROTOCOL_VERSION || record.executionId !== executionId) {
     throw new Error("O sandbox retornou versão ou identificador incompatível.");
   }
-  if (
-    !Number.isInteger(record.exitCode)
-    || typeof record.stdout !== "string"
-    || typeof record.stderr !== "string"
-  ) {
+  if (!Number.isInteger(record.exitCode) || typeof record.stdout !== "string" || typeof record.stderr !== "string") {
     throw new Error("O sandbox retornou um resultado de execução inválido.");
   }
   if (Buffer.byteLength(record.stdout, "utf8") + Buffer.byteLength(record.stderr, "utf8") > maxOutputBytes) {
@@ -173,10 +154,7 @@ export function createSandboxCodeRunner(config: SandboxClientOptions): HostedCod
       redirect: "error",
       signal: AbortSignal.timeout(options.timeoutMs + 5_000),
     });
-    const responseText = await boundedResponseText(
-      response,
-      options.maxOutputBytes + RESPONSE_ENVELOPE_BYTES,
-    );
+    const responseText = await boundedResponseText(response, options.maxOutputBytes + RESPONSE_ENVELOPE_BYTES);
     if (!response.ok) {
       throw new Error(`O sandbox recusou a execução (${response.status}): ${responseText.slice(0, 2_000)}`);
     }

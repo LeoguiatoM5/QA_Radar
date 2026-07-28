@@ -51,11 +51,7 @@ function safeError(error: unknown, secrets: Readonly<Record<string, string | und
     .replace(/QA_RADAR_SECRET_[A-Z0-9_]+/g, "[SECRET]");
 }
 
-async function guardNavigation(
-  route: Route,
-  allowed: Set<string>,
-  validateUrl?: (url: string) => Promise<void>,
-): Promise<void> {
+async function guardNavigation(route: Route, allowed: Set<string>, validateUrl?: (url: string) => Promise<void>): Promise<void> {
   const request = route.request();
   if (!request.isNavigationRequest()) {
     await route.fallback();
@@ -77,11 +73,7 @@ async function guardNavigation(
   }
 }
 
-async function captureMasked(
-  page: Page,
-  path: string,
-  secretSelectors: ReadonlySet<string>,
-): Promise<void> {
+async function captureMasked(page: Page, path: string, secretSelectors: ReadonlySet<string>): Promise<void> {
   const masked: string[] = [];
   try {
     for (const selector of secretSelectors) {
@@ -97,24 +89,21 @@ async function captureMasked(
     await page.screenshot({ path, fullPage: true });
   } finally {
     for (const selector of masked) {
-      await page.locator(selector).evaluateAll((elements) => {
-        for (const element of elements) {
-          const html = element as HTMLElement;
-          html.style.filter = html.dataset.qaRadarOriginalFilter ?? "";
-          delete html.dataset.qaRadarOriginalFilter;
-        }
-      }).catch(() => undefined);
+      await page
+        .locator(selector)
+        .evaluateAll((elements) => {
+          for (const element of elements) {
+            const html = element as HTMLElement;
+            html.style.filter = html.dataset.qaRadarOriginalFilter ?? "";
+            delete html.dataset.qaRadarOriginalFilter;
+          }
+        })
+        .catch(() => undefined);
     }
   }
 }
 
-async function executeStep(
-  page: Page,
-  step: JourneyStep,
-  allowed: Set<string>,
-  secrets: Readonly<Record<string, string | undefined>>,
-  timeoutMs: number,
-): Promise<void> {
+async function executeStep(page: Page, step: JourneyStep, allowed: Set<string>, secrets: Readonly<Record<string, string | undefined>>, timeoutMs: number): Promise<void> {
   switch (step.action) {
     case "goto":
       allowedOrigin(step.url, allowed);
@@ -123,15 +112,21 @@ async function executeStep(
       return;
     case "click": {
       const locator = page.locator(step.selector);
-      const targetDescription = await locator.evaluate((element) => [
-        element.textContent,
-        element.getAttribute("aria-label"),
-        element.getAttribute("title"),
-        element.getAttribute("name"),
-        element.getAttribute("value"),
-        element.getAttribute("href"),
-        element.getAttribute("formaction"),
-      ].filter(Boolean).join(" "), { timeout: timeoutMs });
+      const targetDescription = await locator.evaluate(
+        (element) =>
+          [
+            element.textContent,
+            element.getAttribute("aria-label"),
+            element.getAttribute("title"),
+            element.getAttribute("name"),
+            element.getAttribute("value"),
+            element.getAttribute("href"),
+            element.getAttribute("formaction"),
+          ]
+            .filter(Boolean)
+            .join(" "),
+        { timeout: timeoutMs },
+      );
       if (!step.allowDestructive && isPotentiallyDestructive(`${step.selector} ${targetDescription}`)) {
         throw new Error("Clique potencialmente destrutivo exige allowDestructive: true.");
       }
@@ -162,11 +157,7 @@ async function executeStep(
   }
 }
 
-export async function runJourney(
-  page: Page,
-  definition: JourneyDefinition | unknown,
-  options: JourneyRunOptions,
-): Promise<JourneyRunResult> {
+export async function runJourney(page: Page, definition: JourneyDefinition | unknown, options: JourneyRunOptions): Promise<JourneyRunResult> {
   const journey = parseJourney(definition);
   if (options.allowedOrigins.length < 1) throw new Error("Informe ao menos uma origem autorizada para a jornada.");
   const allowed = new Set(options.allowedOrigins.map((value) => new URL(value).origin));
@@ -187,76 +178,89 @@ export async function runJourney(
   await page.context().route("**/*", navigationGuard);
 
   try {
-  for (let index = 0; index < journey.steps.length; index += 1) {
-    const step = journey.steps[index];
-    if (!step) continue;
-    options.signal?.throwIfAborted();
-    const stepStarted = Date.now();
-    const prefix = `${String(index + 1).padStart(3, "0")}-${step.action}`;
-    const evidence = options.evidenceDir ? {
-      before: join(options.evidenceDir, `${prefix}-before.png`),
-      after: join(options.evidenceDir, `${prefix}-after.png`),
-      ...(options.videoPath ? { video: { path: options.videoPath, startMs: stepStarted - startedAt.getTime(), endMs: 0 } } : {}),
-    } : undefined;
-    try {
-      if (evidence) await captureMasked(page, evidence.before, secretSelectors);
-      await executeStep(page, step, allowed, secrets, timeoutMs);
-      if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) {
-        secretSelectors.add(step.selector);
-        if (options.videoPath) await page.locator(step.selector).evaluateAll((elements) => elements.forEach((element) => element.setAttribute("data-qa-radar-secret-mask", "true"))).catch(() => undefined);
-      }
-      if (evidence) await captureMasked(page, evidence.after, secretSelectors);
+    for (let index = 0; index < journey.steps.length; index += 1) {
+      const step = journey.steps[index];
+      if (!step) continue;
       options.signal?.throwIfAborted();
-      const result: JourneyStepResult = {
-        index,
-        action: step.action,
-        ...(step.description ? { description: step.description } : {}),
-        status: "passed",
-        durationMs: Date.now() - stepStarted,
-        ...(evidence ? { evidence: evidence.video ? { ...evidence, video: { ...evidence.video, endMs: Date.now() - startedAt.getTime() } } : evidence } : {}),
-      };
-      results.push(result);
-      options.onStep?.(result);
-    } catch (error) {
-      options.signal?.throwIfAborted();
-      if (evidence) {
+      const stepStarted = Date.now();
+      const prefix = `${String(index + 1).padStart(3, "0")}-${step.action}`;
+      const evidence = options.evidenceDir
+        ? {
+            before: join(options.evidenceDir, `${prefix}-before.png`),
+            after: join(options.evidenceDir, `${prefix}-after.png`),
+            ...(options.videoPath ? { video: { path: options.videoPath, startMs: stepStarted - startedAt.getTime(), endMs: 0 } } : {}),
+          }
+        : undefined;
+      try {
+        if (evidence) await captureMasked(page, evidence.before, secretSelectors);
+        await executeStep(page, step, allowed, secrets, timeoutMs);
         if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) {
           secretSelectors.add(step.selector);
-          if (options.videoPath) await page.locator(step.selector).evaluateAll((elements) => elements.forEach((element) => element.setAttribute("data-qa-radar-secret-mask", "true"))).catch(() => undefined);
+          if (options.videoPath)
+            await page
+              .locator(step.selector)
+              .evaluateAll((elements) => elements.forEach((element) => element.setAttribute("data-qa-radar-secret-mask", "true")))
+              .catch(() => undefined);
         }
-        await captureMasked(page, evidence.after, secretSelectors).catch(() => undefined);
+        if (evidence) await captureMasked(page, evidence.after, secretSelectors);
+        options.signal?.throwIfAborted();
+        const result: JourneyStepResult = {
+          index,
+          action: step.action,
+          ...(step.description ? { description: step.description } : {}),
+          status: "passed",
+          durationMs: Date.now() - stepStarted,
+          ...(evidence ? { evidence: evidence.video ? { ...evidence, video: { ...evidence.video, endMs: Date.now() - startedAt.getTime() } } : evidence } : {}),
+        };
+        results.push(result);
+        options.onStep?.(result);
+      } catch (error) {
+        options.signal?.throwIfAborted();
+        if (evidence) {
+          if (step.action === "fill" && (step.valueFromEnv || step.valueFromInput)) {
+            secretSelectors.add(step.selector);
+            if (options.videoPath)
+              await page
+                .locator(step.selector)
+                .evaluateAll((elements) => elements.forEach((element) => element.setAttribute("data-qa-radar-secret-mask", "true")))
+                .catch(() => undefined);
+          }
+          await captureMasked(page, evidence.after, secretSelectors).catch(() => undefined);
+        }
+        const result: JourneyStepResult = {
+          index,
+          action: step.action,
+          ...(step.description ? { description: step.description } : {}),
+          status: "failed",
+          durationMs: Date.now() - stepStarted,
+          error: safeError(error, secrets),
+          ...(evidence ? { evidence: evidence.video ? { ...evidence, video: { ...evidence.video, endMs: Date.now() - startedAt.getTime() } } : evidence } : {}),
+        };
+        results.push(result);
+        options.onStep?.(result);
+        return {
+          schemaVersion: "1.0",
+          name: journey.name,
+          status: "failed",
+          startedAt: startedAt.toISOString(),
+          durationMs: Date.now() - startedAt.getTime(),
+          steps: results,
+        };
       }
-      const result: JourneyStepResult = {
-        index,
-        action: step.action,
-        ...(step.description ? { description: step.description } : {}),
-        status: "failed",
-        durationMs: Date.now() - stepStarted,
-        error: safeError(error, secrets),
-        ...(evidence ? { evidence: evidence.video ? { ...evidence, video: { ...evidence.video, endMs: Date.now() - startedAt.getTime() } } : evidence } : {}),
-      };
-      results.push(result);
-      options.onStep?.(result);
-      return {
-        schemaVersion: "1.0",
-        name: journey.name,
-        status: "failed",
-        startedAt: startedAt.toISOString(),
-        durationMs: Date.now() - startedAt.getTime(),
-        steps: results,
-      };
     }
-  }
 
-  return {
-    schemaVersion: "1.0",
-    name: journey.name,
-    status: "passed",
-    startedAt: startedAt.toISOString(),
-    durationMs: Date.now() - startedAt.getTime(),
-    steps: results,
-  };
+    return {
+      schemaVersion: "1.0",
+      name: journey.name,
+      status: "passed",
+      startedAt: startedAt.toISOString(),
+      durationMs: Date.now() - startedAt.getTime(),
+      steps: results,
+    };
   } finally {
-    await page.context().unroute("**/*", navigationGuard).catch(() => undefined);
+    await page
+      .context()
+      .unroute("**/*", navigationGuard)
+      .catch(() => undefined);
   }
 }

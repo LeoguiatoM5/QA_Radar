@@ -40,7 +40,8 @@ export function renderDashboard(options: DashboardOptions): string {
 }
 
 function renderAppNav(active: "home" | "scanner" | "journeys" | "docs"): string {
-  const link = (id: typeof active, label: string, href: string) => `<a class="nav-link ${active === id ? "active" : ""}" style="color:${active === id ? "var(--cyan)" : "var(--muted)"};text-decoration:none;font-size:.78rem;padding:7px 9px;border-radius:7px" href="${href}">${label}</a>`;
+  const link = (id: typeof active, label: string, href: string) =>
+    `<a class="nav-link ${active === id ? "active" : ""}" style="color:${active === id ? "var(--cyan)" : "var(--muted)"};text-decoration:none;font-size:.78rem;padding:7px 9px;border-radius:7px" href="${href}">${label}</a>`;
   return `<nav><a class="logo" href="/"><i class="radar"></i> QA RADAR</a><div class="nav-links" style="display:flex;gap:8px;align-items:center;margin-left:auto">${link("home", "Home", "/")}${link("scanner", "Inspeção", "/scanner")}${link("journeys", "Jornada Playwright", "/journeys")}${link("docs", "Documentação", "/docs")}</div><span class="pill">Beta pública</span></nav>`;
 }
 

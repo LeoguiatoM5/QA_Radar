@@ -2,17 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertHostedPlaywrightCode } from "./code-policy.js";
-import {
-  SANDBOX_PROTOCOL_VERSION,
-  SandboxRequestVerifier,
-} from "./sandbox-client.js";
-import {
-  runDockerSandbox,
-  checkDockerSandboxReadiness,
-  type DockerSandboxConfig,
-  type SandboxExecutionRequest,
-  type SandboxNetworkPolicy,
-} from "./sandbox-runtime.js";
+import { SANDBOX_PROTOCOL_VERSION, SandboxRequestVerifier } from "./sandbox-client.js";
+import { runDockerSandbox, checkDockerSandboxReadiness, type DockerSandboxConfig, type SandboxExecutionRequest, type SandboxNetworkPolicy } from "./sandbox-runtime.js";
 
 const MAX_REQUEST_BYTES = 512 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -69,12 +60,7 @@ async function rawBody(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function integerField(
-  value: unknown,
-  name: string,
-  minimum: number,
-  maximum: number,
-): number {
+function integerField(value: unknown, name: string, minimum: number, maximum: number): number {
   if (!Number.isInteger(value) || (value as number) < minimum || (value as number) > maximum) {
     throw new HttpError(400, `${name} deve ser um inteiro entre ${minimum} e ${maximum}.`);
   }
@@ -94,15 +80,15 @@ function parseExecutionRequest(raw: string, limits: RunnerLimits): SandboxExecut
   const body = value as Record<string, unknown>;
   const rawLimits = body.limits;
   if (
-    body.schemaVersion !== SANDBOX_PROTOCOL_VERSION
-    || typeof body.executionId !== "string"
-    || !UUID_PATTERN.test(body.executionId)
-    || typeof body.code !== "string"
-    || !body.code.trim()
-    || body.headed !== false
-    || !rawLimits
-    || typeof rawLimits !== "object"
-    || Array.isArray(rawLimits)
+    body.schemaVersion !== SANDBOX_PROTOCOL_VERSION ||
+    typeof body.executionId !== "string" ||
+    !UUID_PATTERN.test(body.executionId) ||
+    typeof body.code !== "string" ||
+    !body.code.trim() ||
+    body.headed !== false ||
+    !rawLimits ||
+    typeof rawLimits !== "object" ||
+    Array.isArray(rawLimits)
   ) {
     throw new HttpError(400, "Envelope de execução inválido.");
   }
@@ -175,16 +161,8 @@ function runnerConfiguration(): {
       maxMemoryMiB,
       maxTimeoutMs,
       networkPolicy: networkPolicy(process.env.QA_RADAR_SANDBOX_NETWORK_POLICY),
-      egressMaxBytes: positiveInteger(
-        process.env.QA_RADAR_SANDBOX_EGRESS_MAX_BYTES,
-        64 * 1024 * 1024,
-        "QA_RADAR_SANDBOX_EGRESS_MAX_BYTES",
-      ),
-      egressMaxConnections: positiveInteger(
-        process.env.QA_RADAR_SANDBOX_EGRESS_MAX_CONNECTIONS,
-        32,
-        "QA_RADAR_SANDBOX_EGRESS_MAX_CONNECTIONS",
-      ),
+      egressMaxBytes: positiveInteger(process.env.QA_RADAR_SANDBOX_EGRESS_MAX_BYTES, 64 * 1024 * 1024, "QA_RADAR_SANDBOX_EGRESS_MAX_BYTES"),
+      egressMaxConnections: positiveInteger(process.env.QA_RADAR_SANDBOX_EGRESS_MAX_CONNECTIONS, 32, "QA_RADAR_SANDBOX_EGRESS_MAX_CONNECTIONS"),
       ...(process.env.QA_RADAR_DOCKER_COMMAND ? { dockerCommand: process.env.QA_RADAR_DOCKER_COMMAND } : {}),
     },
   };
@@ -250,9 +228,7 @@ export function createSandboxRunnerServer(
       }
     } catch (error) {
       const status = error instanceof HttpError ? error.status : 500;
-      const message = error instanceof HttpError
-        ? error.message
-        : "Falha interna ao executar o sandbox.";
+      const message = error instanceof HttpError ? error.message : "Falha interna ao executar o sandbox.";
       if (!response.headersSent) json(response, status, { error: message });
       else response.destroy();
       if (!(error instanceof HttpError)) console.error(error);
@@ -260,17 +236,10 @@ export function createSandboxRunnerServer(
   });
 }
 
-const entryPoint = process.argv[1]
-  ? pathToFileURL(resolve(process.argv[1])).href
-  : "";
+const entryPoint = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";
 if (entryPoint === import.meta.url) {
   const configuration = runnerConfiguration();
-  const server = createSandboxRunnerServer(
-    configuration.secret,
-    configuration.limits,
-    configuration.docker,
-    configuration.concurrency,
-  );
+  const server = createSandboxRunnerServer(configuration.secret, configuration.limits, configuration.docker, configuration.concurrency);
   server.listen(configuration.port, configuration.host, () => {
     console.log(`QA Radar sandbox runner em http://${configuration.host}:${configuration.port}`);
   });

@@ -16,9 +16,7 @@ function decodeXml(value: string): string {
 }
 
 export function parseSitemapLocations(xml: string): string[] {
-  return [...xml.matchAll(/<loc\b[^>]*>([\s\S]*?)<\/loc>/gi)]
-    .map((match) => decodeXml(match[1]?.trim() ?? ""))
-    .filter(Boolean);
+  return [...xml.matchAll(/<loc\b[^>]*>([\s\S]*?)<\/loc>/gi)].map((match) => decodeXml(match[1]?.trim() ?? "")).filter(Boolean);
 }
 
 async function responseText(response: Response): Promise<string> {
@@ -45,11 +43,7 @@ async function responseText(response: Response): Promise<string> {
   return new TextDecoder().decode(content);
 }
 
-async function fetchSitemap(
-  rawUrl: string,
-  publicNetworkOnly: boolean,
-  signal?: AbortSignal,
-): Promise<{ url: string; xml: string }> {
+async function fetchSitemap(rawUrl: string, publicNetworkOnly: boolean, signal?: AbortSignal): Promise<{ url: string; xml: string }> {
   let current = rawUrl;
   for (let redirects = 0; redirects <= 5; redirects += 1) {
     if (publicNetworkOnly) await assertPublicUrl(current);
@@ -84,10 +78,7 @@ function normalizedPage(rawUrl: string, origin: string): string | undefined {
   }
 }
 
-export async function discoverSitemapUrls(
-  options: ScanOptions,
-  control: ScanControl = {},
-): Promise<string[]> {
+export async function discoverSitemapUrls(options: ScanOptions, control: ScanControl = {}): Promise<string[]> {
   const root = new URL(options.url);
   const initialSitemap = new URL("/sitemap.xml", root).toString();
   const pending = [initialSitemap];
@@ -100,11 +91,7 @@ export async function discoverSitemapUrls(
     const candidate = pending.shift();
     if (!candidate || visitedSitemaps.has(candidate)) continue;
     visitedSitemaps.add(candidate);
-    const fetched = await fetchSitemap(
-      candidate,
-      options.publicNetworkOnly === true,
-      control.signal,
-    );
+    const fetched = await fetchSitemap(candidate, options.publicNetworkOnly === true, control.signal);
     const locations = parseSitemapLocations(fetched.xml);
     const sitemapIndex = /<sitemapindex\b/i.test(fetched.xml);
     for (const location of locations) {

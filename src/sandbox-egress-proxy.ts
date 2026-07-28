@@ -36,17 +36,7 @@ function count(chunk: Buffer | string, sockets: readonly Destroyable[]): void {
 }
 
 function sanitizedHeaders(headers: IncomingHttpHeaders, host: string): IncomingHttpHeaders {
-  const blocked = new Set([
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "proxy-connection",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-  ]);
+  const blocked = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade"]);
   const result: IncomingHttpHeaders = { host, connection: "close" };
   for (const [name, value] of Object.entries(headers)) {
     if (!blocked.has(name.toLowerCase()) && name.toLowerCase() !== "host") result[name] = value;
@@ -61,8 +51,7 @@ function sanitizedResponseHeaders(headers: IncomingHttpHeaders): IncomingHttpHea
 }
 
 function selectedAddress(resolution: PublicResolution): { address: string; family: number } {
-  const ordered = [...resolution.addresses].sort((left, right) =>
-    (isIP(left.address) === 4 ? 0 : 1) - (isIP(right.address) === 4 ? 0 : 1));
+  const ordered = [...resolution.addresses].sort((left, right) => (isIP(left.address) === 4 ? 0 : 1) - (isIP(right.address) === 4 ? 0 : 1));
   const candidate = ordered[0];
   if (!candidate) throw new Error("Destino público sem endereço.");
   return {
@@ -86,11 +75,7 @@ async function resolveTarget(url: URL): Promise<{ address: string; family: numbe
   return { ...selectedAddress(resolution), port };
 }
 
-function openSocket(
-  address: string,
-  family: number,
-  port: number,
-): Promise<Socket> {
+function openSocket(address: string, family: number, port: number): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const socket = connect({ host: address, family, port });
     const onError = (error: Error): void => {
@@ -123,31 +108,34 @@ const server = createServer(async (request, response) => {
       throw new Error("Destino HTTP inválido.");
     }
     const resolved = await resolveTarget(target);
-    const upstream = httpRequest({
-      host: resolved.address,
-      family: resolved.family,
-      port: resolved.port,
-      method: request.method,
-      path: `${target.pathname}${target.search}`,
-      headers: sanitizedHeaders(request.headers, target.host),
-      agent: false,
-    }, (upstreamResponse) => {
-      response.writeHead(
-        upstreamResponse.statusCode ?? 502,
-        sanitizedResponseHeaders(upstreamResponse.headers),
-      );
-      upstreamResponse.on("data", (chunk: Buffer) => count(chunk, [upstreamResponse.socket]));
-      upstreamResponse.once("error", () => response.destroy());
-      response.once("error", () => upstreamResponse.destroy());
-      upstreamResponse.pipe(response);
-    });
+    const upstream = httpRequest(
+      {
+        host: resolved.address,
+        family: resolved.family,
+        port: resolved.port,
+        method: request.method,
+        path: `${target.pathname}${target.search}`,
+        headers: sanitizedHeaders(request.headers, target.host),
+        agent: false,
+      },
+      (upstreamResponse) => {
+        response.writeHead(upstreamResponse.statusCode ?? 502, sanitizedResponseHeaders(upstreamResponse.headers));
+        upstreamResponse.on("data", (chunk: Buffer) => count(chunk, [upstreamResponse.socket]));
+        upstreamResponse.once("error", () => response.destroy());
+        response.once("error", () => upstreamResponse.destroy());
+        upstreamResponse.pipe(response);
+      },
+    );
     upstream.once("error", () => {
       if (!response.headersSent) response.writeHead(502, { connection: "close" });
       response.end();
     });
-    request.on("data", (chunk: Buffer) => count(chunk, [request.socket, upstream.socket].filter(
-      (value): value is Socket => value !== null,
-    )));
+    request.on("data", (chunk: Buffer) =>
+      count(
+        chunk,
+        [request.socket, upstream.socket].filter((value): value is Socket => value !== null),
+      ),
+    );
     request.pipe(upstream);
   } catch {
     response.writeHead(403, { connection: "close" });

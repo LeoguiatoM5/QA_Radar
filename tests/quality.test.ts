@@ -90,31 +90,36 @@ describe("baseline comparison", () => {
 
 describe("performance rules", () => {
   it("não alerta métricas dentro dos limites recomendados", () => {
-    const issues = performanceIssues({
-      ttfbMs: 800,
-      fcpMs: 1_000,
-      lcpMs: 2_500,
-      cls: 0.1,
-      domContentLoadedMs: 1_200,
-      loadMs: 1_500,
-    }, "https://example.com/");
+    const issues = performanceIssues(
+      {
+        ttfbMs: 800,
+        fcpMs: 1_000,
+        lcpMs: 2_500,
+        cls: 0.1,
+        domContentLoadedMs: 1_200,
+        loadMs: 1_500,
+      },
+      "https://example.com/",
+    );
     assert.deepEqual(issues, []);
   });
 
   it("cria regras estáveis para TTFB, LCP e CLS fora do recomendado", () => {
-    const issues = performanceIssues({
-      ttfbMs: 801,
-      fcpMs: 1_000,
-      lcpMs: 2_501,
-      cls: 0.101,
-      domContentLoadedMs: 2_000,
-      loadMs: 3_000,
-    }, "https://example.com/");
-    assert.deepEqual(issues.map((item) => item.ruleId), [
-      "performance.ttfb.slow",
-      "performance.lcp.slow",
-      "performance.cls.unstable",
-    ]);
+    const issues = performanceIssues(
+      {
+        ttfbMs: 801,
+        fcpMs: 1_000,
+        lcpMs: 2_501,
+        cls: 0.101,
+        domContentLoadedMs: 2_000,
+        loadMs: 3_000,
+      },
+      "https://example.com/",
+    );
+    assert.deepEqual(
+      issues.map((item) => item.ruleId),
+      ["performance.ttfb.slow", "performance.lcp.slow", "performance.cls.unstable"],
+    );
     assert.ok(issues.every((item) => item.severity === "warning"));
   });
 });

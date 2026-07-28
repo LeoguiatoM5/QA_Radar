@@ -25,9 +25,13 @@ async function readCodeFailureDetails(outputDir: string): Promise<string | undef
       if (!entry.isDirectory()) continue;
       try {
         return explainCodeFailure((await readFile(join(resultsDir, entry.name, "error-context.md"), "utf8")).slice(-20_000));
-      } catch { /* Try the next test result directory. */ }
+      } catch {
+        /* Try the next test result directory. */
+      }
     }
-  } catch { /* JSON report remains available. */ }
+  } catch {
+    /* JSON report remains available. */
+  }
   return undefined;
 }
 
@@ -69,14 +73,15 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
       // A execução hospedada recebe só a string de código e nunca vê os
       // arquivos irmãos gravados neste diretório, então só a execução local
       // pode apontar o import para o fixture que captura screenshot por passo.
-      const runtimeCode = hostedExecution
-        ? code.replaceAll("@playwright/test", "playwright/test")
-        : code.replaceAll("@playwright/test", "./qa-radar-fixtures.js");
+      const runtimeCode = hostedExecution ? code.replaceAll("@playwright/test", "playwright/test") : code.replaceAll("@playwright/test", "./qa-radar-fixtures.js");
       await writeFile(specPath, runtimeCode, { encoding: "utf8", mode: 0o600 });
       if (!hostedExecution) {
         await writeFile(join(outputDir, "qa-radar-fixtures.ts"), CODE_STEP_FIXTURES_SOURCE, { encoding: "utf8", mode: 0o600 });
       }
-      await writeFile(join(outputDir, "playwright.config.ts"), `import { defineConfig } from "playwright/test";\nexport default defineConfig({ use: { screenshot: "on", video: "on" } });\n`, { encoding: "utf8", mode: 0o600 });
+      await writeFile(join(outputDir, "playwright.config.ts"), `import { defineConfig } from "playwright/test";\nexport default defineConfig({ use: { screenshot: "on", video: "on" } });\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
       const execution = await runner({
         outputDir,
         code: runtimeCode,
@@ -86,7 +91,11 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
         maxMemoryMiB: config.maxCodeMemoryMiB,
       });
       let report: unknown;
-      try { report = JSON.parse(execution.stdout); } catch { report = { output: execution.stdout.slice(-20_000), errorOutput: execution.stderr.slice(-20_000) }; }
+      try {
+        report = JSON.parse(execution.stdout);
+      } catch {
+        report = { output: execution.stdout.slice(-20_000), errorOutput: execution.stderr.slice(-20_000) };
+      }
       let failureDetails: string | undefined;
       if (execution.exitCode !== 0) {
         failureDetails = await readCodeFailureDetails(outputDir);
@@ -110,7 +119,10 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
   if (request.method === "GET" && codeSteps) {
     if (!context.requireCodeModeEnabled(response)) return true;
     const job = await context.loadCodeExecutionJob(codeSteps[1] ?? "");
-    if (!job) { json(response, 404, { error: "Execução de código não encontrada ou já expirada." }); return true; }
+    if (!job) {
+      json(response, 404, { error: "Execução de código não encontrada ou já expirada." });
+      return true;
+    }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
     const journey = await context.codeReportAsJourney(job);
     json(response, 200, { steps: journey.steps.map((step) => ({ index: step.index, action: step.action, description: step.description ?? step.action })) });
@@ -121,7 +133,10 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
   if (request.method === "POST" && codeEvidence) {
     if (!context.requireCodeModeEnabled(response)) return true;
     const job = await context.loadCodeExecutionJob(codeEvidence[1] ?? "");
-    if (!job) { json(response, 404, { error: "Execução de código não encontrada ou já expirada." }); return true; }
+    if (!job) {
+      json(response, 404, { error: "Execução de código não encontrada ou já expirada." });
+      return true;
+    }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
     const body = await readJson(request, MAX_JSON_BODY_BYTES);
     const metadata = parseJourneyEvidenceMetadata({ testerName: body.testerName, testType: body.testType });
@@ -137,11 +152,17 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
   if (request.method === "GET" && codeArtifact) {
     if (!context.requireCodeModeEnabled(response)) return true;
     const job = await context.loadCodeExecutionJob(codeArtifact[1] ?? "");
-    if (!job) { json(response, 404, { error: "Execução de código não encontrada ou já expirada." }); return true; }
+    if (!job) {
+      json(response, 404, { error: "Execução de código não encontrada ou já expirada." });
+      return true;
+    }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
     try {
       const name = decodeURIComponent(codeArtifact[2] ?? "");
-      if (name !== "code-evidence.html" && (!name.startsWith("test-results/") || name.includes(".."))) { json(response, 404, { error: "Artefato inválido" }); return true; }
+      if (name !== "code-evidence.html" && (!name.startsWith("test-results/") || name.includes(".."))) {
+        json(response, 404, { error: "Artefato inválido" });
+        return true;
+      }
       const artifactPath = name === "code-evidence.html" ? join(job.outputDir, name) : join(job.outputDir, ...name.split("/"));
       const content = await readFile(artifactPath);
       const isHtml = name === "code-evidence.html";
@@ -153,7 +174,9 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
         ...(isHtml ? { "content-security-policy": "sandbox allow-popups allow-same-origin allow-downloads; default-src 'none'; img-src data:; media-src data:; style-src 'unsafe-inline'" } : {}),
       });
       response.end(content);
-    } catch { json(response, 404, { error: "O relatório HTML ainda não foi gerado." }); }
+    } catch {
+      json(response, 404, { error: "O relatório HTML ainda não foi gerado." });
+    }
     return true;
   }
 

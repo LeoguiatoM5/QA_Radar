@@ -1,11 +1,5 @@
 import { resolve } from "node:path";
-import type {
-  BrowserName,
-  FailOn,
-  ReportFormat,
-  ScanOptions,
-  ScreenshotMode,
-} from "./types.js";
+import type { BrowserName, FailOn, ReportFormat, ScanOptions, ScreenshotMode } from "./types.js";
 
 export const HELP = `
 QA Radar - smoke testing sem testes predefinidos

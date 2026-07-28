@@ -10,10 +10,7 @@ describe("configuração de ambiente", () => {
     assert.equal(codeModeEnabledForHost("0.0.0.0"), false);
     assert.equal(codeModeEnabledForHost("0.0.0.0", "true"), true);
     assert.equal(codeModeEnabledForHost("127.0.0.1", "false"), false);
-    assert.throws(
-      () => codeModeEnabledForHost("127.0.0.1", "yes"),
-      /deve ser true ou false/,
-    );
+    assert.throws(() => codeModeEnabledForHost("127.0.0.1", "yes"), /deve ser true ou false/);
   });
 
   it("aplica os valores padrão quando nenhuma variável é informada", () => {
@@ -64,26 +61,14 @@ describe("configuração de ambiente", () => {
     assert.throws(() => loadEnvironmentConfig({ PORT: "0" }), /PORT deve ser um número entre 1 e 65535/);
     assert.throws(() => loadEnvironmentConfig({ PORT: "70000" }), /PORT deve ser um número entre 1 e 65535/);
     assert.throws(() => loadEnvironmentConfig({ PORT: "abc" }), /PORT deve ser um número entre 1 e 65535/);
-    assert.throws(
-      () => loadEnvironmentConfig({ QA_RADAR_CONCURRENCY: "0" }),
-      /QA_RADAR_CONCURRENCY deve ser um número inteiro positivo/,
-    );
-    assert.throws(
-      () => loadEnvironmentConfig({ QA_RADAR_MAX_SITEMAP_PAGES: "3.5" }),
-      /QA_RADAR_MAX_SITEMAP_PAGES deve ser um número inteiro positivo/,
-    );
+    assert.throws(() => loadEnvironmentConfig({ QA_RADAR_CONCURRENCY: "0" }), /QA_RADAR_CONCURRENCY deve ser um número inteiro positivo/);
+    assert.throws(() => loadEnvironmentConfig({ QA_RADAR_MAX_SITEMAP_PAGES: "3.5" }), /QA_RADAR_MAX_SITEMAP_PAGES deve ser um número inteiro positivo/);
   });
 
   it("exige QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto", () => {
     assert.equal(loadEnvironmentConfig({}).sandbox, undefined);
-    assert.throws(
-      () => loadEnvironmentConfig({ QA_RADAR_SANDBOX_URL: "https://sandbox.example.com" }),
-      /QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto/,
-    );
-    assert.throws(
-      () => loadEnvironmentConfig({ QA_RADAR_SANDBOX_SIGNING_SECRET: "segredo-com-32-bytes-no-minimo-ok" }),
-      /QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto/,
-    );
+    assert.throws(() => loadEnvironmentConfig({ QA_RADAR_SANDBOX_URL: "https://sandbox.example.com" }), /QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto/);
+    assert.throws(() => loadEnvironmentConfig({ QA_RADAR_SANDBOX_SIGNING_SECRET: "segredo-com-32-bytes-no-minimo-ok" }), /QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto/);
     const env = loadEnvironmentConfig({
       QA_RADAR_SANDBOX_URL: " https://sandbox.example.com ",
       QA_RADAR_SANDBOX_SIGNING_SECRET: "segredo-com-32-bytes-no-minimo-ok",

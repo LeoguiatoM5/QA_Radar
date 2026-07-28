@@ -64,17 +64,11 @@ describe("scan history", () => {
       assert.equal(failed?.promoted, false);
       assert.equal(await readFile(baselinePath, "utf8"), firstBaseline);
 
-      const partial = await storeRun(
-        report("2026-07-19T11:30:00.000Z", false, "partial"),
-        { ...scanOptions, acceptBaseline: true },
-      );
+      const partial = await storeRun(report("2026-07-19T11:30:00.000Z", false, "partial"), { ...scanOptions, acceptBaseline: true });
       assert.equal(partial?.promoted, false);
       assert.equal(await readFile(baselinePath, "utf8"), firstBaseline);
 
-      const accepted = await storeRun(
-        report("2026-07-19T12:00:00.000Z", false),
-        { ...scanOptions, acceptBaseline: true },
-      );
+      const accepted = await storeRun(report("2026-07-19T12:00:00.000Z", false), { ...scanOptions, acceptBaseline: true });
       assert.equal(accepted?.promoted, true);
       assert.notEqual(await readFile(join(historyDir, "loja", "staging", "baseline.json"), "utf8"), firstBaseline);
 

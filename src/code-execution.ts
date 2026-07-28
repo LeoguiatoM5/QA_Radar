@@ -3,25 +3,9 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
-const CODE_ENVIRONMENT_ALLOWLIST = new Set([
-  "COMSPEC",
-  "HOME",
-  "LOCALAPPDATA",
-  "PATH",
-  "PATHEXT",
-  "PLAYWRIGHT_BROWSERS_PATH",
-  "SYSTEMROOT",
-  "TEMP",
-  "TMP",
-  "TMPDIR",
-  "USERPROFILE",
-]);
+const CODE_ENVIRONMENT_ALLOWLIST = new Set(["COMSPEC", "HOME", "LOCALAPPDATA", "PATH", "PATHEXT", "PLAYWRIGHT_BROWSERS_PATH", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "USERPROFILE"]);
 
-export type SpawnProcess = (
-  command: string,
-  args: readonly string[],
-  options: SpawnOptions,
-) => ChildProcess;
+export type SpawnProcess = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 
 export interface CodeExecutionOptions {
   outputDir: string;
@@ -50,15 +34,8 @@ export function codeExecutionEnvironment(source: NodeJS.ProcessEnv = process.env
   return environment;
 }
 
-export function codeExecutionArguments(
-  projectRoot: string,
-  outputDir: string,
-  headed: boolean,
-  maxMemoryMiB: number,
-  tsxLoaderPath?: string,
-): string[] {
-  const loaderPath = tsxLoaderPath
-    ?? createRequire(join(projectRoot, "package.json")).resolve("tsx");
+export function codeExecutionArguments(projectRoot: string, outputDir: string, headed: boolean, maxMemoryMiB: number, tsxLoaderPath?: string): string[] {
+  const loaderPath = tsxLoaderPath ?? createRequire(join(projectRoot, "package.json")).resolve("tsx");
   return [
     `--max-old-space-size=${maxMemoryMiB}`,
     "--import",
@@ -72,11 +49,7 @@ export function codeExecutionArguments(
   ];
 }
 
-export async function terminateProcessTree(
-  child: ChildProcess,
-  platform: NodeJS.Platform = process.platform,
-  spawnProcess: SpawnProcess = spawn,
-): Promise<void> {
+export async function terminateProcessTree(child: ChildProcess, platform: NodeJS.Platform = process.platform, spawnProcess: SpawnProcess = spawn): Promise<void> {
   const pid = child.pid;
   if (pid === undefined) {
     child.kill("SIGKILL");
@@ -85,11 +58,7 @@ export async function terminateProcessTree(
 
   if (platform === "win32") {
     await new Promise<void>((resolve) => {
-      const killer = spawnProcess(
-        "taskkill",
-        ["/PID", String(pid), "/T", "/F"],
-        { stdio: "ignore", windowsHide: true },
-      );
+      const killer = spawnProcess("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
       killer.once("error", () => {
         child.kill("SIGKILL");
         resolve();
@@ -112,19 +81,15 @@ export async function terminateProcessTree(
 export async function runPlaywrightCode(options: CodeExecutionOptions): Promise<CodeExecutionResult> {
   const projectRoot = options.projectRoot ?? process.cwd();
   const spawnProcess = options.spawnProcess ?? spawn;
-  const child = spawnProcess(
-    process.execPath,
-    codeExecutionArguments(projectRoot, options.outputDir, options.headed, options.maxMemoryMiB),
-    {
-      cwd: options.outputDir,
-      env: {
-        ...codeExecutionEnvironment(),
-        NODE_PATH: join(projectRoot, "node_modules"),
-      },
-      windowsHide: true,
-      detached: process.platform !== "win32",
+  const child = spawnProcess(process.execPath, codeExecutionArguments(projectRoot, options.outputDir, options.headed, options.maxMemoryMiB), {
+    cwd: options.outputDir,
+    env: {
+      ...codeExecutionEnvironment(),
+      NODE_PATH: join(projectRoot, "node_modules"),
     },
-  );
+    windowsHide: true,
+    detached: process.platform !== "win32",
+  });
   const terminate = options.terminate ?? ((processToStop) => terminateProcessTree(processToStop));
 
   return new Promise<CodeExecutionResult>((resolve, reject) => {
@@ -171,10 +136,7 @@ export async function runPlaywrightCode(options: CodeExecutionOptions): Promise<
         stderr: Buffer.concat(stderr).toString("utf8"),
       });
     };
-    const deadline = setTimeout(
-      () => fail(new Error(`A execução excedeu o limite de ${options.timeoutMs} ms.`)),
-      options.timeoutMs,
-    );
+    const deadline = setTimeout(() => fail(new Error(`A execução excedeu o limite de ${options.timeoutMs} ms.`)), options.timeoutMs);
 
     child.stdout?.on("data", onStdout);
     child.stderr?.on("data", onStderr);

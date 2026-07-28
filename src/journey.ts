@@ -1,14 +1,15 @@
 type JourneyStepDescription = { description?: string };
 
-export type JourneyStep = JourneyStepDescription & (
-  | { action: "goto"; url: string }
-  | { action: "click"; selector: string; allowDestructive?: boolean }
-  | { action: "fill"; selector: string; value?: string; valueFromEnv?: string; valueFromInput?: string }
-  | { action: "select"; selector: string; value: string }
-  | { action: "waitFor"; selector: string; timeoutMs?: number }
-  | { action: "assertVisible"; selector: string }
-  | { action: "assertText"; selector: string; text: string }
-);
+export type JourneyStep = JourneyStepDescription &
+  (
+    | { action: "goto"; url: string }
+    | { action: "click"; selector: string; allowDestructive?: boolean }
+    | { action: "fill"; selector: string; value?: string; valueFromEnv?: string; valueFromInput?: string }
+    | { action: "select"; selector: string; value: string }
+    | { action: "waitFor"; selector: string; timeoutMs?: number }
+    | { action: "assertVisible"; selector: string }
+    | { action: "assertText"; selector: string; text: string }
+  );
 
 export interface JourneyDefinition {
   schemaVersion: "1.0";
@@ -58,7 +59,7 @@ function parseStep(value: unknown, index: number): JourneyStep {
       exactKeys(step, ["action", "url", "description"], index);
       const url = text(step.url, `Passo ${index + 1}: url`, 2_048);
       const parsed = new URL(url);
-      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(`Passo ${index + 1}: URL deve usar HTTP ou HTTPS.`);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error(`Passo ${index + 1}: URL deve usar HTTP ou HTTPS.`);
       return { action, url: parsed.toString(), ...description(step, index) };
     }
     case "click": {

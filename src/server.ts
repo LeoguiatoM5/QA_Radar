@@ -24,6 +24,7 @@ import { tryHandleCodeExecution } from "./routes/code-execution.js";
 import { tryHandleLegacyJourneys } from "./routes/journeys-legacy.js";
 import { tryHandleScans } from "./routes/scans.js";
 import type { SpawnProcess } from "./code-execution.js";
+import { SERVER_OPTION_DEFAULTS } from "./env.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -97,15 +98,11 @@ function defaultOperationalLogger(event: OperationalEvent): void {
 }
 
 const DEFAULT_OPTIONS: ServerOptions = {
+  ...SERVER_OPTION_DEFAULTS,
   resultsDir: join(process.cwd(), "qa-radar-results"),
-  concurrency: 2,
-  maxQueueSize: 20,
   allowPrivateTargets: false,
   allowCustomIgnorePatterns: false,
-  rateLimitMax: 10,
   rateLimitWindowMs: 60_000,
-  retentionMs: 60 * 60_000,
-  maxJobDurationMs: 5 * 60_000,
   trustProxy: false,
   turnstileSiteKey: undefined,
   turnstileSecretKey: undefined,
@@ -114,14 +111,9 @@ const DEFAULT_OPTIONS: ServerOptions = {
   allowCodeMode: false,
   codeModeAdminToken: undefined,
   historyDir: join(process.cwd(), ".qa-radar-history"),
-  maxSitemapPages: 20,
   maxJourneySteps: 20,
   maxJourneyPayloadBytes: 32 * 1024,
   maxJourneyDurationMs: 3 * 60_000,
-  maxCodeExecutionDurationMs: 5 * 60_000,
-  maxCodeOutputBytes: 1024 * 1024,
-  maxCodeMemoryMiB: 512,
-  maxCodegenDurationMs: 10 * 60_000,
   scanRunner: scan,
   journeyRunner: runJourneyDefinition,
   codegenSpawner: spawn,
@@ -130,13 +122,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   operationalLogger: defaultOperationalLogger,
 };
 
-const ROUTE_HANDLERS: RouteHandler[] = [
-  tryHandlePages,
-  tryHandleCodegen,
-  tryHandleCodeExecution,
-  tryHandleLegacyJourneys,
-  tryHandleScans,
-];
+const ROUTE_HANDLERS: RouteHandler[] = [tryHandlePages, tryHandleCodegen, tryHandleCodeExecution, tryHandleLegacyJourneys, tryHandleScans];
 
 export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Server {
   const config = { ...DEFAULT_OPTIONS, ...overrides };
@@ -167,16 +153,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   if (!Number.isInteger(config.maxCodegenDurationMs) || config.maxCodegenDurationMs < 1) {
     throw new Error("maxCodegenDurationMs deve ser um número inteiro positivo.");
   }
-  if (
-    config.codeModeAdminToken !== undefined
-    && (Buffer.byteLength(config.codeModeAdminToken, "utf8") < 32
-      || Buffer.byteLength(config.codeModeAdminToken, "utf8") > 512)
-  ) {
+  if (config.codeModeAdminToken !== undefined && (Buffer.byteLength(config.codeModeAdminToken, "utf8") < 32 || Buffer.byteLength(config.codeModeAdminToken, "utf8") > 512)) {
     throw new Error("codeModeAdminToken deve ter entre 32 e 512 bytes.");
   }
-  const codeModeAdminTokenHash = config.codeModeAdminToken
-    ? tokenHash(config.codeModeAdminToken)
-    : undefined;
+  const codeModeAdminTokenHash = config.codeModeAdminToken ? tokenHash(config.codeModeAdminToken) : undefined;
   const jobQueue = new JobQueue();
   const rateLimiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
   const legacyJourneys = new LegacyJourneyRegistry();
@@ -209,22 +189,28 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     ...report,
     steps: report.steps.map((step) => ({
       ...step,
-      ...(step.evidence ? {
-        evidence: {
-          ...(step.evidence.before ? { before: basename(step.evidence.before) } : {}),
-          ...(step.evidence.after ? { after: basename(step.evidence.after) } : {}),
-        },
-      } : {}),
+      ...(step.evidence
+        ? {
+            evidence: {
+              ...(step.evidence.before ? { before: basename(step.evidence.before) } : {}),
+              ...(step.evidence.after ? { after: basename(step.evidence.after) } : {}),
+            },
+          }
+        : {}),
     })),
   });
 
   const codeReportAsJourney = async (job: CodeExecutionJob): Promise<JourneyRunResult> => {
-    const record = job.report && typeof job.report === "object" && !Array.isArray(job.report) ? job.report as Record<string, unknown> : {};
-    const stats = record.stats && typeof record.stats === "object" && !Array.isArray(record.stats) ? record.stats as Record<string, unknown> : {};
+    const record = job.report && typeof job.report === "object" && !Array.isArray(job.report) ? (job.report as Record<string, unknown>) : {};
+    const stats = record.stats && typeof record.stats === "object" && !Array.isArray(record.stats) ? (record.stats as Record<string, unknown>) : {};
     const durationMs = typeof stats.duration === "number" ? stats.duration : 0;
     const expected = typeof stats.expected === "number" ? stats.expected : 0;
     let source = "";
-    try { source = await readFile(join(job.outputDir, "qa-radar.spec.ts"), "utf8"); } catch { /* The report can still be generated from the JSON result. */ }
+    try {
+      source = await readFile(join(job.outputDir, "qa-radar.spec.ts"), "utf8");
+    } catch {
+      /* The report can still be generated from the JSON result. */
+    }
     const sourceSteps: Array<{ action: "goto" | "click" | "fill" | "select" | "waitFor" | "assertVisible" | "assertText"; description: string }> = [];
     for (const rawLine of source.split(/\r?\n/)) {
       const line = rawLine.trim();
@@ -274,10 +260,14 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       }
       const stepFiles = await readdir(join(job.outputDir, "test-results", "qa-radar-steps"));
       stepScreenshots.push(
-        ...stepFiles.filter((name) => name.endsWith(".png")).sort((a, b) => a.localeCompare(b))
+        ...stepFiles
+          .filter((name) => name.endsWith(".png"))
+          .sort((a, b) => a.localeCompare(b))
           .map((name) => `test-results/qa-radar-steps/${name}`),
       );
-    } catch { /* A failed run may not produce media. */ }
+    } catch {
+      /* A failed run may not produce media. */
+    }
     // Só goto/click/fill/select correspondem a ações realmente instrumentadas
     // pelo fixture; waitFor/assertVisible/assertText nunca disparam uma
     // captura, então não avançam o cursor — senão a screenshot N ficaria
@@ -294,13 +284,17 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         index,
         action: step.action,
         description: step.description,
-        status: job.status === "passed" || index < stepDefinitions.length - 1 ? "passed" as const : "failed" as const,
+        status: job.status === "passed" || index < stepDefinitions.length - 1 ? ("passed" as const) : ("failed" as const),
         durationMs: stepDuration,
         ...(job.status === "failed" && isLastStep && job.failureDetails ? { error: job.failureDetails } : {}),
-        ...(image || (isLastStep && videoPath) ? { evidence: {
-          ...(image ? { after: image } : {}),
-          ...(isLastStep && videoPath ? { video: { path: videoPath, startMs: 0, endMs: durationMs } } : {}),
-        } } : {}),
+        ...(image || (isLastStep && videoPath)
+          ? {
+              evidence: {
+                ...(image ? { after: image } : {}),
+                ...(isLastStep && videoPath ? { video: { path: videoPath, startMs: 0, endMs: durationMs } } : {}),
+              },
+            }
+          : {}),
       };
     });
     return {
@@ -359,11 +353,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     }
     return true;
   };
-  const requireCodeModeCreation = (
-    request: IncomingMessage,
-    response: ServerResponse,
-    allowRemoteAdmin: boolean,
-  ): boolean => {
+  const requireCodeModeCreation = (request: IncomingMessage, response: ServerResponse, allowRemoteAdmin: boolean): boolean => {
     if (!requireCodeModeEnabled(response)) return false;
     if (isLocalRequest(request)) return true;
     if (!allowRemoteAdmin || !codeModeAdminTokenHash) {
@@ -446,9 +436,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         ...queueStats(),
         browser: job.options.browser,
         sitemap: Boolean(job.options.sitemap),
-        ...(job.options.sitemap && job.options.maxPages !== undefined
-          ? { maxPages: job.options.maxPages }
-          : {}),
+        ...(job.options.sitemap && job.options.maxPages !== undefined ? { maxPages: job.options.maxPages } : {}),
         screenshot: job.options.screenshot,
         failOn: job.options.failOn,
         timeoutMs: job.options.timeoutMs,
@@ -473,9 +461,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           if (!effectiveOptions.sitemap) {
             job.progress = { discoveredPages: 1, completedPages: 0, currentUrl: effectiveOptions.url, percent: 0 };
           }
-          job.report = effectiveOptions.sitemap
-            ? await scanSitemap(effectiveOptions, control)
-            : await config.scanRunner(effectiveOptions, control);
+          job.report = effectiveOptions.sitemap ? await scanSitemap(effectiveOptions, control) : await config.scanRunner(effectiveOptions, control);
           job.controller.signal.throwIfAborted();
           job.progress = { ...job.progress, stage: "writing-reports" };
           await writeReports(job.report, job.options);
@@ -504,9 +490,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           clearTimeout(deadline);
           const usage = resourceUsage(startedAt, cpuStart);
           logOperational({
-            event: job.status === "completed"
-              ? "scan.completed"
-              : job.status === "cancelled" ? "scan.cancelled" : "scan.failed",
+            event: job.status === "completed" ? "scan.completed" : job.status === "cancelled" ? "scan.cancelled" : "scan.failed",
             timestamp: new Date().toISOString(),
             jobId: job.id,
             targetOrigin: targetOrigin(job),

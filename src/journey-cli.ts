@@ -11,8 +11,7 @@ function browserType(name: ScanOptions["browser"]): BrowserType {
 
 function journeySecrets(environment: NodeJS.ProcessEnv): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(environment)
-      .filter((entry): entry is [string, string] => (entry[0].startsWith("QA_RADAR_SECRET_") || entry[0].startsWith("QA_RADAR_INPUT_")) && entry[1] !== undefined),
+    Object.entries(environment).filter((entry): entry is [string, string] => (entry[0].startsWith("QA_RADAR_SECRET_") || entry[0].startsWith("QA_RADAR_INPUT_")) && entry[1] !== undefined),
   );
 }
 
@@ -38,7 +37,9 @@ export async function runJourneyDefinition(
   signal?.throwIfAborted();
   await mkdir(options.outputDir, { recursive: true });
   const browser = await browserType(options.browser).launch({ headless: !options.headed });
-  const abort = (): void => { void browser.close(); };
+  const abort = (): void => {
+    void browser.close();
+  };
   signal?.addEventListener("abort", abort, { once: true });
   try {
     signal?.throwIfAborted();

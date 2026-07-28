@@ -50,9 +50,7 @@ export function scanOptions(body: Record<string, unknown>, outputDir: string, co
 }
 
 function publicJob(job: ScanJob, queuePosition?: number): Record<string, unknown> {
-  const report = job.report
-    ? { ...job.report, screenshotPath: job.report.screenshotPath ? "screenshot.png" : undefined }
-    : undefined;
+  const report = job.report ? { ...job.report, screenshotPath: job.report.screenshotPath ? "screenshot.png" : undefined } : undefined;
   return {
     id: job.id,
     status: job.status,
@@ -132,7 +130,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
           idempotency_key: randomUUID(),
         }),
       });
-      const result = await verification.json() as { success?: boolean };
+      const result = (await verification.json()) as { success?: boolean };
       if (!verification.ok || !result.success) throw new Error("A verificação de segurança expirou ou é inválida. Tente novamente.");
     }
     if (!config.allowCustomIgnorePatterns && textField(body, "ignoredUrl")) {
@@ -212,7 +210,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       return true;
     }
     const job = jobQueue.get(id);
-    const expectedHash = job?.accessTokenHash ?? await storedAccessHash(config.resultsDir, id);
+    const expectedHash = job?.accessTokenHash ?? (await storedAccessHash(config.resultsDir, id));
     if (!expectedHash) {
       json(response, 404, { error: "Análise não encontrada ou já expirada." });
       return true;
@@ -241,18 +239,20 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       ? "text/html; charset=utf-8"
       : artifact.endsWith(".xml")
         ? "application/xml; charset=utf-8"
-      : artifact.endsWith(".json")
-        ? "application/json; charset=utf-8"
-        : "image/png";
+        : artifact.endsWith(".json")
+          ? "application/json; charset=utf-8"
+          : "image/png";
     response.writeHead(200, {
       "content-type": contentType,
       "content-length": content.length,
       "x-content-type-options": "nosniff",
       "cache-control": "private, no-store",
       "referrer-policy": "no-referrer",
-      ...(artifact.endsWith(".html") ? {
-        "content-security-policy": "default-src 'none'; base-uri 'none'; img-src data: blob: 'self'; style-src 'unsafe-inline'; sandbox allow-same-origin",
-      } : {}),
+      ...(artifact.endsWith(".html")
+        ? {
+            "content-security-policy": "default-src 'none'; base-uri 'none'; img-src data: blob: 'self'; style-src 'unsafe-inline'; sandbox allow-same-origin",
+          }
+        : {}),
     });
     response.end(content);
     return true;

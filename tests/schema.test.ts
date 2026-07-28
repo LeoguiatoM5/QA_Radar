@@ -40,19 +40,21 @@ function report(): ScanReport {
     failOn: "error",
     gateScope: "all",
     summary: { warnings: 0, errors: 1, total: 1 },
-    issues: [{
-      ruleId: "http.document.error",
-      fingerprint: "a".repeat(64),
-      category: "http",
-      severity: "error",
-      message: "Falha de exemplo",
-      method: "GET",
-      status: 500,
-      url: "https://example.com/",
-      resourceType: "document",
-      source: undefined,
-      occurrences: 1,
-    }],
+    issues: [
+      {
+        ruleId: "http.document.error",
+        fingerprint: "a".repeat(64),
+        category: "http",
+        severity: "error",
+        message: "Falha de exemplo",
+        method: "GET",
+        status: 500,
+        url: "https://example.com/",
+        resourceType: "document",
+        source: undefined,
+        occurrences: 1,
+      },
+    ],
     screenshotPath: undefined,
   };
 }
@@ -80,11 +82,14 @@ describe("schema JSON 1.0", () => {
     const outputDir = await mkdtemp(join(tmpdir(), "qa-radar-baseline-schema-"));
     const baselinePath = join(outputDir, "baseline.json");
     try {
-      await writeFile(baselinePath, JSON.stringify({
-        schemaVersion: "0.9",
-        startedAt: "2026-07-21T00:00:00.000Z",
-        issues: [],
-      }));
+      await writeFile(
+        baselinePath,
+        JSON.stringify({
+          schemaVersion: "0.9",
+          startedAt: "2026-07-21T00:00:00.000Z",
+          issues: [],
+        }),
+      );
       await assert.rejects(loadBaseline(baselinePath), /schema 1\.0/);
     } finally {
       await rm(outputDir, { recursive: true, force: true });

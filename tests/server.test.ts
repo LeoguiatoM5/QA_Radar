@@ -14,7 +14,7 @@ import type { OperationalEvent } from "../src/server.js";
 
 async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 1_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!await predicate()) {
+  while (!(await predicate())) {
     if (Date.now() >= deadline) throw new Error("A condição esperada não ocorreu no prazo.");
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -32,9 +32,7 @@ describe("web server", () => {
   });
 
   after(async () => {
-    await new Promise<void>((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve())),
-    );
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
 
   it("entrega a Home com cabeçalhos de segurança", async () => {
@@ -87,7 +85,7 @@ describe("web server", () => {
       body: JSON.stringify({}),
     });
     assert.equal(response.status, 403);
-    assert.match((await response.json() as { error: string }).error, /desabilitadas/);
+    assert.match(((await response.json()) as { error: string }).error, /desabilitadas/);
   });
 
   it("bloqueia endpoints de código quando desabilitados e restringe o acesso ao host local", async () => {
@@ -97,7 +95,7 @@ describe("web server", () => {
       body: JSON.stringify({ code: "test('x', () => {});" }),
     });
     assert.equal(disabled.status, 403);
-    assert.match((await disabled.json() as { error: string }).error, /desabilitado/);
+    assert.match(((await disabled.json()) as { error: string }).error, /desabilitado/);
 
     const protectedServer = createQaRadarServer({
       allowCodeMode: true,
@@ -117,7 +115,7 @@ describe("web server", () => {
         body: JSON.stringify({}),
       });
       assert.equal(remote.status, 403);
-      assert.match((await remote.json() as { error: string }).error, /execução hospedada/);
+      assert.match(((await remote.json()) as { error: string }).error, /execução hospedada/);
 
       const local = await fetch(`${protectedUrl}/api/code-execution`, {
         method: "POST",
@@ -125,11 +123,9 @@ describe("web server", () => {
         body: JSON.stringify({}),
       });
       assert.equal(local.status, 400);
-      assert.match((await local.json() as { error: string }).error, /arquivo \.spec\.ts/);
+      assert.match(((await local.json()) as { error: string }).error, /arquivo \.spec\.ts/);
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        protectedServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => protectedServer.close((error) => (error ? reject(error) : resolve())));
     }
   });
 
@@ -184,11 +180,8 @@ describe("web server", () => {
         body,
       });
       assert.equal(executionResponse.status, 200);
-      assert.match(
-        executionResponse.headers.get("set-cookie") ?? "",
-        /HttpOnly; SameSite=Strict; Path=\/api\/code-executions\//,
-      );
-      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      assert.match(executionResponse.headers.get("set-cookie") ?? "", /HttpOnly; SameSite=Strict; Path=\/api\/code-executions\//);
+      const execution = (await executionResponse.json()) as { id: string; accessToken: string };
       assert.match(execution.accessToken, /^[A-Za-z0-9_-]{40,}$/);
       assert.notEqual(execution.accessToken, adminToken);
 
@@ -225,33 +218,24 @@ describe("web server", () => {
       assert.equal(artifact.status, 200);
       assert.match(await artifact.text(), /Relatório de evidências/);
 
-      for (const maliciousCode of [
-        'import { readFile } from "node:fs/promises";',
-        "const secret = process.env.QA_RADAR_CODE_MODE_ADMIN_TOKEN;",
-        'import { spawn } from "node:child_process";',
-      ]) {
+      for (const maliciousCode of ['import { readFile } from "node:fs/promises";', "const secret = process.env.QA_RADAR_CODE_MODE_ADMIN_TOKEN;", 'import { spawn } from "node:child_process";']) {
         const blocked = await fetch(`${protectedUrl}/api/code-execution`, {
           method: "POST",
           headers: { ...remoteHeaders, authorization: `Bearer ${adminToken}` },
           body: JSON.stringify({ code: maliciousCode, headed: false }),
         });
         assert.equal(blocked.status, 400);
-        assert.match((await blocked.json() as { error: string }).error, /não (?:é )?permitid[ao]/);
+        assert.match(((await blocked.json()) as { error: string }).error, /não (?:é )?permitid[ao]/);
       }
       assert.equal(executionCount, 1);
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        protectedServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => protectedServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
 
   it("rejeita token administrativo curto", () => {
-    assert.throws(
-      () => createQaRadarServer({ codeModeAdminToken: "curto" }),
-      /entre 32 e 512 bytes/,
-    );
+    assert.throws(() => createQaRadarServer({ codeModeAdminToken: "curto" }), /entre 32 e 512 bytes/);
   });
 
   it("falha fechado quando execução remota não possui runner sandbox", async () => {
@@ -276,11 +260,9 @@ describe("web server", () => {
         }),
       });
       assert.equal(response.status, 503);
-      assert.match((await response.json() as { error: string }).error, /sandbox.+não está configurado/i);
+      assert.match(((await response.json()) as { error: string }).error, /sandbox.+não está configurado/i);
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        serverWithoutSandbox.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => serverWithoutSandbox.close((error) => (error ? reject(error) : resolve())));
     }
   });
 
@@ -307,17 +289,19 @@ describe("web server", () => {
         body: JSON.stringify({ url: "https://example.com" }),
       });
       assert.equal(createdResponse.status, 201);
-      assert.match(
-        createdResponse.headers.get("set-cookie") ?? "",
-        /HttpOnly; SameSite=Strict; Path=\/api\/codegen\//,
-      );
-      const created = await createdResponse.json() as { id: string; accessToken: string };
+      assert.match(createdResponse.headers.get("set-cookie") ?? "", /HttpOnly; SameSite=Strict; Path=\/api\/codegen\//);
+      const created = (await createdResponse.json()) as { id: string; accessToken: string };
       const statusUrl = `${codegenUrl}/api/codegen/${created.id}`;
 
       assert.equal((await fetch(statusUrl)).status, 401);
-      assert.equal((await fetch(statusUrl, {
-        headers: { authorization: "Bearer token-incorreto" },
-      })).status, 403);
+      assert.equal(
+        (
+          await fetch(statusUrl, {
+            headers: { authorization: "Bearer token-incorreto" },
+          })
+        ).status,
+        403,
+      );
       const authorized = await fetch(statusUrl, {
         headers: { authorization: `Bearer ${created.accessToken}` },
       });
@@ -325,9 +309,7 @@ describe("web server", () => {
       assert.deepEqual(await authorized.json(), { status: "recording" });
     } finally {
       processEvents.emit("exit", 0);
-      await new Promise<void>((resolve, reject) =>
-        codegenServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => codegenServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
@@ -354,8 +336,12 @@ describe("web server", () => {
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-"));
     let releaseExecution: (() => void) | undefined;
     let signalStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
-    const release = new Promise<void>((resolve) => { releaseExecution = resolve; });
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseExecution = resolve;
+    });
     const codeServer = createQaRadarServer({
       allowCodeMode: true,
       resultsDir,
@@ -369,23 +355,24 @@ describe("web server", () => {
     await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
     const address = codeServer.address() as AddressInfo;
     const codeUrl = `http://127.0.0.1:${address.port}`;
-    const execute = () => fetch(`${codeUrl}/api/code-execution`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('ok', async () => {});" }),
-    });
+    const execute = () =>
+      fetch(`${codeUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('ok', async () => {});" }),
+      });
 
     try {
       const firstRequest = execute();
       await started;
       const concurrent = await execute();
       assert.equal(concurrent.status, 429);
-      assert.match((await concurrent.json() as { error: string }).error, /execução.+andamento/i);
+      assert.match(((await concurrent.json()) as { error: string }).error, /execução.+andamento/i);
 
       releaseExecution?.();
       const completed = await firstRequest;
       assert.equal(completed.status, 200);
-      const payload = await completed.json() as { id: string };
+      const payload = (await completed.json()) as { id: string };
       const executionDir = join(resultsDir, `code-${payload.id}`);
       await access(executionDir);
       await waitFor(async () => {
@@ -398,9 +385,7 @@ describe("web server", () => {
       });
     } finally {
       releaseExecution?.();
-      await new Promise<void>((resolve, reject) =>
-        codeServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => codeServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
@@ -426,7 +411,7 @@ describe("web server", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('ok', async () => {});" }),
       });
-      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      const execution = (await executionResponse.json()) as { id: string; accessToken: string };
       const authorization = { authorization: `Bearer ${execution.accessToken}` };
 
       const evidenceResponse = await fetch(`${codeUrl}/api/code-executions/${execution.id}/evidence-report`, {
@@ -450,9 +435,7 @@ describe("web server", () => {
       assert.equal(videoResponse.headers.get("content-length"), "video-falso-para-teste".length.toString());
       assert.notEqual(videoResponse.headers.get("transfer-encoding"), "chunked");
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        codeServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => codeServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
@@ -467,23 +450,24 @@ describe("web server", () => {
     await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
     const address = codeServer.address() as AddressInfo;
     const codeUrl = `http://127.0.0.1:${address.port}`;
-    const code = "import { test } from '@playwright/test';\n"
-      + "test('busca', async ({ page }) => {\n"
-      + "  await page.goto('https://example.com');\n"
-      + "  await page.getByRole('button', { name: 'Estou com sorte' }).click();\n"
-      + "});\n";
+    const code =
+      "import { test } from '@playwright/test';\n" +
+      "test('busca', async ({ page }) => {\n" +
+      "  await page.goto('https://example.com');\n" +
+      "  await page.getByRole('button', { name: 'Estou com sorte' }).click();\n" +
+      "});\n";
     try {
       const executionResponse = await fetch(`${codeUrl}/api/code-execution`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code }),
       });
-      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      const execution = (await executionResponse.json()) as { id: string; accessToken: string };
       const authorization = { authorization: `Bearer ${execution.accessToken}` };
 
       const stepsResponse = await fetch(`${codeUrl}/api/code-executions/${execution.id}/steps`, { headers: authorization });
       assert.equal(stepsResponse.status, 200);
-      const { steps } = await stepsResponse.json() as { steps: Array<{ index: number; action: string; description: string }> };
+      const { steps } = (await stepsResponse.json()) as { steps: Array<{ index: number; action: string; description: string }> };
       assert.equal(steps.length, 2);
       assert.match(steps[1]?.description ?? "", /Clicar em await page\.getByRole/);
 
@@ -504,9 +488,7 @@ describe("web server", () => {
       });
       assert.equal(rejected.status, 400);
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        codeServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => codeServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
@@ -530,7 +512,7 @@ describe("web server", () => {
         body: JSON.stringify({}),
       });
       assert.equal(missingUrl.status, 400);
-      assert.match((await missingUrl.json() as { error: string }).error, /Informe a URL/);
+      assert.match(((await missingUrl.json()) as { error: string }).error, /Informe a URL/);
 
       const invalidProtocol = await fetch(`${codegenUrl}/api/codegen`, {
         method: "POST",
@@ -538,7 +520,7 @@ describe("web server", () => {
         body: JSON.stringify({ url: "ftp://example.com" }),
       });
       assert.equal(invalidProtocol.status, 400);
-      assert.match((await invalidProtocol.json() as { error: string }).error, /http ou https/);
+      assert.match(((await invalidProtocol.json()) as { error: string }).error, /http ou https/);
 
       const unknownStatus = await fetch(`${codegenUrl}/api/codegen/${randomUUID()}`, {
         headers: { authorization: "Bearer qualquer-coisa" },
@@ -569,9 +551,7 @@ describe("web server", () => {
       assert.equal(afterFailure.status, 201);
     } finally {
       processEvents.emit("exit", 0);
-      await new Promise<void>((resolve, reject) =>
-        codegenServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => codegenServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
@@ -593,7 +573,7 @@ describe("web server", () => {
         body: "{ isto não é JSON",
       });
       assert.equal(malformed.status, 400);
-      assert.match((await malformed.json() as { error: string }).error, /Corpo JSON inválido/);
+      assert.match(((await malformed.json()) as { error: string }).error, /Corpo JSON inválido/);
 
       const failed = await fetch(`${codeUrl}/api/code-execution`, {
         method: "POST",
@@ -601,13 +581,11 @@ describe("web server", () => {
         body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('x', async () => { throw new Error('falhou'); });" }),
       });
       assert.equal(failed.status, 422);
-      const body = await failed.json() as { status: string; report: { stats: { unexpected: number } } };
+      const body = (await failed.json()) as { status: string; report: { stats: { unexpected: number } } };
       assert.equal(body.status, "failed");
       assert.equal(body.report.stats.unexpected, 1);
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        codeServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => codeServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
@@ -633,7 +611,7 @@ describe("web server", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code: "import { test } from '@playwright/test'; test('ok', async () => {});" }),
       });
-      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      const execution = (await executionResponse.json()) as { id: string; accessToken: string };
       const authorization = { authorization: `Bearer ${execution.accessToken}` };
       const wrongAuthorization = { authorization: "Bearer token-incorreto" };
       const unknownId = randomUUID();
@@ -672,9 +650,7 @@ describe("web server", () => {
       const unknownExecutionArtifact = await fetch(`${codeUrl}/api/code-executions/${unknownId}/code-evidence.html`, { headers: authorization });
       assert.equal(unknownExecutionArtifact.status, 404);
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        codeServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => codeServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
@@ -697,22 +673,23 @@ describe("web server", () => {
     await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
     const address = codeServer.address() as AddressInfo;
     const codeUrl = `http://127.0.0.1:${address.port}`;
-    const code = "import { test } from '@playwright/test';\n"
-      + "test('busca', async ({ page }) => {\n"
-      + "  await page.goto('https://example.com');\n"
-      + "  await page.getByRole('button', { name: 'Buscar' }).click();\n"
-      + "});\n";
+    const code =
+      "import { test } from '@playwright/test';\n" +
+      "test('busca', async ({ page }) => {\n" +
+      "  await page.goto('https://example.com');\n" +
+      "  await page.getByRole('button', { name: 'Buscar' }).click();\n" +
+      "});\n";
     try {
       const executionResponse = await fetch(`${codeUrl}/api/code-execution`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code }),
       });
-      const execution = await executionResponse.json() as { id: string; accessToken: string };
+      const execution = (await executionResponse.json()) as { id: string; accessToken: string };
       const authorization = { authorization: `Bearer ${execution.accessToken}` };
 
       const stepsResponse = await fetch(`${codeUrl}/api/code-executions/${execution.id}/steps`, { headers: authorization });
-      const { steps } = await stepsResponse.json() as { steps: Array<{ index: number; action: string }> };
+      const { steps } = (await stepsResponse.json()) as { steps: Array<{ index: number; action: string }> };
       assert.equal(steps.length, 2);
       assert.equal(steps[0]?.action, "goto");
       assert.equal(steps[1]?.action, "click");
@@ -726,9 +703,7 @@ describe("web server", () => {
       const images = [...html.matchAll(/src="data:image\/png;base64,([^"]+)"/g)].map((match) => Buffer.from(match[1] ?? "", "base64").toString("utf8"));
       assert.deepEqual(images, ["screenshot-do-goto", "screenshot-do-click"]);
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        codeServer.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => codeServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
@@ -739,23 +714,25 @@ describe("web server", () => {
       allowPrivateTargets: true,
       maxSitemapPages: 5,
       maxJourneySteps: 2,
-      journeyRunner: async (_options, _definition, _environment, signal) => new Promise<never>((_resolve, reject) => {
-        const abort = () => reject(signal?.reason ?? new Error("abortada"));
-        if (signal?.aborted) abort();
-        else signal?.addEventListener("abort", abort, { once: true });
-      }),
+      journeyRunner: async (_options, _definition, _environment, signal) =>
+        new Promise<never>((_resolve, reject) => {
+          const abort = () => reject(signal?.reason ?? new Error("abortada"));
+          if (signal?.aborted) abort();
+          else signal?.addEventListener("abort", abort, { once: true });
+        }),
     });
     await new Promise<void>((resolve) => journeyServer.listen(0, "127.0.0.1", resolve));
     const address = journeyServer.address() as AddressInfo;
     const journeyUrl = `http://127.0.0.1:${address.port}`;
-    const request = (steps: unknown[]) => fetch(`${journeyUrl}/api/journeys`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        url: journeyUrl,
-        journey: { schemaVersion: "1.0", name: "Protegida", steps },
-      }),
-    });
+    const request = (steps: unknown[]) =>
+      fetch(`${journeyUrl}/api/journeys`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: journeyUrl,
+          journey: { schemaVersion: "1.0", name: "Protegida", steps },
+        }),
+      });
     try {
       const excessive = await request([
         { action: "assertVisible", selector: "body" },
@@ -763,10 +740,10 @@ describe("web server", () => {
         { action: "assertVisible", selector: "footer" },
       ]);
       assert.equal(excessive.status, 400);
-      assert.match((await excessive.json() as { error: string }).error, /no máximo 2 passos/);
+      assert.match(((await excessive.json()) as { error: string }).error, /no máximo 2 passos/);
 
       const createdResponse = await request([{ action: "assertVisible", selector: "body" }]);
-      const created = await createdResponse.json() as { id: string; accessToken: string; status: string };
+      const created = (await createdResponse.json()) as { id: string; accessToken: string; status: string };
       assert.equal(createdResponse.status, 202);
       assert.equal(created.status, "running");
       assert.match(createdResponse.headers.get("set-cookie") ?? "", /HttpOnly; SameSite=Strict/);
@@ -777,7 +754,7 @@ describe("web server", () => {
       assert.equal(cancel.status, 202);
       await waitFor(async () => {
         const response = await fetch(`${journeyUrl}/api/journeys/${created.id}`, { headers });
-        return (await response.json() as { status: string }).status === "cancelled";
+        return ((await response.json()) as { status: string }).status === "cancelled";
       });
     } finally {
       await new Promise<void>((resolve) => journeyServer.close(() => resolve()));
@@ -789,11 +766,12 @@ describe("web server", () => {
       allowJourneys: true,
       allowPrivateTargets: true,
       maxJourneyDurationMs: 25,
-      journeyRunner: async (_options, _definition, _environment, signal) => new Promise<never>((_resolve, reject) => {
-        const abort = () => reject(signal?.reason ?? new Error("abortada"));
-        if (signal?.aborted) abort();
-        else signal?.addEventListener("abort", abort, { once: true });
-      }),
+      journeyRunner: async (_options, _definition, _environment, signal) =>
+        new Promise<never>((_resolve, reject) => {
+          const abort = () => reject(signal?.reason ?? new Error("abortada"));
+          if (signal?.aborted) abort();
+          else signal?.addEventListener("abort", abort, { once: true });
+        }),
     });
     await new Promise<void>((resolve) => journeyServer.listen(0, "127.0.0.1", resolve));
     const address = journeyServer.address() as AddressInfo;
@@ -807,11 +785,11 @@ describe("web server", () => {
           journey: { schemaVersion: "1.0", name: "Timeout", steps: [{ action: "assertVisible", selector: "body" }] },
         }),
       });
-      const created = await response.json() as { id: string; accessToken: string };
+      const created = (await response.json()) as { id: string; accessToken: string };
       const headers = { authorization: `Bearer ${created.accessToken}` };
       await waitFor(async () => {
         const status = await fetch(`${journeyUrl}/api/journeys/${created.id}`, { headers });
-        const job = await status.json() as { status: string; error?: string };
+        const job = (await status.json()) as { status: string; error?: string };
         return job.status === "failed" && /limite global de 25 ms/.test(job.error ?? "");
       });
     } finally {
@@ -826,6 +804,24 @@ describe("web server", () => {
     assert.deepEqual(body, { status: "ok", active: 0, queued: 0, jobs: 0 });
   });
 
+  it("reporta o estado de saúde como erro quando resultsDir não pode ser criado", async () => {
+    const tempParent = await mkdtemp(join(tmpdir(), "qa-radar-health-"));
+    const resultsDir = join(tempParent, "blocked-by-a-file", "results");
+    await writeFile(join(tempParent, "blocked-by-a-file"), "");
+    const unhealthyServer = createQaRadarServer({ resultsDir });
+    await new Promise<void>((resolve) => unhealthyServer.listen(0, "127.0.0.1", resolve));
+    const address = unhealthyServer.address() as AddressInfo;
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/health`);
+      const body = (await response.json()) as { status: string; reason: string };
+      assert.equal(response.status, 503);
+      assert.deepEqual(body, { status: "error", reason: "results-dir-unwritable" });
+    } finally {
+      await new Promise<void>((resolve, reject) => unhealthyServer.close((error) => (error ? reject(error) : resolve())));
+      await rm(tempParent, { recursive: true, force: true });
+    }
+  });
+
   it("valida entradas antes de criar uma análise", async () => {
     const response = await fetch(`${baseUrl}/api/scans`, {
       method: "POST",
@@ -838,12 +834,7 @@ describe("web server", () => {
   });
 
   it("bloqueia destinos privados e limites abusivos", async () => {
-    for (const payload of [
-      { url: "http://127.0.0.1:8080" },
-      { url: "http://10.0.0.1" },
-      { url: "https://example.com", timeoutMs: 120001 },
-      { url: "https://example.com", settleMs: 30001 },
-    ]) {
+    for (const payload of [{ url: "http://127.0.0.1:8080" }, { url: "http://10.0.0.1" }, { url: "https://example.com", timeoutMs: 120001 }, { url: "https://example.com", settleMs: 30001 }]) {
       const response = await fetch(`${baseUrl}/api/scans`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -868,11 +859,12 @@ describe("web server", () => {
     await new Promise<void>((resolve) => limitedServer.listen(0, "127.0.0.1", resolve));
     const address = limitedServer.address() as AddressInfo;
     const limitedUrl = `http://127.0.0.1:${address.port}`;
-    const request = () => fetch(`${limitedUrl}/api/scans`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: limitedUrl }),
-    });
+    const request = () =>
+      fetch(`${limitedUrl}/api/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: limitedUrl }),
+      });
     try {
       const accepted = await request();
       assert.equal(accepted.status, 202);
@@ -946,11 +938,12 @@ describe("web server", () => {
     const timeoutServer = createQaRadarServer({
       allowPrivateTargets: true,
       maxJobDurationMs: 25,
-      scanRunner: async (_options, control) => new Promise<never>((_resolve, reject) => {
-        const fail = () => reject(control?.signal?.reason ?? new Error("abortada"));
-        if (control?.signal?.aborted) fail();
-        else control?.signal?.addEventListener("abort", fail, { once: true });
-      }),
+      scanRunner: async (_options, control) =>
+        new Promise<never>((_resolve, reject) => {
+          const fail = () => reject(control?.signal?.reason ?? new Error("abortada"));
+          if (control?.signal?.aborted) fail();
+          else control?.signal?.addEventListener("abort", fail, { once: true });
+        }),
     });
     await new Promise<void>((resolve) => timeoutServer.listen(0, "127.0.0.1", resolve));
     const address = timeoutServer.address() as AddressInfo;
@@ -961,11 +954,11 @@ describe("web server", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: timeoutUrl }),
       });
-      const created = await createResponse.json() as { id: string; accessToken: string };
+      const created = (await createResponse.json()) as { id: string; accessToken: string };
       const headers = { authorization: `Bearer ${created.accessToken}` };
       await waitFor(async () => {
         const response = await fetch(`${timeoutUrl}/api/scans/${created.id}`, { headers });
-        const job = await response.json() as { status: string; error?: string };
+        const job = (await response.json()) as { status: string; error?: string };
         return job.status === "failed" && /limite global de 25 ms/.test(job.error ?? "");
       });
     } finally {
@@ -985,13 +978,16 @@ describe("web server", () => {
     const accessToken = "recovery-test-token";
     await mkdir(outputDir);
     await writeFile(join(outputDir, ".access-token.sha256"), createHash("sha256").update(accessToken).digest("hex"));
-    await writeFile(join(outputDir, "report.json"), JSON.stringify({
-      tool: "QA Radar",
-      version: "3.0.1",
-      startedAt: "2026-07-14T00:00:00.000Z",
-      targetUrl: "https://example.com/",
-      issues: [],
-    }));
+    await writeFile(
+      join(outputDir, "report.json"),
+      JSON.stringify({
+        tool: "QA Radar",
+        version: "3.0.1",
+        startedAt: "2026-07-14T00:00:00.000Z",
+        targetUrl: "https://example.com/",
+        issues: [],
+      }),
+    );
     await writeFile(join(outputDir, "report.html"), "<h1>Relatório recuperado</h1>");
     const recoveryServer = createQaRadarServer({ resultsDir });
     await new Promise<void>((resolve) => recoveryServer.listen(0, "127.0.0.1", resolve));
@@ -1035,11 +1031,10 @@ describe("web server", () => {
       await waitFor(() => events.some((event) => event.event === "scan.expired"));
       const statusResponse = await fetch(`${expirationUrl}/api/scans/${created.id}`);
       assert.equal(statusResponse.status, 404);
-      assert.deepEqual(events.map((event) => event.event), [
-        "scan.started",
-        "scan.failed",
-        "scan.expired",
-      ]);
+      assert.deepEqual(
+        events.map((event) => event.event),
+        ["scan.started", "scan.failed", "scan.expired"],
+      );
       assert.equal(events.at(-1)?.jobs, 0);
     } finally {
       await new Promise<void>((resolve) => expirationServer.close(() => resolve()));

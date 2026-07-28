@@ -36,28 +36,32 @@ function categoryLabel(category: Issue["category"]): string {
 
 export function resourceTypeLabel(resourceType: string | undefined): string {
   if (!resourceType) return "Página ou requisição de rede";
-  return {
-    document: "Página principal",
-    fetch: "Chamada da aplicação",
-    xhr: "Chamada da aplicação (XHR)",
-    script: "JavaScript",
-    stylesheet: "Folha de estilos",
-    image: "Imagem",
-    font: "Fonte",
-    media: "Áudio ou vídeo",
-    websocket: "WebSocket",
-  }[resourceType] ?? resourceType;
+  return (
+    {
+      document: "Página principal",
+      fetch: "Chamada da aplicação",
+      xhr: "Chamada da aplicação (XHR)",
+      script: "JavaScript",
+      stylesheet: "Folha de estilos",
+      image: "Imagem",
+      font: "Fonte",
+      media: "Áudio ou vídeo",
+      websocket: "WebSocket",
+    }[resourceType] ?? resourceType
+  );
 }
 
 function issueLine(issue: Issue): string {
   const details = [issue.method, issue.status, issue.resourceType ? resourceTypeLabel(issue.resourceType) : undefined].filter(Boolean).join(" · ");
   const occurrence = issue.occurrences > 1 ? ` (${issue.occurrences}x)` : "";
-  return `${issue.title ?? issue.message}${occurrence}${details ? ` [${details}]` : ""}` +
+  return (
+    `${issue.title ?? issue.message}${occurrence}${details ? ` [${details}]` : ""}` +
     `${issue.impact ? `\n    Impacto: ${issue.impact}` : ""}` +
     `${issue.recommendation ? `\n    Ação: ${issue.recommendation}` : ""}` +
     `${issue.url ? `\n    URL: ${issue.url}` : ""}` +
     `${issue.referenceUrl ? `\n    Referência: ${issue.referenceUrl}` : ""}` +
-    `\n    Técnico: ${issue.message}`;
+    `\n    Técnico: ${issue.message}`
+  );
 }
 
 export function printConsoleReport(report: ScanReport): void {
@@ -71,7 +75,7 @@ export function printConsoleReport(report: ScanReport): void {
   console.log(`Duração:    ${report.durationMs} ms`);
   if (report.pages) console.log(`Cobertura:  ${report.pages.length} página(s)`);
   if (report.performance) {
-    const metric = (value: number | undefined, suffix: string): string => value === undefined ? "N/A" : `${value}${suffix}`;
+    const metric = (value: number | undefined, suffix: string): string => (value === undefined ? "N/A" : `${value}${suffix}`);
     console.log(
       `Performance: TTFB ${metric(report.performance.ttfbMs, " ms")} · ` +
         `FCP ${metric(report.performance.fcpMs, " ms")} · ` +
@@ -79,7 +83,7 @@ export function printConsoleReport(report: ScanReport): void {
     );
   }
   if (report.lighthouse) {
-    const score = (value: number | undefined) => value === undefined ? "N/A" : Math.round(value * 100);
+    const score = (value: number | undefined) => (value === undefined ? "N/A" : Math.round(value * 100));
     console.log(`Lighthouse: Performance ${score(report.lighthouse.performance)} · Boas práticas ${score(report.lighthouse.bestPractices)} · SEO ${score(report.lighthouse.seo)}`);
   }
   if (report.scanStatus === "partial") console.log(`Execução:   ${paint("PARCIAL", "yellow")} · DOM indisponível ou navegação instável`);
@@ -145,40 +149,46 @@ export function createGitHubAnnotations(report: ScanReport): string[] {
     .map((issue) => {
       const level = issue.severity === "error" ? "error" : "warning";
       const title = escapeWorkflowCommand(`QA Radar · ${issue.ruleId}`, true);
-      const message = escapeWorkflowCommand([
-        issue.title ?? issue.message,
-        issue.impact,
-        issue.url,
-      ].filter(Boolean).join(" — "));
+      const message = escapeWorkflowCommand([issue.title ?? issue.message, issue.impact, issue.url].filter(Boolean).join(" — "));
       return `::${level} title=${title}::${message}`;
     });
 }
 
 export function createJunitReport(report: ScanReport): string {
   const failures = report.issues.filter((issue) => issueFailsGate(issue, report)).length;
-  const testCases = report.issues.length > 0
-    ? report.issues.map((issue) => {
-      const name = `${issue.ruleId}: ${issue.title ?? issue.message}`;
-      const detail = [issue.message, issue.url].filter(Boolean).join("\n");
-      const outcome = issueFailsGate(issue, report)
-        ? `<failure message="${escapeXml(issue.title ?? issue.message)}" type="${escapeXml(issue.ruleId)}">${escapeXml(detail)}</failure>`
-        : `<system-out>${escapeXml(`${issue.baselineStatus ?? "observed"}: ${detail}`)}</system-out>`;
-      return `  <testcase classname="qa-radar.${escapeXml(issue.category)}" name="${escapeXml(name)}">${outcome}</testcase>`;
-    }).join("\n")
-    : "  <testcase classname=\"qa-radar\" name=\"scan completed\"/>";
+  const testCases =
+    report.issues.length > 0
+      ? report.issues
+          .map((issue) => {
+            const name = `${issue.ruleId}: ${issue.title ?? issue.message}`;
+            const detail = [issue.message, issue.url].filter(Boolean).join("\n");
+            const outcome = issueFailsGate(issue, report)
+              ? `<failure message="${escapeXml(issue.title ?? issue.message)}" type="${escapeXml(issue.ruleId)}">${escapeXml(detail)}</failure>`
+              : `<system-out>${escapeXml(`${issue.baselineStatus ?? "observed"}: ${detail}`)}</system-out>`;
+            return `  <testcase classname="qa-radar.${escapeXml(issue.category)}" name="${escapeXml(name)}">${outcome}</testcase>`;
+          })
+          .join("\n")
+      : '  <testcase classname="qa-radar" name="scan completed"/>';
   const tests = Math.max(report.issues.length, 1);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="QA Radar" tests="${tests}" failures="${failures}" errors="0" time="${(report.durationMs / 1000).toFixed(3)}" timestamp="${escapeXml(report.startedAt)}">\n${testCases}\n</testsuite>\n`;
 }
 
 export function createSarifReport(report: ScanReport): string {
-  const rules = [...new Map(report.issues.map((issue) => [issue.ruleId, {
-    id: issue.ruleId,
-    name: issue.ruleId.replaceAll(".", "_"),
-    shortDescription: { text: issue.title ?? issue.message },
-    help: { text: issue.recommendation ?? "Consulte o relatório do QA Radar para investigar a ocorrência." },
-    ...(issue.referenceUrl ? { helpUri: issue.referenceUrl } : {}),
-    properties: { category: issue.category },
-  }])).values()];
+  const rules = [
+    ...new Map(
+      report.issues.map((issue) => [
+        issue.ruleId,
+        {
+          id: issue.ruleId,
+          name: issue.ruleId.replaceAll(".", "_"),
+          shortDescription: { text: issue.title ?? issue.message },
+          help: { text: issue.recommendation ?? "Consulte o relatório do QA Radar para investigar a ocorrência." },
+          ...(issue.referenceUrl ? { helpUri: issue.referenceUrl } : {}),
+          properties: { category: issue.category },
+        },
+      ]),
+    ).values(),
+  ];
   const results = report.issues.map((issue) => ({
     ruleId: issue.ruleId,
     level: issue.severity === "error" ? "error" : "warning",
@@ -193,16 +203,22 @@ export function createSarifReport(report: ScanReport): string {
       ...(issue.status ? { httpStatus: issue.status } : {}),
     },
   }));
-  return `${JSON.stringify({
-    $schema: "https://json.schemastore.org/sarif-2.1.0.json",
-    version: "2.1.0",
-    runs: [{
-      tool: { driver: { name: report.tool, version: report.version, informationUri: "https://github.com/", rules } },
-      automationDetails: { id: [report.project, report.environment, report.browser].filter(Boolean).join("/") || report.browser },
-      results,
-      properties: { scanStatus: report.scanStatus, passed: report.passed, targetUrl: report.targetUrl },
-    }],
-  }, null, 2)}\n`;
+  return `${JSON.stringify(
+    {
+      $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+      version: "2.1.0",
+      runs: [
+        {
+          tool: { driver: { name: report.tool, version: report.version, informationUri: "https://github.com/", rules } },
+          automationDetails: { id: [report.project, report.environment, report.browser].filter(Boolean).join("/") || report.browser },
+          results,
+          properties: { scanStatus: report.scanStatus, passed: report.passed, targetUrl: report.targetUrl },
+        },
+      ],
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 export function createHtmlReport(report: ScanReport): string {

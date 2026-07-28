@@ -27,15 +27,14 @@ export function tokenMatches(token: string, expectedHash: string): boolean {
 
 export function bearerToken(request: IncomingMessage): string | undefined {
   const authorization = request.headers.authorization;
-  return authorization?.startsWith("Bearer ")
-    ? authorization.slice(7).trim() || undefined
-    : undefined;
+  return authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() || undefined : undefined;
 }
 
 export function requestToken(request: IncomingMessage): string | undefined {
   const authorization = bearerToken(request);
   if (authorization) return authorization;
-  const cookie = request.headers.cookie?.split(";")
+  const cookie = request.headers.cookie
+    ?.split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith("qa_radar_access="));
   return cookie ? decodeURIComponent(cookie.slice("qa_radar_access=".length)) : undefined;
@@ -51,8 +50,7 @@ export function requireAccess(request: IncomingMessage, response: ServerResponse
 
 export function accessCookie(request: IncomingMessage, path: string, token: string, retentionMs: number, trustProxy: boolean): string {
   const forwardedProto = request.headers["x-forwarded-proto"];
-  const secure = Boolean((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted) ||
-    (trustProxy && forwardedProto === "https");
+  const secure = Boolean((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted) || (trustProxy && forwardedProto === "https");
   return `qa_radar_access=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=${path}; Max-Age=${Math.ceil(retentionMs / 1000)}${secure ? "; Secure" : ""}`;
 }
 

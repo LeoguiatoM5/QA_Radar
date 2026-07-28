@@ -34,9 +34,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
         const value = element.getAttribute(attr);
         if (value) return `${tag}[${attr}="${CSS.escape(value)}"]`;
       }
-      const siblings = element.parentElement
-        ? [...element.parentElement.children].filter((sibling) => sibling.tagName === element.tagName)
-        : [];
+      const siblings = element.parentElement ? [...element.parentElement.children].filter((sibling) => sibling.tagName === element.tagName) : [];
       return `${tag}:nth-of-type(${Math.max(siblings.indexOf(element), 0) + 1})`;
     };
     const boxFor = (element: HTMLElement): Finding["box"] => {
@@ -50,12 +48,7 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
       };
     };
     const describe = (element: HTMLElement): string => {
-      const detail =
-        element.getAttribute("alt") ||
-        element.getAttribute("aria-label") ||
-        element.getAttribute("title") ||
-        element.textContent?.trim().slice(0, 60) ||
-        element.tagName.toLowerCase();
+      const detail = element.getAttribute("alt") || element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent?.trim().slice(0, 60) || element.tagName.toLowerCase();
       return `${element.tagName.toLowerCase()} · ${detail}`;
     };
     const add = (finding: Omit<Finding, "selector" | "element" | "box">, element: HTMLElement): void => {
@@ -69,17 +62,20 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
 
     for (const image of document.querySelectorAll<HTMLImageElement>("img")) {
       if (image.complete && image.naturalWidth === 0) {
-        add({
-          ruleId: "element.image.broken",
-          category: "element",
-          severity: "error",
-          title: "Imagem quebrada na página",
-          impact: "O usuário verá um espaço vazio ou o ícone de imagem quebrada.",
-          recommendation: "Corrija o endereço da imagem ou publique o arquivo ausente.",
-          message: "A imagem terminou de carregar, mas o navegador não conseguiu decodificar conteúdo visual.",
-          url: image.currentSrc || image.src || undefined,
-          occurrences: 1,
-        }, image);
+        add(
+          {
+            ruleId: "element.image.broken",
+            category: "element",
+            severity: "error",
+            title: "Imagem quebrada na página",
+            impact: "O usuário verá um espaço vazio ou o ícone de imagem quebrada.",
+            recommendation: "Corrija o endereço da imagem ou publique o arquivo ausente.",
+            message: "A imagem terminou de carregar, mas o navegador não conseguiu decodificar conteúdo visual.",
+            url: image.currentSrc || image.src || undefined,
+            occurrences: 1,
+          },
+          image,
+        );
       }
     }
 
@@ -95,17 +91,20 @@ async function inspectPageElements(page: Page, targetUrl: string): Promise<Issue
       if (elements.length < 2) continue;
       const first = elements[0];
       if (!first) continue;
-      add({
-        ruleId: "element.id.duplicate",
-        category: "element",
-        severity: "warning",
-        title: "Identificador duplicado no HTML",
-        impact: "Labels, automações e JavaScript podem encontrar o elemento errado.",
-        recommendation: `Mantenha o id "${id}" em apenas um elemento e use classes nos demais.`,
-        message: `${elements.length} elementos utilizam o mesmo id "${id}".`,
-        url: undefined,
-        occurrences: elements.length,
-      }, first);
+      add(
+        {
+          ruleId: "element.id.duplicate",
+          category: "element",
+          severity: "warning",
+          title: "Identificador duplicado no HTML",
+          impact: "Labels, automações e JavaScript podem encontrar o elemento errado.",
+          recommendation: `Mantenha o id "${id}" em apenas um elemento e use classes nos demais.`,
+          message: `${elements.length} elementos utilizam o mesmo id "${id}".`,
+          url: undefined,
+          occurrences: elements.length,
+        },
+        first,
+      );
     }
     return result;
   });
@@ -151,15 +150,11 @@ function domInspectionIssue(page: Page, targetUrl: string, error: unknown): Issu
   };
 }
 
-export async function inspectStablePage(
-  page: Page,
-  targetUrl: string,
-): Promise<{ issues: IssueInput[]; partial: boolean }> {
+export async function inspectStablePage(page: Page, targetUrl: string): Promise<{ issues: IssueInput[]; partial: boolean }> {
   try {
     return { issues: await inspectPageElements(page, targetUrl), partial: false };
   } catch (firstError) {
-    const contextChanged = /execution context was destroyed|cannot find context|most likely because of a navigation/i
-      .test(firstError instanceof Error ? firstError.message : String(firstError));
+    const contextChanged = /execution context was destroyed|cannot find context|most likely because of a navigation/i.test(firstError instanceof Error ? firstError.message : String(firstError));
     if (contextChanged && !page.isClosed()) {
       try {
         await page.waitForLoadState("domcontentloaded", { timeout: 2_000 });

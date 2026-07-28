@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  SANDBOX_PROTOCOL_VERSION,
-  SandboxRequestVerifier,
-  createSandboxCodeRunner,
-  sandboxRequestSignature,
-  verifySandboxRequestSignature,
-} from "../src/sandbox-client.js";
+import { SANDBOX_PROTOCOL_VERSION, SandboxRequestVerifier, createSandboxCodeRunner, sandboxRequestSignature, verifySandboxRequestSignature } from "../src/sandbox-client.js";
 
 const SIGNING_SECRET = "sandbox-signing-secret-com-mais-de-32-bytes";
 
@@ -31,19 +25,29 @@ describe("protocolo do runner sandbox", () => {
         maxOutputBytes: 4_096,
         maxMemoryMiB: 256,
       });
-      assert.equal(verifySandboxRequestSignature(SIGNING_SECRET, {
-        timestamp: headers.get("x-qa-radar-timestamp") ?? "",
-        requestId: headers.get("x-qa-radar-request-id") ?? "",
-        signature: headers.get("x-qa-radar-signature") ?? "",
-        body,
-      }, Date.parse(headers.get("x-qa-radar-timestamp") ?? "")), true);
-      return new Response(JSON.stringify({
-        schemaVersion: SANDBOX_PROTOCOL_VERSION,
-        executionId: request.executionId,
-        exitCode: 0,
-        stdout: '{"stats":{"expected":1}}',
-        stderr: "",
-      }), { status: 200 });
+      assert.equal(
+        verifySandboxRequestSignature(
+          SIGNING_SECRET,
+          {
+            timestamp: headers.get("x-qa-radar-timestamp") ?? "",
+            requestId: headers.get("x-qa-radar-request-id") ?? "",
+            signature: headers.get("x-qa-radar-signature") ?? "",
+            body,
+          },
+          Date.parse(headers.get("x-qa-radar-timestamp") ?? ""),
+        ),
+        true,
+      );
+      return new Response(
+        JSON.stringify({
+          schemaVersion: SANDBOX_PROTOCOL_VERSION,
+          executionId: request.executionId,
+          exitCode: 0,
+          stdout: '{"stats":{"expected":1}}',
+          stderr: "",
+        }),
+        { status: 200 },
+      );
     }) as typeof fetch;
     const runner = createSandboxCodeRunner({
       baseUrl: "https://sandbox.example",
@@ -73,21 +77,9 @@ describe("protocolo do runner sandbox", () => {
       body: '{"job":"abc"}',
     };
     const signature = sandboxRequestSignature(SIGNING_SECRET, input);
-    assert.equal(verifySandboxRequestSignature(
-      SIGNING_SECRET,
-      { ...input, signature },
-      Date.parse("2026-07-25T12:04:00.000Z"),
-    ), true);
-    assert.equal(verifySandboxRequestSignature(
-      SIGNING_SECRET,
-      { ...input, body: '{"job":"alterado"}', signature },
-      Date.parse("2026-07-25T12:04:00.000Z"),
-    ), false);
-    assert.equal(verifySandboxRequestSignature(
-      SIGNING_SECRET,
-      { ...input, signature },
-      Date.parse("2026-07-25T12:06:00.000Z"),
-    ), false);
+    assert.equal(verifySandboxRequestSignature(SIGNING_SECRET, { ...input, signature }, Date.parse("2026-07-25T12:04:00.000Z")), true);
+    assert.equal(verifySandboxRequestSignature(SIGNING_SECRET, { ...input, body: '{"job":"alterado"}', signature }, Date.parse("2026-07-25T12:04:00.000Z")), false);
+    assert.equal(verifySandboxRequestSignature(SIGNING_SECRET, { ...input, signature }, Date.parse("2026-07-25T12:06:00.000Z")), false);
   });
 
   it("consome o nonce uma única vez para impedir replay", () => {
@@ -107,27 +99,24 @@ describe("protocolo do runner sandbox", () => {
   });
 
   it("exige HTTPS, secret forte e limite de resposta", async () => {
-    assert.throws(
-      () => createSandboxCodeRunner({ baseUrl: "http://sandbox.example", signingSecret: SIGNING_SECRET }),
-      /deve usar HTTPS/,
-    );
-    assert.throws(
-      () => createSandboxCodeRunner({ baseUrl: "https://sandbox.example", signingSecret: "curto" }),
-      /entre 32 e 512 bytes/,
-    );
+    assert.throws(() => createSandboxCodeRunner({ baseUrl: "http://sandbox.example", signingSecret: SIGNING_SECRET }), /deve usar HTTPS/);
+    assert.throws(() => createSandboxCodeRunner({ baseUrl: "https://sandbox.example", signingSecret: "curto" }), /entre 32 e 512 bytes/);
 
     const runner = createSandboxCodeRunner({
       baseUrl: "https://sandbox.example",
       signingSecret: SIGNING_SECRET,
       fetcher: (async (_input: string | URL | Request, init?: RequestInit) => {
         const request = JSON.parse(String(init?.body)) as { executionId: string };
-        return new Response(JSON.stringify({
-          schemaVersion: SANDBOX_PROTOCOL_VERSION,
-          executionId: request.executionId,
-          exitCode: 0,
-          stdout: "x".repeat(33),
-          stderr: "",
-        }), { status: 200 });
+        return new Response(
+          JSON.stringify({
+            schemaVersion: SANDBOX_PROTOCOL_VERSION,
+            executionId: request.executionId,
+            exitCode: 0,
+            stdout: "x".repeat(33),
+            stderr: "",
+          }),
+          { status: 200 },
+        );
       }) as typeof fetch,
     });
     await assert.rejects(

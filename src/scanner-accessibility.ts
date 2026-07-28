@@ -27,27 +27,29 @@ export function axeViolationsToIssues(violations: AxeViolationFinding[], url: st
   return violations.flatMap((violation) => {
     const first = violation.nodes[0];
     if (!first) return [];
-    return [{
-      ruleId: `axe.${violation.id}`,
-      category: "accessibility" as const,
-      severity: severityFor(violation.impact),
-      title: violation.help,
-      impact: violation.description,
-      recommendation: `Corrija os elementos conforme a regra ${violation.id}. Referência: ${violation.helpUrl}`,
-      message: first.failureSummary ?? violation.description,
-      method: undefined,
-      status: undefined,
-      url,
-      resourceType: "document",
-      source: "axe-core",
-      occurrences: violation.nodes.length,
-      evidence: {
-        selector: first.target,
-        element: first.html,
-        label: violation.help,
-        boundingBox: first.box,
+    return [
+      {
+        ruleId: `axe.${violation.id}`,
+        category: "accessibility" as const,
+        severity: severityFor(violation.impact),
+        title: violation.help,
+        impact: violation.description,
+        recommendation: `Corrija os elementos conforme a regra ${violation.id}. Referência: ${violation.helpUrl}`,
+        message: first.failureSummary ?? violation.description,
+        method: undefined,
+        status: undefined,
+        url,
+        resourceType: "document",
+        source: "axe-core",
+        occurrences: violation.nodes.length,
+        evidence: {
+          selector: first.target,
+          element: first.html,
+          label: violation.help,
+          boundingBox: first.box,
+        },
       },
-    }];
+    ];
   });
 }
 
@@ -59,7 +61,10 @@ export async function auditAccessibility(page: Page, targetUrl: string): Promise
     const violations = await page.evaluate(async () => {
       type AxeWindow = typeof globalThis & {
         axe: {
-          run: (context: Document, options: { resultTypes: string[] }) => Promise<{
+          run: (
+            context: Document,
+            options: { resultTypes: string[] },
+          ) => Promise<{
             violations: Array<{
               id: string;
               impact: "minor" | "moderate" | "serious" | "critical" | null;
@@ -92,20 +97,22 @@ export async function auditAccessibility(page: Page, targetUrl: string): Promise
     });
     return axeViolationsToIssues(violations, page.url() || targetUrl);
   } catch (error) {
-    return [{
-      ruleId: "accessibility.audit-failed",
-      category: "accessibility",
-      severity: "warning",
-      title: "Auditoria automática de acessibilidade indisponível",
-      impact: "A página foi analisada, mas algumas barreiras de acessibilidade podem não ter sido identificadas.",
-      recommendation: "Verifique scripts bloqueados pela página e repita a análise; complemente com avaliação manual.",
-      message: cleanMessage(error instanceof Error ? error.message : String(error)),
-      method: undefined,
-      status: undefined,
-      url: page.url() || targetUrl,
-      resourceType: "document",
-      source: "axe-core",
-      occurrences: 1,
-    }];
+    return [
+      {
+        ruleId: "accessibility.audit-failed",
+        category: "accessibility",
+        severity: "warning",
+        title: "Auditoria automática de acessibilidade indisponível",
+        impact: "A página foi analisada, mas algumas barreiras de acessibilidade podem não ter sido identificadas.",
+        recommendation: "Verifique scripts bloqueados pela página e repita a análise; complemente com avaliação manual.",
+        message: cleanMessage(error instanceof Error ? error.message : String(error)),
+        method: undefined,
+        status: undefined,
+        url: page.url() || targetUrl,
+        resourceType: "document",
+        source: "axe-core",
+        occurrences: 1,
+      },
+    ];
   }
 }

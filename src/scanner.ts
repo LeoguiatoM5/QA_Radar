@@ -1,23 +1,9 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  chromium,
-  firefox,
-  webkit,
-  type Browser,
-  type BrowserType,
-  type Page,
-} from "playwright";
+import { chromium, firefox, webkit, type Browser, type BrowserType, type Page } from "playwright";
 import { deduplicateIssues, passesQualityGate, summarizeIssues } from "./quality.js";
 import { identifyIssue } from "./fingerprint.js";
-import type {
-  IssueInput,
-  PerformanceMetrics,
-  LighthouseSummary,
-  ScanControl,
-  ScanOptions,
-  ScanReport,
-} from "./types.js";
+import type { IssueInput, PerformanceMetrics, LighthouseSummary, ScanControl, ScanOptions, ScanReport } from "./types.js";
 import { VERSION } from "./version.js";
 import { PublicNetworkGuard } from "./security.js";
 import { compareWithBaseline, emptyBaseline, loadBaseline } from "./baseline.js";
@@ -115,7 +101,7 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
     issues.push(...inspection.issues);
     if (inspection.partial) scanStatus = "partial";
     if (scanStatus === "completed") {
-      if (options.accessibility) issues.push(...await auditAccessibility(page, options.url));
+      if (options.accessibility) issues.push(...(await auditAccessibility(page, options.url)));
       performance = await collectPerformanceMetrics(page);
       if (performance) issues.push(...performanceIssues(performance, page.url() || options.url));
       if (options.lighthouse) {
@@ -130,11 +116,12 @@ export async function scan(options: ScanOptions, control: ScanControl = {}): Pro
     const summary = summarizeIssues(uniqueIssues);
     const comparison = options.baselinePath
       ? compareWithBaseline(uniqueIssues, await loadBaseline(options.baselinePath))
-      : options.regressionsOnly ? compareWithBaseline(uniqueIssues, emptyBaseline()) : undefined;
+      : options.regressionsOnly
+        ? compareWithBaseline(uniqueIssues, emptyBaseline())
+        : undefined;
     const gateSummary = options.regressionsOnly && comparison ? comparison.newSummary : summary;
     const passed = passesQualityGate(gateSummary, options.failOn);
-    const shouldCapture = scanStatus === "completed" &&
-      (options.screenshot === "always" || (options.screenshot === "on-failure" && !passed));
+    const shouldCapture = scanStatus === "completed" && (options.screenshot === "always" || (options.screenshot === "on-failure" && !passed));
 
     if (shouldCapture) {
       control.signal?.throwIfAborted();

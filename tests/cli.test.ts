@@ -14,26 +14,13 @@ describe("parseCli", () => {
   });
 
   it("interpreta opções e filtros", () => {
-    const result = parseCli([
-      "https://example.com",
-      "--browser",
-      "firefox",
-      "--headed",
-      "--timeout",
-      "5000",
-      "--settle",
-      "0",
-      "--ignore-status",
-      "401,404",
-      "--ignore-url",
-      "analytics",
-    ]);
+    const result = parseCli(["https://example.com", "--browser", "firefox", "--headed", "--timeout", "5000", "--settle", "0", "--ignore-status", "401,404", "--ignore-url", "analytics"]);
     const options = result.options;
     assert.equal(options?.browser, "firefox");
     assert.equal(options?.headed, true);
     assert.equal(options?.timeoutMs, 5000);
     assert.equal(options?.settleMs, 0);
-    assert.deepEqual([...options?.ignoredStatuses ?? []], [401, 404]);
+    assert.deepEqual([...(options?.ignoredStatuses ?? [])], [401, 404]);
     assert.equal(options?.ignoredUrlPatterns[0]?.test("/analytics/event"), true);
   });
 
@@ -46,30 +33,17 @@ describe("parseCli", () => {
   });
 
   it("configura baseline e gate de regressões", () => {
-    const result = parseCli([
-      "https://example.com",
-      "--baseline",
-      "previous.json",
-      "--regressions-only",
-    ]);
+    const result = parseCli(["https://example.com", "--baseline", "previous.json", "--regressions-only"]);
     assert.ok(result.options?.baselinePath?.endsWith("previous.json"));
     assert.equal(result.options?.regressionsOnly, true);
   });
 
   it("exige baseline para o gate de regressões", () => {
-    assert.throws(
-      () => parseCli(["https://example.com", "--regressions-only"]),
-      /exige --baseline ou --project/,
-    );
+    assert.throws(() => parseCli(["https://example.com", "--regressions-only"]), /exige --baseline ou --project/);
   });
 
   it("configura histórico isolado por projeto e ambiente", () => {
-    const result = parseCli([
-      "https://example.com",
-      "--project", "Loja-Web",
-      "--environment", "Staging",
-      "--regressions-only",
-    ]);
+    const result = parseCli(["https://example.com", "--project", "Loja-Web", "--environment", "Staging", "--regressions-only"]);
     assert.equal(result.options?.project, "loja-web");
     assert.equal(result.options?.environment, "staging");
     assert.ok(result.options?.historyDir?.endsWith(".qa-radar-history"));

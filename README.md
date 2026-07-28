@@ -311,16 +311,16 @@ não faz parte do produto, da interface ou da direção comercial.
 
 ## Como interpretar os resultados
 
-| Categoria | Nível comum | Exemplo |
-| --- | --- | --- |
-| Navegador | erro ou aviso | recurso bloqueado ou cookie de terceiro rejeitado |
-| JavaScript | erro | exceção ou conteúdo inválido executado como script |
-| Carregamento | erro ou aviso | imagem `404`, API `401` ou servidor `500` |
-| Rede | erro | DNS, TLS, conexão ou conteúdo incompatível |
-| Navegação | erro | timeout ou página inacessível |
-| Performance | aviso | TTFB, LCP ou CLS fora do recomendado |
-| Elemento da página | erro ou aviso | imagem quebrada ou ID duplicado |
-| Acessibilidade | aviso | botão sem nome, campo sem label ou iframe sem título |
+| Categoria          | Nível comum   | Exemplo                                              |
+| ------------------ | ------------- | ---------------------------------------------------- |
+| Navegador          | erro ou aviso | recurso bloqueado ou cookie de terceiro rejeitado    |
+| JavaScript         | erro          | exceção ou conteúdo inválido executado como script   |
+| Carregamento       | erro ou aviso | imagem `404`, API `401` ou servidor `500`            |
+| Rede               | erro          | DNS, TLS, conexão ou conteúdo incompatível           |
+| Navegação          | erro          | timeout ou página inacessível                        |
+| Performance        | aviso         | TTFB, LCP ou CLS fora do recomendado                 |
+| Elemento da página | erro ou aviso | imagem quebrada ou ID duplicado                      |
+| Acessibilidade     | aviso         | botão sem nome, campo sem label ou iframe sem título |
 
 As severidades são heurísticas. Um `404` em uma imagem, CSS, script ou documento tende a ser erro porque afeta diretamente a página; um `404` em uma API pode ser um comportamento esperado e começa como aviso.
 

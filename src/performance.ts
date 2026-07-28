@@ -15,16 +15,7 @@ function rating(value: number, threshold: Threshold): "needs-improvement" | "poo
   return value > threshold.poor ? "poor" : "needs-improvement";
 }
 
-function metricIssue(
-  ruleId: string,
-  title: string,
-  metric: string,
-  value: number,
-  threshold: Threshold,
-  url: string,
-  impact: string,
-  recommendation: string,
-): IssueInput {
+function metricIssue(ruleId: string, title: string, metric: string, value: number, threshold: Threshold, url: string, impact: string, recommendation: string): IssueInput {
   const unit = metric === "CLS" ? "" : " ms";
   return {
     ruleId,
@@ -46,40 +37,46 @@ function metricIssue(
 export function performanceIssues(metrics: PerformanceMetrics, url: string): IssueInput[] {
   const issues: IssueInput[] = [];
   if (metrics.ttfbMs !== undefined && metrics.ttfbMs > THRESHOLDS.ttfbMs.good) {
-    issues.push(metricIssue(
-      "performance.ttfb.slow",
-      "Servidor demorou para iniciar a resposta",
-      "TTFB",
-      metrics.ttfbMs,
-      THRESHOLDS.ttfbMs,
-      url,
-      "O usuário espera mais antes que o navegador possa começar a montar a página.",
-      "Revise redirects, cache, CDN, conexão com dependências e tempo de processamento do backend.",
-    ));
+    issues.push(
+      metricIssue(
+        "performance.ttfb.slow",
+        "Servidor demorou para iniciar a resposta",
+        "TTFB",
+        metrics.ttfbMs,
+        THRESHOLDS.ttfbMs,
+        url,
+        "O usuário espera mais antes que o navegador possa começar a montar a página.",
+        "Revise redirects, cache, CDN, conexão com dependências e tempo de processamento do backend.",
+      ),
+    );
   }
   if (metrics.lcpMs !== undefined && metrics.lcpMs > THRESHOLDS.lcpMs.good) {
-    issues.push(metricIssue(
-      "performance.lcp.slow",
-      "Conteúdo principal demorou para aparecer",
-      "LCP",
-      metrics.lcpMs,
-      THRESHOLDS.lcpMs,
-      url,
-      "A página pode parecer lenta mesmo depois de começar a carregar.",
-      "Priorize o recurso principal, reduza bloqueios de renderização e otimize imagens e fontes acima da dobra.",
-    ));
+    issues.push(
+      metricIssue(
+        "performance.lcp.slow",
+        "Conteúdo principal demorou para aparecer",
+        "LCP",
+        metrics.lcpMs,
+        THRESHOLDS.lcpMs,
+        url,
+        "A página pode parecer lenta mesmo depois de começar a carregar.",
+        "Priorize o recurso principal, reduza bloqueios de renderização e otimize imagens e fontes acima da dobra.",
+      ),
+    );
   }
   if (metrics.cls !== undefined && metrics.cls > THRESHOLDS.cls.good) {
-    issues.push(metricIssue(
-      "performance.cls.unstable",
-      "Layout mudou de posição durante o carregamento",
-      "CLS",
-      metrics.cls,
-      THRESHOLDS.cls,
-      url,
-      "Elementos podem se mover quando o usuário tenta ler ou interagir com a página.",
-      "Reserve espaço para imagens, anúncios e embeds; evite inserir conteúdo acima do que já foi renderizado.",
-    ));
+    issues.push(
+      metricIssue(
+        "performance.cls.unstable",
+        "Layout mudou de posição durante o carregamento",
+        "CLS",
+        metrics.cls,
+        THRESHOLDS.cls,
+        url,
+        "Elementos podem se mover quando o usuário tenta ler ou interagir com a página.",
+        "Reserve espaço para imagens, anúncios e embeds; evite inserir conteúdo acima do que já foi renderizado.",
+      ),
+    );
   }
   return issues;
 }
