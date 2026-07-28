@@ -309,6 +309,37 @@ oferta comercial.
 O executor declarativo baseado em JSON é legado, fica desabilitado por padrão e
 não faz parte do produto, da interface ou da direção comercial.
 
+### Testes de API
+
+```powershell
+npm run web
+```
+
+A rota `/api-tests` é uma aba própria, separada da Jornada, dedicada a testes
+de API puros — chamadas HTTP diretas sem depender do navegador. Usa o mesmo
+motor de execução do Modo Jornada de Playwright (arquivos `.spec.ts` reais,
+mesma fila de jobs, mesmo relatório de evidências, mesmas proteções de
+credenciais), só que o código escrito ali normalmente usa o fixture
+`request` do Playwright Test em vez do fixture `page`:
+
+```ts
+import { test, expect } from "@playwright/test";
+
+test("consulta o endpoint de status", async ({ request }) => {
+  const apiResponse = await request.get("https://sua-api.exemplo.com/status");
+  expect(apiResponse.status()).toBe(200);
+});
+```
+
+Cada chamada `request.get/post/put/patch/delete/head/fetch(...)` vira um
+passo nomeado na lista de passos e no relatório de evidências, com método,
+URL, status HTTP e um trecho do corpo da requisição/resposta — o equivalente,
+para uma chamada de API, da screenshot capturada automaticamente por passo no
+Modo Jornada. O botão "Adicionar passo de API" insere um trecho de código
+pronto no editor. Assim como as screenshots por passo, essa captura de
+evidência só funciona na execução local — a execução hospedada recebe apenas
+a string de código, sem os arquivos auxiliares do fixture.
+
 ## Como interpretar os resultados
 
 | Categoria          | Nível comum   | Exemplo                                              |

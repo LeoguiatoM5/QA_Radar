@@ -13,6 +13,7 @@ export interface JourneyStepResult {
   evidence?: {
     before?: string;
     after?: string;
+    api?: string;
     video?: { path: string; startMs: number; endMs: number };
   };
 }

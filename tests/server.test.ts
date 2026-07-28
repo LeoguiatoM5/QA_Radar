@@ -78,6 +78,15 @@ describe("web server", () => {
     assert.doesNotMatch(html, /id="journey-form"/);
   });
 
+  it("separa os Testes de API da Jornada e mostra indisponibilidade com segurança", async () => {
+    const response = await fetch(`${baseUrl}/api-tests`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /Recurso indisponível neste ambiente/);
+    assert.doesNotMatch(html, /id="scan-form"/);
+    assert.doesNotMatch(html, /id="codegen-start"/);
+  });
+
   it("mantém jornadas desabilitadas por padrão", async () => {
     const response = await fetch(`${baseUrl}/api/journeys`, {
       method: "POST",
@@ -702,6 +711,65 @@ describe("web server", () => {
       const html = await (await fetch(`${codeUrl}/api/code-executions/${execution.id}/code-evidence.html`, { headers: authorization })).text();
       const images = [...html.matchAll(/src="data:image\/png;base64,([^"]+)"/g)].map((match) => Buffer.from(match[1] ?? "", "base64").toString("utf8"));
       assert.deepEqual(images, ["screenshot-do-goto", "screenshot-do-click"]);
+    } finally {
+      await new Promise<void>((resolve, reject) => codeServer.close((error) => (error ? reject(error) : resolve())));
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("associa passos de API às suas evidências .json intercaladas com screenshots", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-code-api-steps-"));
+    const codeServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codeRunner: async ({ outputDir }) => {
+        // Simula o que o fixture (src/code-step-fixtures.ts) realmente produz
+        // quando página e API se intercalam: 000 (goto, .png), 001 (API, .json).
+        const stepsDir = join(outputDir, "test-results", "qa-radar-steps");
+        await mkdir(stepsDir, { recursive: true });
+        await writeFile(join(stepsDir, "000.png"), Buffer.from("screenshot-do-goto"));
+        await writeFile(join(stepsDir, "001.json"), JSON.stringify({ method: "GET", url: "https://example.com/api/status", status: 200, responseBody: '{"ok":true}' }));
+        return { exitCode: 0, stdout: '{"stats":{"expected":1}}', stderr: "" };
+      },
+    });
+    await new Promise<void>((resolve) => codeServer.listen(0, "127.0.0.1", resolve));
+    const address = codeServer.address() as AddressInfo;
+    const codeUrl = `http://127.0.0.1:${address.port}`;
+    const code =
+      "import { test, expect } from '@playwright/test';\n" +
+      "test('busca com API', async ({ page, request }) => {\n" +
+      "  await page.goto('https://example.com');\n" +
+      "  const apiResponse = await request.get('https://example.com/api/status');\n" +
+      "  expect(apiResponse.status()).toBe(200);\n" +
+      "});\n";
+    try {
+      const executionResponse = await fetch(`${codeUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const execution = (await executionResponse.json()) as { id: string; accessToken: string };
+      const authorization = { authorization: `Bearer ${execution.accessToken}` };
+
+      const stepsResponse = await fetch(`${codeUrl}/api/code-executions/${execution.id}/steps`, { headers: authorization });
+      const { steps } = (await stepsResponse.json()) as { steps: Array<{ index: number; action: string; description: string }> };
+      assert.equal(steps.length, 2);
+      assert.equal(steps[0]?.action, "goto");
+      assert.equal(steps[1]?.action, "apiRequest");
+      assert.match(steps[1]?.description ?? "", /GET https:\/\/example\.com\/api\/status/);
+
+      await fetch(`${codeUrl}/api/code-executions/${execution.id}/evidence-report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: JSON.stringify({ testerName: "QA", testType: "smoke" }),
+      });
+      const html = await (await fetch(`${codeUrl}/api/code-executions/${execution.id}/code-evidence.html`, { headers: authorization })).text();
+      assert.match(html, /src="data:image\/png;base64,/);
+      assert.match(html, /class="api-evidence"/);
+      assert.match(html, /GET/);
+      assert.match(html, /https:\/\/example\.com\/api\/status/);
+      assert.match(html, /class="api-status ok">200/);
+      assert.match(html, /\{&quot;ok&quot;:true\}/);
     } finally {
       await new Promise<void>((resolve, reject) => codeServer.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });

@@ -9,7 +9,12 @@ import { createQaRadarServer } from "../src/server.js";
 
 describe("Modo Jornada de Playwright ponta a ponta (execução real, sem mocks)", () => {
   let targetOrigin = "";
-  const target = createServer((_request, response) => {
+  const target = createServer((request, response) => {
+    if (request.url === "/api/status") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end('{"ok":true}');
+      return;
+    }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(
       '<!doctype html><html lang="pt-BR"><main><h1>Alvo</h1><button id="enter" onclick="document.querySelector(\'#result\').textContent=\'Bem-vindo\'">Entrar</button><p id="result"></p></main></html>',
@@ -87,6 +92,69 @@ describe("Modo Jornada de Playwright ponta a ponta (execução real, sem mocks)"
 
       const reportWithoutToken = await fetch(`${baseUrl}${evidencePath}`);
       assert.equal(reportWithoutToken.status, 401);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("executa um teste de API puro (sem navegador) e produz evidência de requisição/resposta no relatório", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-api-test-e2e-"));
+    const server = createQaRadarServer({ allowCodeMode: true, resultsDir });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const code = [
+      "import { test, expect } from '@playwright/test';",
+      "test('status da API', async ({ request }) => {",
+      `  const apiResponse = await request.get('${targetOrigin}/api/status');`,
+      "  expect(apiResponse.status()).toBe(200);",
+      "});",
+    ].join("\n");
+
+    try {
+      const executionResponse = await fetch(`${baseUrl}/api/code-execution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code, headed: false }),
+      });
+      const execution = (await executionResponse.json()) as {
+        id: string;
+        status: string;
+        accessToken: string;
+        report: { stats?: { expected?: number; unexpected?: number } };
+      };
+      assert.equal(executionResponse.status, 200, JSON.stringify(execution));
+      assert.equal(execution.status, "passed");
+      assert.equal(execution.report.stats?.expected, 1);
+      assert.equal(execution.report.stats?.unexpected, 0);
+
+      const authorization = { authorization: `Bearer ${execution.accessToken}` };
+
+      const stepsResponse = await fetch(`${baseUrl}/api/code-executions/${execution.id}/steps`, { headers: authorization });
+      assert.equal(stepsResponse.status, 200);
+      const { steps } = (await stepsResponse.json()) as { steps: Array<{ action: string; description: string }> };
+      assert.equal(steps.length, 1);
+      assert.equal(steps[0]?.action, "apiRequest");
+      assert.match(steps[0]?.description ?? "", /GET/);
+      assert.match(steps[0]?.description ?? "", new RegExp(`${targetOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/api/status`));
+
+      const evidenceResponse = await fetch(`${baseUrl}/api/code-executions/${execution.id}/evidence-report`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authorization },
+        body: JSON.stringify({ testerName: "QA Automatizado", testType: "smoke" }),
+      });
+      assert.equal(evidenceResponse.status, 201);
+      const { url: evidencePath } = (await evidenceResponse.json()) as { url: string };
+
+      const reportResponse = await fetch(`${baseUrl}${evidencePath}`, { headers: authorization });
+      assert.equal(reportResponse.status, 200);
+      const html = await reportResponse.text();
+      assert.match(html, /class="api-evidence"/);
+      assert.match(html, /class="api-method">GET</);
+      assert.match(html, /class="api-status ok">200/);
+      assert.match(html, /&quot;ok&quot;:true/);
+      assert.doesNotMatch(html, /<img/);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });

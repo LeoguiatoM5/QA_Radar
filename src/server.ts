@@ -211,7 +211,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     } catch {
       /* The report can still be generated from the JSON result. */
     }
-    const sourceSteps: Array<{ action: "goto" | "click" | "fill" | "select" | "waitFor" | "assertVisible" | "assertText"; description: string }> = [];
+    const sourceSteps: Array<{ action: "goto" | "click" | "fill" | "select" | "waitFor" | "assertVisible" | "assertText" | "apiRequest"; description: string }> = [];
     for (const rawLine of source.split(/\r?\n/)) {
       const line = rawLine.trim();
       if (!line || line.startsWith("//")) continue;
@@ -225,6 +225,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       const visible = /expect\((.+?)\)\.toBeVisible\(/.exec(line);
       const text = /expect\((.+?)\)\.toHaveText\(/.exec(line);
       const wait = /\.waitFor\(/.exec(line);
+      const apiRequest = /\brequest\.(get|post|put|patch|delete|head|fetch)\((['"`])(.+?)\2/.exec(line);
       // As variantes "genericas" cobrem localizadores como getByRole/getByLabel,
       // não só page.locator(...) — sem elas, o passo some do relatório mesmo
       // a ação tendo sido executada (e instrumentada) de verdade, e a
@@ -239,47 +240,52 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       else if (visible) sourceSteps.push({ action: "assertVisible", description: `Confirmar elemento visível: ${visible[1]}` });
       else if (text) sourceSteps.push({ action: "assertText", description: `Confirmar texto em ${text[1]}` });
       else if (wait) sourceSteps.push({ action: "waitFor", description: "Aguardar elemento" });
+      else if (apiRequest) sourceSteps.push({ action: "apiRequest", description: `Requisição ${(apiRequest[1] ?? "").toUpperCase()} ${apiRequest[3]}` });
     }
     const stepDefinitions = sourceSteps.length > 0 ? sourceSteps : [{ action: "assertVisible" as const, description: `${expected} teste(s) executado(s)` }];
     const stepDuration = durationMs / stepDefinitions.length;
     let screenshotPath: string | undefined;
     let videoPath: string | undefined;
-    const stepScreenshots: string[] = [];
+    const stepCaptures: string[] = [];
     try {
       const mediaFiles = await readdir(join(job.outputDir, "test-results"), { recursive: true });
       for (const relative of mediaFiles) {
         if (typeof relative !== "string") continue;
         const normalized = `test-results/${relative.replaceAll("\\", "/")}`;
         // O fixture qa-radar-fixtures.ts (src/code-step-fixtures.ts) grava uma
-        // screenshot real por ação em test-results/qa-radar-steps/, numeradas
-        // em ordem; tratadas à parte para não confundir com os artefatos
-        // padrão do próprio Playwright (ex.: test-finished-1.png).
+        // evidência real por ação em test-results/qa-radar-steps/ (screenshot
+        // .png para passos de página, requisição/resposta .json para passos de
+        // API), numeradas em ordem; tratadas à parte para não confundir com os
+        // artefatos padrão do próprio Playwright (ex.: test-finished-1.png).
         if (normalized.startsWith("test-results/qa-radar-steps/")) continue;
         if (!screenshotPath && normalized.endsWith(".png")) screenshotPath = normalized;
         if (!videoPath && normalized.endsWith(".webm")) videoPath = normalized;
       }
       const stepFiles = await readdir(join(job.outputDir, "test-results", "qa-radar-steps"));
-      stepScreenshots.push(
+      stepCaptures.push(
         ...stepFiles
-          .filter((name) => name.endsWith(".png"))
+          .filter((name) => name.endsWith(".png") || name.endsWith(".json"))
           .sort((a, b) => a.localeCompare(b))
           .map((name) => `test-results/qa-radar-steps/${name}`),
       );
     } catch {
       /* A failed run may not produce media. */
     }
-    // Só goto/click/fill/select correspondem a ações realmente instrumentadas
-    // pelo fixture; waitFor/assertVisible/assertText nunca disparam uma
-    // captura, então não avançam o cursor — senão a screenshot N ficaria
-    // associada ao passo errado sempre que uma asserção aparecesse no meio.
-    const CAPTURABLE_ACTIONS = new Set(["goto", "click", "fill", "select"]);
-    let screenshotCursor = 0;
+    // Só goto/click/fill/select/apiRequest correspondem a ações realmente
+    // instrumentadas pelo fixture; waitFor/assertVisible/assertText nunca
+    // disparam uma captura, então não avançam o cursor — senão a evidência N
+    // ficaria associada ao passo errado sempre que uma asserção aparecesse no
+    // meio.
+    const CAPTURABLE_ACTIONS = new Set(["goto", "click", "fill", "select", "apiRequest"]);
+    let captureCursor = 0;
     const steps = stepDefinitions.map((step, index) => {
       const isLastStep = index === stepDefinitions.length - 1;
       const capturable = CAPTURABLE_ACTIONS.has(step.action);
-      const stepImage = capturable ? stepScreenshots[screenshotCursor] : undefined;
-      if (capturable) screenshotCursor += 1;
-      const image = stepImage ?? (isLastStep ? screenshotPath : undefined);
+      const stepCapture = capturable ? stepCaptures[captureCursor] : undefined;
+      if (capturable) captureCursor += 1;
+      const isApiStep = step.action === "apiRequest";
+      const image = isApiStep ? undefined : (stepCapture ?? (isLastStep ? screenshotPath : undefined));
+      const api = isApiStep ? stepCapture : undefined;
       return {
         index,
         action: step.action,
@@ -287,10 +293,11 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         status: job.status === "passed" || index < stepDefinitions.length - 1 ? ("passed" as const) : ("failed" as const),
         durationMs: stepDuration,
         ...(job.status === "failed" && isLastStep && job.failureDetails ? { error: job.failureDetails } : {}),
-        ...(image || (isLastStep && videoPath)
+        ...(image || api || (isLastStep && videoPath)
           ? {
               evidence: {
                 ...(image ? { after: image } : {}),
+                ...(api ? { api } : {}),
                 ...(isLastStep && videoPath ? { video: { path: videoPath, startMs: 0, endMs: durationMs } } : {}),
               },
             }
