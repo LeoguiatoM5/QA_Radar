@@ -54,7 +54,7 @@ describe("journey evidence HTML", () => {
     assert.match(html, /Nenhuma imagem foi gerada para este passo\./);
     assert.equal(html.match(/<img/g)?.length, 1);
     assert.doesNotMatch(html, /Antes<\/figcaption>/);
-    assert.match(html, /Depois<\/figcaption>/);
+    assert.doesNotMatch(html, /Depois<\/figcaption>/);
   });
 
   it("mostra uma mensagem quando o artefato não está mais disponível", async () => {
