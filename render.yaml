@@ -4,6 +4,20 @@ services:
     runtime: docker
     plan: free
     healthCheckPath: /health
+    # As variáveis abaixo cobrem o que este Blueprint precisa. As seguintes
+    # ficam de fora de propósito, não por esquecimento:
+    #   QA_RADAR_ALLOW_PRIVATE_TARGETS — nunca deve ser true num deploy público.
+    #   QA_RADAR_ENABLE_HISTORY — histórico compartilhado sem autenticação
+    #     não deve ser exposto no deploy público (ver README, seção Segurança).
+    #   QA_RADAR_SANDBOX_URL / QA_RADAR_SANDBOX_SIGNING_SECRET — moot enquanto
+    #     QA_RADAR_ENABLE_CODE_MODE=false; exigem um runner dedicado publicado
+    #     à parte antes de fazer sentido setar (ver docs/SANDBOX_RUNNER_PROTOCOL.md
+    #     no histórico do git — o arquivo foi removido da árvore trackeada).
+    #   QA_RADAR_MAX_CODE_EXECUTION_MS / MAX_CODE_OUTPUT_BYTES / MAX_CODE_MEMORY_MIB /
+    #     MAX_CODEGEN_DURATION_MS — só têm efeito com o Modo Código habilitado.
+    #   TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY — exigem um widget criado à
+    #     mão no painel da Cloudflare; adicionar manualmente no Render antes de
+    #     uma divulgação ampla do endereço público.
     envVars:
       - key: HOST
         value: 0.0.0.0

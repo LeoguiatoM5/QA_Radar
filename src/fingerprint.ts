@@ -27,15 +27,9 @@ function normalizeMessage(value: string): string {
 }
 
 export function identifyIssue(issue: IssueInput): Issue {
-  const identity = [
-    issue.ruleId,
-    issue.method ?? "",
-    issue.status ?? "",
-    issue.resourceType ?? "",
-    normalizeUrl(issue.url),
-    issue.evidence?.selector ?? "",
-    normalizeMessage(issue.message),
-  ].join("\u0000");
+  const identity = [issue.ruleId, issue.method ?? "", issue.status ?? "", issue.resourceType ?? "", normalizeUrl(issue.url), issue.evidence?.selector ?? "", normalizeMessage(issue.message)].join(
+    "\u0000",
+  );
 
   return {
     ...issue,

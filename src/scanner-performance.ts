@@ -25,9 +25,7 @@ export async function installPerformanceObservers(page: Page): Promise<void> {
         for (const entry of list.getEntries()) {
           const shift = entry as PerformanceEntry & { value: number; hadRecentInput: boolean };
           if (shift.hadRecentInput) continue;
-          const continuesWindow = state.clsWindowLast > 0 &&
-            shift.startTime - state.clsWindowLast < 1_000 &&
-            shift.startTime - state.clsWindowStart < 5_000;
+          const continuesWindow = state.clsWindowLast > 0 && shift.startTime - state.clsWindowLast < 1_000 && shift.startTime - state.clsWindowStart < 5_000;
           if (continuesWindow) state.clsWindow += shift.value;
           else {
             state.clsWindow = shift.value;

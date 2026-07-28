@@ -5,9 +5,7 @@ import { createSandboxCodeRunner } from "./sandbox-client.js";
 
 try {
   const env = loadEnvironmentConfig();
-  const hostedCodeRunner = env.sandbox
-    ? createSandboxCodeRunner({ baseUrl: env.sandbox.url, signingSecret: env.sandbox.signingSecret })
-    : undefined;
+  const hostedCodeRunner = env.sandbox ? createSandboxCodeRunner({ baseUrl: env.sandbox.url, signingSecret: env.sandbox.signingSecret }) : undefined;
   const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner });
   server.listen(env.port, env.host, () => {
     console.log(`\nQA Radar Web disponível em http://${env.host}:${env.port}`);

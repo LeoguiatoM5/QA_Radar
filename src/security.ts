@@ -65,8 +65,7 @@ export interface PublicResolution {
 
 export type PublicUrlResolver = (hostname: string) => Promise<ResolvedAddress[]>;
 
-const systemResolver: PublicUrlResolver = async (hostname) =>
-  isIP(hostname) ? [{ address: hostname }] : lookup(hostname, { all: true, verbatim: true });
+const systemResolver: PublicUrlResolver = async (hostname) => (isIP(hostname) ? [{ address: hostname }] : lookup(hostname, { all: true, verbatim: true }));
 
 async function publicResolution(rawUrl: string, resolver: PublicUrlResolver): Promise<PublicResolution> {
   const url = new URL(rawUrl);

@@ -2,18 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import {
-  accessCookie,
-  bearerToken,
-  json,
-  numberField,
-  readJson,
-  requestToken,
-  requireAccess,
-  textField,
-  tokenHash,
-  tokenMatches,
-} from "../src/http-helpers.js";
+import { accessCookie, bearerToken, json, numberField, readJson, requestToken, requireAccess, textField, tokenHash, tokenMatches } from "../src/http-helpers.js";
 
 function fakeRequest(overrides: Partial<{ headers: Record<string, string>; body: string; encrypted: boolean }> = {}): IncomingMessage {
   const stream = Readable.from(overrides.body !== undefined ? [Buffer.from(overrides.body)] : []);
@@ -59,10 +48,7 @@ describe("http helpers", () => {
 
   it("prioriza o bearer token e cai para o cookie de acesso", () => {
     assert.equal(requestToken(fakeRequest({ headers: { authorization: "Bearer do-header" } })), "do-header");
-    assert.equal(
-      requestToken(fakeRequest({ headers: { cookie: "qa_radar_access=do-cookie" } })),
-      "do-cookie",
-    );
+    assert.equal(requestToken(fakeRequest({ headers: { cookie: "qa_radar_access=do-cookie" } })), "do-cookie");
     assert.equal(requestToken(fakeRequest({ headers: {} })), undefined);
   });
 
@@ -74,13 +60,7 @@ describe("http helpers", () => {
     const secure = accessCookie(fakeRequest({ encrypted: true }), "/api/scans", "tok", 60_000, false);
     assert.match(secure, /Secure/);
 
-    const trustedProxy = accessCookie(
-      fakeRequest({ headers: { "x-forwarded-proto": "https" } }),
-      "/api/scans",
-      "tok",
-      60_000,
-      true,
-    );
+    const trustedProxy = accessCookie(fakeRequest({ headers: { "x-forwarded-proto": "https" } }), "/api/scans", "tok", 60_000, true);
     assert.match(trustedProxy, /Secure/);
   });
 

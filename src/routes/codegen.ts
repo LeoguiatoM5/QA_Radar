@@ -59,10 +59,16 @@ export const tryHandleCodegen: RouteHandler = async (context, request, response,
   if (request.method === "GET" && codegenMatch) {
     if (!context.requireCodeModeEnabled(response)) return true;
     const session = codegenSessions.get(codegenMatch[1] ?? "");
-    if (!session) { json(response, 404, { error: "Sessão de Codegen não encontrada." }); return true; }
+    if (!session) {
+      json(response, 404, { error: "Sessão de Codegen não encontrada." });
+      return true;
+    }
     if (!requireAccess(request, response, session.accessTokenHash)) return true;
-    try { json(response, 200, { status: "completed", code: await readFile(session.outputPath, "utf8") }); }
-    catch { json(response, 200, { status: "recording" }); }
+    try {
+      json(response, 200, { status: "completed", code: await readFile(session.outputPath, "utf8") });
+    } catch {
+      json(response, 200, { status: "recording" });
+    }
     return true;
   }
 

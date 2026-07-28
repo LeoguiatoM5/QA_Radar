@@ -81,12 +81,7 @@ async function reportFromFile(path: string): Promise<ScanReport | undefined> {
   }
 }
 
-export async function listProjectHistory(
-  historyDir: string,
-  project: string,
-  environment: string,
-  limit = 20,
-): Promise<ProjectHistory> {
+export async function listProjectHistory(historyDir: string, project: string, environment: string, limit = 20): Promise<ProjectHistory> {
   if (!validIdentifier(project) || !validIdentifier(environment)) {
     throw new Error("Projeto ou ambiente inválido para consulta de histórico.");
   }
@@ -97,7 +92,11 @@ export async function listProjectHistory(
   } catch {
     names = [];
   }
-  const candidates = names.filter((name) => name.endsWith(".json")).sort().reverse().slice(0, limit);
+  const candidates = names
+    .filter((name) => name.endsWith(".json"))
+    .sort()
+    .reverse()
+    .slice(0, limit);
   const reports = (await Promise.all(candidates.map((name) => reportFromFile(join(directory, "runs", name)))))
     .filter((report): report is ScanReport => Boolean(report))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));

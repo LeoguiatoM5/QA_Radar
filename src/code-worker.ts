@@ -12,14 +12,7 @@ function positiveInteger(raw: string | undefined, name: string): number {
 }
 
 async function main(): Promise<void> {
-  const [
-    outputDir,
-    headedRaw,
-    timeoutRaw,
-    maxOutputRaw,
-    maxMemoryRaw,
-    projectRoot,
-  ] = process.argv.slice(2);
+  const [outputDir, headedRaw, timeoutRaw, maxOutputRaw, maxMemoryRaw, projectRoot] = process.argv.slice(2);
   if (!outputDir || !projectRoot || !["true", "false"].includes(headedRaw ?? "")) {
     throw new Error("Parâmetros inválidos para o worker Playwright.");
   }
@@ -32,11 +25,7 @@ async function main(): Promise<void> {
     maxMemoryMiB: positiveInteger(maxMemoryRaw, "maxMemoryMiB"),
     projectRoot,
   });
-  await writeFile(
-    join(outputDir, CODE_WORKER_RESULT_FILE),
-    JSON.stringify(result),
-    { encoding: "utf8", mode: 0o600 },
-  );
+  await writeFile(join(outputDir, CODE_WORKER_RESULT_FILE), JSON.stringify(result), { encoding: "utf8", mode: 0o600 });
 }
 
 main().catch((error: unknown) => {

@@ -15,9 +15,7 @@ async function listen(server: Server): Promise<string> {
 }
 
 async function close(server: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
-  );
+  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 }
 
 describe("web scan integration", () => {
@@ -45,7 +43,7 @@ describe("web scan integration", () => {
       const queuedResponse = await page.request.post(`${appUrl}/api/scans`, {
         data: { url: targetUrl, settleMs: 0, screenshot: "never" },
       });
-      const queued = await queuedResponse.json() as { id: string; status: string; queuePosition: number };
+      const queued = (await queuedResponse.json()) as { id: string; status: string; queuePosition: number };
       assert.equal(queued.status, "queued");
       assert.equal(queued.queuePosition, 1);
       await page.locator("#cancel").click();
@@ -54,7 +52,7 @@ describe("web scan integration", () => {
       await assert.doesNotReject(async () => {
         for (let attempt = 0; attempt < 100; attempt += 1) {
           const response = await page.request.get(`${appUrl}/api/scans/${queued.id}`);
-          const job = await response.json() as { status: string; error?: string };
+          const job = (await response.json()) as { status: string; error?: string };
           if (job.status === "completed") return;
           if (job.status === "failed") throw new Error(job.error);
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -62,7 +60,7 @@ describe("web scan integration", () => {
         throw new Error("A próxima análise não iniciou após o cancelamento.");
       });
 
-      const health = await (await page.request.get(`${appUrl}/health`)).json() as {
+      const health = (await (await page.request.get(`${appUrl}/health`)).json()) as {
         active: number;
         queued: number;
       };
@@ -84,7 +82,9 @@ describe("web scan integration", () => {
         return;
       }
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end('<html lang="pt-BR"><title>Alvo Web</title><main><h1>Catálogo</h1><img src="/broken" alt="Imagem do produto"><button></button><input id="email"><div id="repetido"></div><span id="repetido"></span></main>');
+      response.end(
+        '<html lang="pt-BR"><title>Alvo Web</title><main><h1>Catálogo</h1><img src="/broken" alt="Imagem do produto"><button></button><input id="email"><div id="repetido"></div><span id="repetido"></span></main>',
+      );
     });
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-"));
     const app = createQaRadarServer({

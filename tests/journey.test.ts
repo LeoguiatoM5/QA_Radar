@@ -4,13 +4,17 @@ import { parseJourney } from "../src/journey.js";
 
 describe("journey contract", () => {
   it("aceita somente ações declarativas e secrets por ambiente", () => {
-    const journey = parseJourney({ schemaVersion: "1.0", name: "Login", steps: [
-      { action: "goto", url: "https://example.com/login", description: "Abrir o login" },
-      { action: "fill", selector: "#email", value: "qa@example.com" },
-      { action: "fill", selector: "#password", valueFromEnv: "QA_RADAR_SECRET_PASSWORD" },
-      { action: "click", selector: "button[type=submit]" },
-      { action: "assertVisible", selector: "[data-testid=dashboard]" },
-    ] });
+    const journey = parseJourney({
+      schemaVersion: "1.0",
+      name: "Login",
+      steps: [
+        { action: "goto", url: "https://example.com/login", description: "Abrir o login" },
+        { action: "fill", selector: "#email", value: "qa@example.com" },
+        { action: "fill", selector: "#password", valueFromEnv: "QA_RADAR_SECRET_PASSWORD" },
+        { action: "click", selector: "button[type=submit]" },
+        { action: "assertVisible", selector: "[data-testid=dashboard]" },
+      ],
+    });
     assert.equal(journey.steps.length, 5);
     assert.equal(journey.steps[0]?.description, "Abrir o login");
     assert.equal(journey.steps[2]?.action, "fill");

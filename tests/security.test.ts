@@ -28,16 +28,11 @@ describe("public network guard", () => {
       return [{ address: attempt === 1 ? "93.184.216.34" : "93.184.216.35" }];
     });
     await guard.assert("https://example.com");
-    await assert.rejects(
-      guard.assert("https://example.com/recurso"),
-      /DNS rebinding/,
-    );
+    await assert.rejects(guard.assert("https://example.com/recurso"), /DNS rebinding/);
   });
 
   it("retorna somente resoluções públicas fixadas para o proxy", async () => {
-    const guard = new PublicNetworkGuard(async () => [
-      { address: "93.184.216.34", family: 4 },
-    ]);
+    const guard = new PublicNetworkGuard(async () => [{ address: "93.184.216.34", family: 4 }]);
     const resolution = await guard.resolve("https://example.com/path");
     assert.equal(resolution.hostname, "example.com");
     assert.deepEqual(resolution.addresses, [{ address: "93.184.216.34", family: 4 }]);

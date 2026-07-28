@@ -23,8 +23,7 @@ describe("responsive integration", () => {
       for (const path of ["/", "/scanner", "/journeys", "/docs"]) {
         await page.goto(`${appUrl}${path}`, { waitUntil: "domcontentloaded" });
         const layout = await page.evaluate(() => {
-          const visibleControls = [...document.querySelectorAll<HTMLElement>("input, select, textarea, button")]
-            .filter((element) => element.getClientRects().length > 0);
+          const visibleControls = [...document.querySelectorAll<HTMLElement>("input, select, textarea, button")].filter((element) => element.getClientRects().length > 0);
           return {
             h1Count: document.querySelectorAll("h1").length,
             innerWidth: window.innerWidth,
@@ -50,9 +49,7 @@ describe("responsive integration", () => {
       assert.equal(await page.locator("#journey-json").count(), 0);
     } finally {
       await browser?.close();
-      await new Promise<void>((resolve, reject) =>
-        app.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => app.close((error) => (error ? reject(error) : resolve())));
       await rm(resultsDir, { recursive: true, force: true });
     }
   });

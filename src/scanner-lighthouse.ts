@@ -3,8 +3,15 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 import type { IssueCategory, IssueInput, LighthouseSummary } from "./types.js";
 
-interface AuditReference { id: string; weight: number }
-interface LighthouseCategory { id: string; score: number | null; auditRefs: AuditReference[] }
+interface AuditReference {
+  id: string;
+  weight: number;
+}
+interface LighthouseCategory {
+  id: string;
+  score: number | null;
+  auditRefs: AuditReference[];
+}
 interface LighthouseAudit {
   id: string;
   title: string;
@@ -15,21 +22,18 @@ interface LighthouseAudit {
   details?: { items?: Array<Record<string, unknown>> };
 }
 
-const FAST_METRIC_AUDITS = new Set([
-  "server-response-time", "first-contentful-paint", "largest-contentful-paint",
-  "cumulative-layout-shift", "errors-in-console",
-]);
+const FAST_METRIC_AUDITS = new Set(["server-response-time", "first-contentful-paint", "largest-contentful-paint", "cumulative-layout-shift", "errors-in-console"]);
 
 const GUIDANCE: Record<string, { title: string; impact: string; recommendation: string }> = {
   "meta-description": {
     title: "Documento não possui meta description",
     impact: "Mecanismos de busca podem exibir um resumo inadequado ou pouco atrativo da página nos resultados.",
-    recommendation: "Adicione uma tag <meta name=\"description\"> no <head> com um resumo específico e conciso do conteúdo.",
+    recommendation: 'Adicione uma tag <meta name="description"> no <head> com um resumo específico e conciso do conteúdo.',
   },
   "image-alt": {
     title: "Imagens informativas não possuem texto alternativo",
     impact: "Pessoas que usam leitores de tela podem não compreender o conteúdo ou a função dessas imagens.",
-    recommendation: "Adicione um atributo alt descritivo às imagens informativas e alt=\"\" às imagens exclusivamente decorativas.",
+    recommendation: 'Adicione um atributo alt descritivo às imagens informativas e alt="" às imagens exclusivamente decorativas.',
   },
   "total-blocking-time": {
     title: "A página permaneceu bloqueada por tarefas longas",
@@ -44,8 +48,7 @@ const GUIDANCE: Record<string, { title: string; impact: string; recommendation: 
 };
 
 function referenceUrl(description: string): string | undefined {
-  return /\[[^\]]+\]\((https?:\/\/[^)]+)\)/.exec(description)?.[1] ??
-    /(https?:\/\/[^\s)]+)/.exec(description)?.[1];
+  return /\[[^\]]+\]\((https?:\/\/[^)]+)\)/.exec(description)?.[1] ?? /(https?:\/\/[^\s)]+)/.exec(description)?.[1];
 }
 
 function plainText(value: string): string {
@@ -83,11 +86,7 @@ function affectedUrl(audit: LighthouseAudit, fallback: string): string {
   return typeof value === "string" && /^https?:/.test(value) ? value : fallback;
 }
 
-export function lighthouseAuditsToIssues(
-  categories: LighthouseCategory[],
-  audits: Record<string, LighthouseAudit>,
-  url: string,
-): IssueInput[] {
+export function lighthouseAuditsToIssues(categories: LighthouseCategory[], audits: Record<string, LighthouseAudit>, url: string): IssueInput[] {
   const candidates = new Map<string, { audit: LighthouseAudit; weight: number; categories: Set<string> }>();
   for (const category of categories) {
     for (const reference of category.auditRefs) {
@@ -133,11 +132,7 @@ export function lighthouseAuditsToIssues(
     });
 }
 
-export async function auditLighthouse(
-  url: string,
-  outputDir: string,
-  timeoutMs: number,
-): Promise<{ summary: LighthouseSummary; issues: IssueInput[] }> {
+export async function auditLighthouse(url: string, outputDir: string, timeoutMs: number): Promise<{ summary: LighthouseSummary; issues: IssueInput[] }> {
   const [{ default: lighthouse }, { launch }] = await Promise.all([import("lighthouse"), import("chrome-launcher")]);
   await mkdir(outputDir, { recursive: true });
   const chrome = await launch({
@@ -146,7 +141,9 @@ export async function auditLighthouse(
   });
   try {
     const result = await lighthouse(url, {
-      port: chrome.port, output: "json", logLevel: "error",
+      port: chrome.port,
+      output: "json",
+      logLevel: "error",
       maxWaitForLoad: Math.min(Math.max(timeoutMs, 1_000), 120_000),
       onlyCategories: ["performance", "best-practices", "seo"],
     });
@@ -154,14 +151,17 @@ export async function auditLighthouse(
     const reportPath = join(outputDir, "report.lighthouse.json");
     await writeFile(reportPath, typeof result.report === "string" ? result.report : JSON.stringify(result.lhr), "utf8");
     const categories = Object.values(result.lhr.categories).map((category) => ({
-      id: category.id, score: category.score,
+      id: category.id,
+      score: category.score,
       auditRefs: category.auditRefs.map((reference) => ({ id: reference.id, weight: reference.weight })),
     }));
     const score = (id: string) => result.lhr.categories[id]?.score ?? undefined;
     return {
       summary: {
-        performance: score("performance"), bestPractices: score("best-practices"),
-        seo: score("seo"), reportPath: "report.lighthouse.json",
+        performance: score("performance"),
+        bestPractices: score("best-practices"),
+        seo: score("seo"),
+        reportPath: "report.lighthouse.json",
       },
       issues: lighthouseAuditsToIssues(categories, result.lhr.audits as Record<string, LighthouseAudit>, result.lhr.finalDisplayedUrl || url),
     };

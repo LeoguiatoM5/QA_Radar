@@ -7,18 +7,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {
-  codeExecutionArguments,
-  codeExecutionEnvironment,
-  runPlaywrightCode,
-  terminateProcessTree,
-  type SpawnProcess,
-} from "../src/code-execution.js";
-import {
-  CODE_WORKER_RESULT_FILE,
-  codeWorkerArguments,
-  runPlaywrightCodeWorker,
-} from "../src/code-worker-client.js";
+import { codeExecutionArguments, codeExecutionEnvironment, runPlaywrightCode, terminateProcessTree, type SpawnProcess } from "../src/code-execution.js";
+import { CODE_WORKER_RESULT_FILE, codeWorkerArguments, runPlaywrightCodeWorker } from "../src/code-worker-client.js";
 
 interface FakeChild {
   child: ChildProcess;
@@ -47,29 +37,26 @@ function createFakeChild(pid = 1234): FakeChild {
 
 describe("executor de código Playwright", () => {
   it("repassa somente variáveis de ambiente permitidas", () => {
-    assert.deepEqual(codeExecutionEnvironment({
-      PATH: "bin",
-      TEMP: "temp",
-      PLAYWRIGHT_BROWSERS_PATH: "browsers",
-      DATABASE_URL: "postgres://secret",
-      API_TOKEN: "secret",
-      QA_RADAR_CODE_MODE_ADMIN_TOKEN: "admin-secret",
-    }), {
-      CI: "1",
-      PATH: "bin",
-      TEMP: "temp",
-      PLAYWRIGHT_BROWSERS_PATH: "browsers",
-    });
+    assert.deepEqual(
+      codeExecutionEnvironment({
+        PATH: "bin",
+        TEMP: "temp",
+        PLAYWRIGHT_BROWSERS_PATH: "browsers",
+        DATABASE_URL: "postgres://secret",
+        API_TOKEN: "secret",
+        QA_RADAR_CODE_MODE_ADMIN_TOKEN: "admin-secret",
+      }),
+      {
+        CI: "1",
+        PATH: "bin",
+        TEMP: "temp",
+        PLAYWRIGHT_BROWSERS_PATH: "browsers",
+      },
+    );
   });
 
   it("inclui limite de memória e diretório de evidências nos argumentos", () => {
-    const args = codeExecutionArguments(
-      "C:\\app",
-      "C:\\result",
-      true,
-      384,
-      "C:\\app\\node_modules\\tsx\\dist\\loader.mjs",
-    );
+    const args = codeExecutionArguments("C:\\app", "C:\\result", true, 384, "C:\\app\\node_modules\\tsx\\dist\\loader.mjs");
     assert.equal(args[0], "--max-old-space-size=384");
     assert.ok(args.includes("--headed"));
     assert.ok(args.some((argument) => argument.includes("test-results")));
@@ -116,7 +103,9 @@ describe("executor de código Playwright", () => {
         maxOutputBytes: 5,
         maxMemoryMiB: 256,
         spawnProcess,
-        terminate: async () => { terminated = true; },
+        terminate: async () => {
+          terminated = true;
+        },
       }),
       /saída da execução excedeu o limite de 5 bytes/,
     );
@@ -135,7 +124,9 @@ describe("executor de código Playwright", () => {
         maxOutputBytes: 1_024,
         maxMemoryMiB: 256,
         spawnProcess: () => fake.child,
-        terminate: async () => { terminated = true; },
+        terminate: async () => {
+          terminated = true;
+        },
       }),
       /execução excedeu o limite de 20 ms/,
     );
@@ -164,29 +155,21 @@ describe("executor de código Playwright", () => {
     // Windows quanto no Linux/CI.
     const moduleUrl = pathToFileURL(join(process.cwd(), "qa-radar", "src", "code-worker-client.ts")).href;
     const loaderPath = join(process.cwd(), "qa-radar", "node_modules", "tsx", "dist", "loader.mjs");
-    const args = codeWorkerArguments({
-      outputDir: "resultado",
-      headed: false,
-      timeoutMs: 30_000,
-      maxOutputBytes: 4_096,
-      maxMemoryMiB: 256,
-      projectRoot: "projeto",
-    }, moduleUrl, loaderPath);
+    const args = codeWorkerArguments(
+      {
+        outputDir: "resultado",
+        headed: false,
+        timeoutMs: 30_000,
+        maxOutputBytes: 4_096,
+        maxMemoryMiB: 256,
+        projectRoot: "projeto",
+      },
+      moduleUrl,
+      loaderPath,
+    );
 
-    assert.deepEqual(args.slice(0, 4), [
-      "--max-old-space-size=128",
-      "--import",
-      pathToFileURL(loaderPath).href,
-      fileURLToPath(new URL("./code-worker.ts", moduleUrl)),
-    ]);
-    assert.deepEqual(args.slice(-6), [
-      "resultado",
-      "false",
-      "30000",
-      "4096",
-      "256",
-      "projeto",
-    ]);
+    assert.deepEqual(args.slice(0, 4), ["--max-old-space-size=128", "--import", pathToFileURL(loaderPath).href, fileURLToPath(new URL("./code-worker.ts", moduleUrl))]);
+    assert.deepEqual(args.slice(-6), ["resultado", "false", "30000", "4096", "256", "projeto"]);
   });
 
   it("recebe o resultado do Playwright pelo arquivo privado do worker", async () => {

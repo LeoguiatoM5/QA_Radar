@@ -9,9 +9,7 @@ function escapeAttribute(value: string): string {
 }
 
 export function createWebPage(turnstileSiteKey?: string, allowHistory = false, maxSitemapPages = 20): string {
-  const turnstileScript = turnstileSiteKey
-    ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
-    : "";
+  const turnstileScript = turnstileSiteKey ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>' : "";
   const turnstileWidget = turnstileSiteKey
     ? `<div id="turnstile-block"><div class="cf-turnstile" data-sitekey="${escapeAttribute(turnstileSiteKey)}" data-theme="dark" data-size="flexible" data-callback="onTurnstileSuccess" data-expired-callback="onTurnstileExpired" data-error-callback="onTurnstileError"></div><small class="hint">Verificação de segurança necessária para iniciar a análise.</small></div>`
     : "";

@@ -92,9 +92,7 @@ describe("sitemap suite integration", () => {
       assert.ok(report.pages?.every((page) => page.url.startsWith(origin)));
     } finally {
       await rm(outputDir, { recursive: true, force: true });
-      await new Promise<void>((resolveClose, reject) =>
-        server.close((error) => (error ? reject(error) : resolveClose())),
-      );
+      await new Promise<void>((resolveClose, reject) => server.close((error) => (error ? reject(error) : resolveClose())));
     }
   });
 });

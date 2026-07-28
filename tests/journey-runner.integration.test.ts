@@ -14,7 +14,9 @@ describe("journey runner integration", () => {
   let browser: Browser;
   const server = createServer((_request, response) => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end('<!doctype html><html lang="pt-BR"><main><input id="email"><input id="password"><select id="role"><option value="qa">QA</option></select><button id="enter" onclick="document.querySelector(\'#result\').textContent=\'Bem-vindo QA\'">Entrar</button><p id="result"></p></main>');
+    response.end(
+      '<!doctype html><html lang="pt-BR"><main><input id="email"><input id="password"><select id="role"><option value="qa">QA</option></select><button id="enter" onclick="document.querySelector(\'#result\').textContent=\'Bem-vindo QA\'">Entrar</button><p id="result"></p></main>',
+    );
   });
 
   before(async () => {
@@ -27,30 +29,41 @@ describe("journey runner integration", () => {
 
   after(async () => {
     await browser.close();
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
 
   it("executa uma jornada declarativa com secret sem expor seu valor", async () => {
     const page = await browser.newPage();
     const evidenceDir = await mkdtemp(join(tmpdir(), "qa-radar-journey-"));
     try {
-      const result = await runJourney(page, { schemaVersion: "1.0", name: "Login", steps: [
-        { action: "goto", url: origin, description: "Abrir o formulário de login" },
-        { action: "fill", selector: "#email", value: "qa@example.com" },
-        { action: "fill", selector: "#password", valueFromEnv: "QA_RADAR_SECRET_PASSWORD" },
-        { action: "select", selector: "#role", value: "qa" },
-        { action: "click", selector: "#enter" },
-        { action: "assertText", selector: "#result", text: "Bem-vindo QA" },
-      ] }, {
-        allowedOrigins: [origin],
-        secrets: { QA_RADAR_SECRET_PASSWORD: "super-secret" },
-        evidenceDir,
-      });
+      const result = await runJourney(
+        page,
+        {
+          schemaVersion: "1.0",
+          name: "Login",
+          steps: [
+            { action: "goto", url: origin, description: "Abrir o formulário de login" },
+            { action: "fill", selector: "#email", value: "qa@example.com" },
+            { action: "fill", selector: "#password", valueFromEnv: "QA_RADAR_SECRET_PASSWORD" },
+            { action: "select", selector: "#role", value: "qa" },
+            { action: "click", selector: "#enter" },
+            { action: "assertText", selector: "#result", text: "Bem-vindo QA" },
+          ],
+        },
+        {
+          allowedOrigins: [origin],
+          secrets: { QA_RADAR_SECRET_PASSWORD: "super-secret" },
+          evidenceDir,
+        },
+      );
       assert.equal(result.status, "passed");
       assert.equal(result.steps.length, 6);
       assert.equal(result.steps[0]?.description, "Abrir o formulário de login");
       assert.doesNotMatch(JSON.stringify(result), /super-secret/);
-      assert.equal(result.steps.every((step) => Boolean(step.evidence)), true);
+      assert.equal(
+        result.steps.every((step) => Boolean(step.evidence)),
+        true,
+      );
       await access(result.steps[2]?.evidence?.after ?? "missing");
       assert.equal(await page.locator("#password").evaluate((element) => (element as HTMLElement).style.filter), "");
       assert.equal(await page.locator("#password").evaluate((element) => "qaRadarOriginalFilter" in (element as HTMLElement).dataset), false);
@@ -63,10 +76,18 @@ describe("journey runner integration", () => {
   it("interrompe no primeiro passo com falha e bloqueia outra origem", async () => {
     const page = await browser.newPage();
     try {
-      const result = await runJourney(page, { schemaVersion: "1.0", name: "Bloqueio", steps: [
-        { action: "goto", url: "https://example.com" },
-        { action: "assertVisible", selector: "body" },
-      ] }, { allowedOrigins: [origin] });
+      const result = await runJourney(
+        page,
+        {
+          schemaVersion: "1.0",
+          name: "Bloqueio",
+          steps: [
+            { action: "goto", url: "https://example.com" },
+            { action: "assertVisible", selector: "body" },
+          ],
+        },
+        { allowedOrigins: [origin] },
+      );
       assert.equal(result.status, "failed");
       assert.equal(result.steps.length, 1);
       assert.match(result.steps[0]?.error ?? "", /origem não autorizada/);
@@ -94,9 +115,15 @@ describe("journey runner integration", () => {
     const allowedRedirectOrigin = `http://127.0.0.1:${redirectAddress.port}`;
     const page = await browser.newPage();
     try {
-      const result = await runJourney(page, {
-        schemaVersion: "1.0", name: "Redirect", steps: [{ action: "goto", url: allowedRedirectOrigin }],
-      }, { allowedOrigins: [allowedRedirectOrigin] });
+      const result = await runJourney(
+        page,
+        {
+          schemaVersion: "1.0",
+          name: "Redirect",
+          steps: [{ action: "goto", url: allowedRedirectOrigin }],
+        },
+        { allowedOrigins: [allowedRedirectOrigin] },
+      );
       assert.equal(result.status, "failed");
       assert.equal(destinationHits, 0);
     } finally {
@@ -110,9 +137,15 @@ describe("journey runner integration", () => {
     const page = await browser.newPage();
     try {
       await page.setContent('<button id="primary">Excluir conta</button>');
-      const result = await runJourney(page, {
-        schemaVersion: "1.0", name: "Proteção", steps: [{ action: "click", selector: "#primary" }],
-      }, { allowedOrigins: [origin] });
+      const result = await runJourney(
+        page,
+        {
+          schemaVersion: "1.0",
+          name: "Proteção",
+          steps: [{ action: "click", selector: "#primary" }],
+        },
+        { allowedOrigins: [origin] },
+      );
       assert.equal(result.status, "failed");
       assert.match(result.steps[0]?.error ?? "", /allowDestructive/);
     } finally {
@@ -124,9 +157,15 @@ describe("journey runner integration", () => {
     const page = await browser.newPage();
     try {
       await page.goto(origin);
-      const result = await runJourney(page, {
-        schemaVersion: "1.0", name: "Redação", steps: [{ action: "assertText", selector: "#super-secret", text: "x" }],
-      }, { allowedOrigins: [origin], secrets: { QA_RADAR_SECRET_PASSWORD: "super-secret" }, timeoutMs: 100 });
+      const result = await runJourney(
+        page,
+        {
+          schemaVersion: "1.0",
+          name: "Redação",
+          steps: [{ action: "assertText", selector: "#super-secret", text: "x" }],
+        },
+        { allowedOrigins: [origin], secrets: { QA_RADAR_SECRET_PASSWORD: "super-secret" }, timeoutMs: 100 },
+      );
       assert.equal(result.status, "failed");
       assert.doesNotMatch(JSON.stringify(result), /super-secret/);
       assert.match(result.steps[0]?.error ?? "", /\[SECRET\]/);
@@ -141,9 +180,14 @@ describe("journey runner integration", () => {
     controller.abort(new Error("cancelada pelo teste"));
     try {
       await assert.rejects(
-        runJourney(page, { schemaVersion: "1.0", name: "Cancelamento", steps: [{ action: "goto", url: origin }] }, {
-          allowedOrigins: [origin], signal: controller.signal,
-        }),
+        runJourney(
+          page,
+          { schemaVersion: "1.0", name: "Cancelamento", steps: [{ action: "goto", url: origin }] },
+          {
+            allowedOrigins: [origin],
+            signal: controller.signal,
+          },
+        ),
         /cancelada pelo teste/,
       );
     } finally {
@@ -154,10 +198,18 @@ describe("journey runner integration", () => {
   it("executa arquivo JSON pela camada CLI e grava relatório próprio", async () => {
     const outputDir = await mkdtemp(join(tmpdir(), "qa-radar-journey-cli-"));
     const journeyPath = join(outputDir, "journey.json");
-    await writeFile(journeyPath, JSON.stringify({ schemaVersion: "1.0", name: "Smoke CLI", steps: [
-      { action: "goto", url: origin },
-      { action: "assertVisible", selector: "#enter" },
-    ] }), "utf8");
+    await writeFile(
+      journeyPath,
+      JSON.stringify({
+        schemaVersion: "1.0",
+        name: "Smoke CLI",
+        steps: [
+          { action: "goto", url: origin },
+          { action: "assertVisible", selector: "#enter" },
+        ],
+      }),
+      "utf8",
+    );
     const options: ScanOptions = {
       url: origin,
       browser: "chromium",
@@ -178,7 +230,10 @@ describe("journey runner integration", () => {
       assert.equal(JSON.parse(await readFile(result.reportPath, "utf8")).name, "Smoke CLI");
       await access(join(outputDir, "journey-evidence", "001-goto-before.png"));
       await access(join(outputDir, "journey-evidence", "journey.webm"));
-      assert.equal(result.report.steps.every((step) => Boolean(step.evidence?.video)), true);
+      assert.equal(
+        result.report.steps.every((step) => Boolean(step.evidence?.video)),
+        true,
+      );
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

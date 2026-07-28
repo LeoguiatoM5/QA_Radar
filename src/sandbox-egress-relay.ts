@@ -5,10 +5,7 @@ export interface SandboxEgressRelay {
   sockets: Set<Socket>;
 }
 
-export async function startSandboxEgressRelay(
-  socketPath = "/run/egress/proxy.sock",
-  port = 3128,
-): Promise<SandboxEgressRelay> {
+export async function startSandboxEgressRelay(socketPath = "/run/egress/proxy.sock", port = 3128): Promise<SandboxEgressRelay> {
   const sockets = new Set<Socket>();
   const server = createServer((client) => {
     const upstream = createConnection(socketPath);

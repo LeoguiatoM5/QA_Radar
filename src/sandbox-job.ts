@@ -2,10 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runPlaywrightCode, type CodeExecutionResult } from "./code-execution.js";
 import { assertHostedPlaywrightCode } from "./code-policy.js";
-import {
-  closeSandboxEgressRelay,
-  startSandboxEgressRelay,
-} from "./sandbox-egress-relay.js";
+import { closeSandboxEgressRelay, startSandboxEgressRelay } from "./sandbox-egress-relay.js";
 
 const WORK_DIR = "/work";
 const INPUT_LIMIT_BYTES = 512 * 1024;
@@ -29,13 +26,7 @@ async function readInput(): Promise<JobInput> {
     chunks.push(buffer);
   }
   const value = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Partial<JobInput>;
-  if (
-    typeof value.code !== "string"
-    || !value.limits
-    || !Number.isInteger(value.limits.timeoutMs)
-    || !Number.isInteger(value.limits.maxOutputBytes)
-    || !Number.isInteger(value.limits.maxMemoryMiB)
-  ) {
+  if (typeof value.code !== "string" || !value.limits || !Number.isInteger(value.limits.timeoutMs) || !Number.isInteger(value.limits.maxOutputBytes) || !Number.isInteger(value.limits.maxMemoryMiB)) {
     throw new Error("Entrada do job inválida.");
   }
   return value as JobInput;
@@ -53,13 +44,17 @@ async function main(): Promise<void> {
   const relay = egressEnabled ? await startSandboxEgressRelay() : undefined;
   try {
     if (egressEnabled) {
-      await writeFile(join(WORK_DIR, "playwright.config.ts"), `
+      await writeFile(
+        join(WORK_DIR, "playwright.config.ts"),
+        `
         import { defineConfig } from "playwright/test";
         export default defineConfig({
           workers: 1,
           use: { proxy: { server: "http://127.0.0.1:3128" } },
         });
-      `, { encoding: "utf8", mode: 0o600 });
+      `,
+        { encoding: "utf8", mode: 0o600 },
+      );
     }
     const result = await runPlaywrightCode({
       outputDir: WORK_DIR,

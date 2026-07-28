@@ -30,6 +30,19 @@ function booleanFromEnvironment(source: NodeJS.ProcessEnv, name: string): boolea
   return source[name] === "true";
 }
 
+export const SERVER_OPTION_DEFAULTS = {
+  concurrency: 2,
+  maxQueueSize: 20,
+  rateLimitMax: 10,
+  retentionMs: 60 * 60_000,
+  maxJobDurationMs: 5 * 60_000,
+  maxCodeExecutionDurationMs: 5 * 60_000,
+  maxCodeOutputBytes: 1024 * 1024,
+  maxCodeMemoryMiB: 512,
+  maxCodegenDurationMs: 10 * 60_000,
+  maxSitemapPages: 20,
+} as const;
+
 export interface EnvironmentConfig {
   host: string;
   port: number;
@@ -54,16 +67,16 @@ export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): 
       allowHistory: booleanFromEnvironment(source, "QA_RADAR_ENABLE_HISTORY"),
       allowCodeMode: codeModeEnabledForHost(host, source.QA_RADAR_ENABLE_CODE_MODE),
       codeModeAdminToken: source.QA_RADAR_CODE_MODE_ADMIN_TOKEN,
-      concurrency: positiveIntegerFromEnvironment(source, "QA_RADAR_CONCURRENCY", 2),
-      maxQueueSize: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_QUEUE_SIZE", 20),
-      rateLimitMax: positiveIntegerFromEnvironment(source, "QA_RADAR_RATE_LIMIT_MAX", 10),
-      retentionMs: positiveIntegerFromEnvironment(source, "QA_RADAR_RETENTION_MS", 60 * 60_000),
-      maxJobDurationMs: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_JOB_DURATION_MS", 5 * 60_000),
-      maxCodeExecutionDurationMs: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_CODE_EXECUTION_MS", 5 * 60_000),
-      maxCodeOutputBytes: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_CODE_OUTPUT_BYTES", 1024 * 1024),
-      maxCodeMemoryMiB: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_CODE_MEMORY_MIB", 512),
-      maxCodegenDurationMs: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_CODEGEN_DURATION_MS", 10 * 60_000),
-      maxSitemapPages: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_SITEMAP_PAGES", 20),
+      concurrency: positiveIntegerFromEnvironment(source, "QA_RADAR_CONCURRENCY", SERVER_OPTION_DEFAULTS.concurrency),
+      maxQueueSize: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_QUEUE_SIZE", SERVER_OPTION_DEFAULTS.maxQueueSize),
+      rateLimitMax: positiveIntegerFromEnvironment(source, "QA_RADAR_RATE_LIMIT_MAX", SERVER_OPTION_DEFAULTS.rateLimitMax),
+      retentionMs: positiveIntegerFromEnvironment(source, "QA_RADAR_RETENTION_MS", SERVER_OPTION_DEFAULTS.retentionMs),
+      maxJobDurationMs: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_JOB_DURATION_MS", SERVER_OPTION_DEFAULTS.maxJobDurationMs),
+      maxCodeExecutionDurationMs: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_CODE_EXECUTION_MS", SERVER_OPTION_DEFAULTS.maxCodeExecutionDurationMs),
+      maxCodeOutputBytes: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_CODE_OUTPUT_BYTES", SERVER_OPTION_DEFAULTS.maxCodeOutputBytes),
+      maxCodeMemoryMiB: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_CODE_MEMORY_MIB", SERVER_OPTION_DEFAULTS.maxCodeMemoryMiB),
+      maxCodegenDurationMs: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_CODEGEN_DURATION_MS", SERVER_OPTION_DEFAULTS.maxCodegenDurationMs),
+      maxSitemapPages: positiveIntegerFromEnvironment(source, "QA_RADAR_MAX_SITEMAP_PAGES", SERVER_OPTION_DEFAULTS.maxSitemapPages),
       turnstileSiteKey: source.TURNSTILE_SITE_KEY,
       turnstileSecretKey: source.TURNSTILE_SECRET_KEY,
     },

@@ -36,9 +36,4 @@ export interface RequestContext {
   publicJourney: (report: JourneyRunResult) => JourneyRunResult;
 }
 
-export type RouteHandler = (
-  context: RequestContext,
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL,
-) => Promise<boolean>;
+export type RouteHandler = (context: RequestContext, request: IncomingMessage, response: ServerResponse, url: URL) => Promise<boolean>;

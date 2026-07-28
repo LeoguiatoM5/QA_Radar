@@ -11,10 +11,7 @@ let origin = "";
 
 const server = createServer((request, response) => {
   if (request.url === "/sitemap.xml") {
-    const urls = Array.from(
-      { length: pageCount },
-      (_, index) => `<url><loc>${origin}/page-${index + 1}</loc></url>`,
-    ).join("");
+    const urls = Array.from({ length: pageCount }, (_, index) => `<url><loc>${origin}/page-${index + 1}</loc></url>`).join("");
     response.writeHead(200, { "content-type": "application/xml; charset=utf-8" });
     response.end(`<urlset>${urls}</urlset>`);
     return;
@@ -63,19 +60,23 @@ try {
   const elapsedMs = performance.now() - startedAt;
   assert.equal(report.pages?.length, pageCount);
   assert.equal(report.scanStatus, "completed");
-  console.log(JSON.stringify({
-    pages: pageCount,
-    elapsedMs: Math.round(elapsedMs),
-    averageMsPerPage: Math.round(elapsedMs / pageCount),
-    peakNodeRssMiB: Number((peakRssBytes / 1024 / 1024).toFixed(1)),
-    peakNodeHeapMiB: Number((peakHeapBytes / 1024 / 1024).toFixed(1)),
-    issues: report.summary.total,
-    passed: report.passed,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        pages: pageCount,
+        elapsedMs: Math.round(elapsedMs),
+        averageMsPerPage: Math.round(elapsedMs / pageCount),
+        peakNodeRssMiB: Number((peakRssBytes / 1024 / 1024).toFixed(1)),
+        peakNodeHeapMiB: Number((peakHeapBytes / 1024 / 1024).toFixed(1)),
+        issues: report.summary.total,
+        passed: report.passed,
+      },
+      null,
+      2,
+    ),
+  );
 } finally {
   clearInterval(sample);
   await rm(outputDir, { recursive: true, force: true });
-  await new Promise<void>((resolveClose, reject) =>
-    server.close((error) => error ? reject(error) : resolveClose()),
-  );
+  await new Promise<void>((resolveClose, reject) => server.close((error) => (error ? reject(error) : resolveClose())));
 }

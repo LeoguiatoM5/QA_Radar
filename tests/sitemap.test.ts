@@ -9,10 +9,7 @@ describe("sitemap parser", () => {
         <url><loc>https://example.com/</loc></url>
         <url><loc>https://example.com/search?a=1&amp;b=2</loc></url>
       </urlset>`);
-    assert.deepEqual(locations, [
-      "https://example.com/",
-      "https://example.com/search?a=1&b=2",
-    ]);
+    assert.deepEqual(locations, ["https://example.com/", "https://example.com/search?a=1&b=2"]);
   });
 
   it("ignora elementos sem loc", () => {

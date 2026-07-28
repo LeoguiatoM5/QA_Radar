@@ -1,11 +1,27 @@
+import { access, mkdir } from "node:fs/promises";
+import { constants } from "node:fs";
 import { createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../web-page.js";
 import { json } from "../http-helpers.js";
 import type { RouteHandler } from "./context.js";
+
+async function resultsDirWritable(resultsDir: string): Promise<boolean> {
+  try {
+    await mkdir(resultsDir, { recursive: true });
+    await access(resultsDir, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const tryHandlePages: RouteHandler = async (context, request, response, url) => {
   const { config } = context;
 
   if (request.method === "GET" && url.pathname === "/health") {
+    if (!(await resultsDirWritable(config.resultsDir))) {
+      json(response, 503, { status: "error", reason: "results-dir-unwritable" });
+      return true;
+    }
     json(response, 200, { status: "ok", ...context.queueStats() });
     return true;
   }

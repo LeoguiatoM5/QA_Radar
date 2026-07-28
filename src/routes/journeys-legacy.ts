@@ -16,7 +16,7 @@ function journeyInputSecrets(body: Record<string, unknown>, definition: ReturnTy
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("As credenciais da jornada devem ser um objeto.");
   const entries = Object.entries(raw as Record<string, unknown>);
   if (entries.length > 10) throw new Error("A jornada pode receber no máximo 10 credenciais.");
-  const expected = new Set(definition.steps.flatMap((step) => step.action === "fill" && step.valueFromInput ? [step.valueFromInput] : []));
+  const expected = new Set(definition.steps.flatMap((step) => (step.action === "fill" && step.valueFromInput ? [step.valueFromInput] : [])));
   const secrets: Record<string, string> = {};
   for (const [name, value] of entries) {
     if (!/^QA_RADAR_INPUT_[A-Z0-9_]+$/.test(name)) throw new Error("As credenciais devem usar referências QA_RADAR_INPUT_*.");
@@ -187,7 +187,7 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
     const name = journeyArtifact[2];
     if (!id || !name) throw new Error("Evidência inválida.");
     const job = legacyJourneys.get(id);
-    const expectedHash = job?.accessTokenHash ?? await storedAccessHash(config.resultsDir, `journey-${id}`);
+    const expectedHash = job?.accessTokenHash ?? (await storedAccessHash(config.resultsDir, `journey-${id}`));
     if (!expectedHash) {
       json(response, 404, { error: "Jornada não encontrada ou já expirada." });
       return true;
@@ -197,21 +197,20 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
       json(response, 409, { error: "A jornada ainda não foi concluída." });
       return true;
     }
-    const path = name === "journey-report.json" || name === "journey-evidence.html"
-      ? join(config.resultsDir, `journey-${id}`, name)
-      : join(config.resultsDir, `journey-${id}`, "journey-evidence", name);
+    const path =
+      name === "journey-report.json" || name === "journey-evidence.html" ? join(config.resultsDir, `journey-${id}`, name) : join(config.resultsDir, `journey-${id}`, "journey-evidence", name);
     const content = await readFile(path);
     response.writeHead(200, {
-      "content-type": name.endsWith(".json")
-        ? "application/json; charset=utf-8"
-        : name.endsWith(".html") ? "text/html; charset=utf-8" : name.endsWith(".webm") ? "video/webm" : "image/png",
+      "content-type": name.endsWith(".json") ? "application/json; charset=utf-8" : name.endsWith(".html") ? "text/html; charset=utf-8" : name.endsWith(".webm") ? "video/webm" : "image/png",
       "content-length": content.length,
       "x-content-type-options": "nosniff",
       "cache-control": "private, no-store",
       "referrer-policy": "no-referrer",
-      ...(name.endsWith(".html") ? {
-        "content-security-policy": "sandbox allow-popups allow-same-origin allow-downloads; default-src 'none'; img-src data:; media-src data:; style-src 'unsafe-inline'",
-      } : {}),
+      ...(name.endsWith(".html")
+        ? {
+            "content-security-policy": "sandbox allow-popups allow-same-origin allow-downloads; default-src 'none'; img-src data:; media-src data:; style-src 'unsafe-inline'",
+          }
+        : {}),
     });
     response.end(content);
     return true;

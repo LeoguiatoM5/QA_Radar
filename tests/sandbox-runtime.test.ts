@@ -4,13 +4,7 @@ import { PassThrough } from "node:stream";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { describe, it } from "node:test";
 import type { SpawnProcess } from "../src/code-execution.js";
-import {
-  dockerEgressProxyArguments,
-  dockerSandboxArguments,
-  runDockerSandbox,
-  type DockerSandboxConfig,
-  type SandboxExecutionRequest,
-} from "../src/sandbox-runtime.js";
+import { dockerEgressProxyArguments, dockerSandboxArguments, runDockerSandbox, type DockerSandboxConfig, type SandboxExecutionRequest } from "../src/sandbox-runtime.js";
 
 const REQUEST: SandboxExecutionRequest = {
   executionId: "11111111-1111-4111-8111-111111111111",
@@ -48,12 +42,7 @@ function fakeChild(): FakeChild {
 describe("runtime Docker do sandbox", () => {
   it("fixa isolamento, recursos e ausência de rede ou mounts do host", () => {
     const args = dockerSandboxArguments(REQUEST, CONFIG);
-    assert.deepEqual(args.slice(0, 4), [
-      "run",
-      "--rm",
-      "--interactive",
-      "--name",
-    ]);
+    assert.deepEqual(args.slice(0, 4), ["run", "--rm", "--interactive", "--name"]);
     assert.ok(args.includes("none"));
     assert.ok(args.includes("--read-only"));
     assert.ok(args.includes("ALL"));
@@ -62,7 +51,10 @@ describe("runtime Docker do sandbox", () => {
     assert.ok(args.includes("64"));
     assert.ok(args.includes("0.5"));
     assert.equal(args.filter((argument) => argument === "256m").length, 2);
-    assert.equal(args.some((argument) => argument === "--volume" || argument === "-v"), false);
+    assert.equal(
+      args.some((argument) => argument === "--volume" || argument === "-v"),
+      false,
+    );
     assert.equal(args.at(-1), CONFIG.image);
   });
 
@@ -81,13 +73,14 @@ describe("runtime Docker do sandbox", () => {
     assert.equal(jobArgs[jobNetwork + 1], "none");
     assert.equal(proxyArgs[proxyNetwork + 1], "bridge");
     assert.ok(jobArgs.includes("QA_RADAR_EGRESS_PROXY=1"));
-    assert.ok(jobArgs.some((argument) =>
-      argument.includes("dst=/run/egress,readonly")));
-    assert.ok(proxyArgs.some((argument) =>
-      argument.includes("dst=/run/egress") && !argument.includes("readonly")));
+    assert.ok(jobArgs.some((argument) => argument.includes("dst=/run/egress,readonly")));
+    assert.ok(proxyArgs.some((argument) => argument.includes("dst=/run/egress") && !argument.includes("readonly")));
     assert.ok(proxyArgs.includes("QA_RADAR_EGRESS_MAX_BYTES=8388608"));
     assert.ok(proxyArgs.includes("QA_RADAR_EGRESS_MAX_CONNECTIONS=16"));
-    assert.equal(jobArgs.some((argument) => argument.includes("host.docker.internal")), false);
+    assert.equal(
+      jobArgs.some((argument) => argument.includes("host.docker.internal")),
+      false,
+    );
   });
 
   it("envia o código por stdin, valida o resultado e remove o container", async () => {
@@ -120,10 +113,13 @@ describe("runtime Docker do sandbox", () => {
 
   it("rejeita recursos acima do teto antes de iniciar o Docker", async () => {
     await assert.rejects(
-      runDockerSandbox({
-        ...REQUEST,
-        limits: { ...REQUEST.limits, maxMemoryMiB: 1024 },
-      }, CONFIG),
+      runDockerSandbox(
+        {
+          ...REQUEST,
+          limits: { ...REQUEST.limits, maxMemoryMiB: 1024 },
+        },
+        CONFIG,
+      ),
       /memória solicitada excede/,
     );
   });

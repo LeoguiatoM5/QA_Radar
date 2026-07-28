@@ -9,10 +9,11 @@ import type { ScanControl, ScanOptions, ScanPageResult, ScanReport } from "./typ
 
 function pageDirectory(index: number, rawUrl: string): string {
   const url = new URL(rawUrl);
-  const name = `${url.hostname}${url.pathname}`
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 70) || "page";
+  const name =
+    `${url.hostname}${url.pathname}`
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 70) || "page";
   return `${String(index + 1).padStart(3, "0")}-${name}`;
 }
 
@@ -30,10 +31,7 @@ function pageResult(report: ScanReport, outputDir: string): ScanPageResult {
   };
 }
 
-export async function scanSitemap(
-  options: ScanOptions,
-  control: ScanControl = {},
-): Promise<ScanReport> {
+export async function scanSitemap(options: ScanOptions, control: ScanControl = {}): Promise<ScanReport> {
   const startedAt = new Date();
   control.signal?.throwIfAborted();
   control.onStage?.("discovering-sitemap");
@@ -81,9 +79,7 @@ export async function scanSitemap(
   control.onStage?.("consolidating");
   const issues = deduplicateIssues(reports.flatMap((report) => report.issues.map((issue) => ({ ...issue }))));
   const summary = summarizeIssues(issues);
-  const comparison = options.baselinePath
-    ? compareWithBaseline(issues, await loadBaseline(options.baselinePath))
-    : options.regressionsOnly ? compareWithBaseline(issues, emptyBaseline()) : undefined;
+  const comparison = options.baselinePath ? compareWithBaseline(issues, await loadBaseline(options.baselinePath)) : options.regressionsOnly ? compareWithBaseline(issues, emptyBaseline()) : undefined;
   const gateSummary = options.regressionsOnly && comparison ? comparison.newSummary : summary;
   const scanStatus = reports.some((report) => report.scanStatus === "partial") ? "partial" : "completed";
   const first = reports[0];

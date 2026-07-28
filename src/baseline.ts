@@ -11,9 +11,7 @@ export interface BaselineReport {
 function isIssue(value: unknown): value is Issue {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<Issue>;
-  return typeof candidate.ruleId === "string" &&
-    typeof candidate.fingerprint === "string" &&
-    (candidate.severity === "warning" || candidate.severity === "error");
+  return typeof candidate.ruleId === "string" && typeof candidate.fingerprint === "string" && (candidate.severity === "warning" || candidate.severity === "error");
 }
 
 export async function loadBaseline(path: string): Promise<BaselineReport> {
@@ -26,8 +24,7 @@ export async function loadBaseline(path: string): Promise<BaselineReport> {
   }
   if (!parsed || typeof parsed !== "object") throw new Error("O baseline não contém um relatório válido.");
   const report = parsed as Partial<BaselineReport>;
-  if (report.schemaVersion !== "1.0" || typeof report.startedAt !== "string" ||
-      !Array.isArray(report.issues) || !report.issues.every(isIssue)) {
+  if (report.schemaVersion !== "1.0" || typeof report.startedAt !== "string" || !Array.isArray(report.issues) || !report.issues.every(isIssue)) {
     throw new Error("O baseline é incompatível. Gere-o com um QA Radar que suporte o schema 1.0.");
   }
   return report as BaselineReport;
@@ -47,9 +44,7 @@ export function compareWithBaseline(currentIssues: Issue[], baseline: BaselineRe
   }
   const newIssues = currentIssues.filter((issue) => !baselineFingerprints.has(issue.fingerprint));
   const existingIssues = currentIssues.length - newIssues.length;
-  const resolvedIssues = baseline.issues
-    .filter((issue) => !currentFingerprints.has(issue.fingerprint))
-    .map(withoutBaselineStatus);
+  const resolvedIssues = baseline.issues.filter((issue) => !currentFingerprints.has(issue.fingerprint)).map(withoutBaselineStatus);
 
   return {
     baselineStartedAt: baseline.startedAt,

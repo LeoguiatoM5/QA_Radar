@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  renderDashboard,
-  renderResultsPanel,
-  renderScannerForm,
-} from "../src/web-components.js";
+import { renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
 import { createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
 
 describe("dashboard components", () => {
@@ -104,12 +100,15 @@ describe("dashboard components", () => {
       assert.match(dashboard, new RegExp(`id="${id}"`));
     }
 
-    assert.match(renderScannerForm({
-      allowHistory: false,
-      maxSitemapPages: 3,
-      turnstileWidget: "",
-      historyWidget: "",
-    }), /id="scan-form"/);
+    assert.match(
+      renderScannerForm({
+        allowHistory: false,
+        maxSitemapPages: 3,
+        turnstileWidget: "",
+        historyWidget: "",
+      }),
+      /id="scan-form"/,
+    );
     assert.match(renderResultsPanel(), /id="results"/);
   });
 });

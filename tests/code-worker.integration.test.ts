@@ -10,12 +10,7 @@ describe("worker Playwright integration", () => {
     const outputDir = await mkdtemp(join(tmpdir(), "qa-radar-worker-integration-"));
     await writeFile(
       join(outputDir, "qa-radar.spec.ts"),
-      [
-        "import { test, expect } from 'playwright/test';",
-        "test('worker isolado', async () => {",
-        "  expect(2 + 2).toBe(4);",
-        "});",
-      ].join("\n"),
+      ["import { test, expect } from 'playwright/test';", "test('worker isolado', async () => {", "  expect(2 + 2).toBe(4);", "});"].join("\n"),
       "utf8",
     );
 

@@ -4,15 +4,8 @@ import type { Issue, IssueEvidence, IssueInput } from "./types.js";
 export function correlateIssues(issues: IssueInput[]): IssueInput[] {
   const correlated = issues.filter((issue) => {
     if (!issue.url) return true;
-    if (issue.category === "network" && issues.some(
-      (candidate) => candidate.category === "console" && candidate.ruleId.startsWith("console.cors.") && candidate.url === issue.url,
-    )) return false;
-    const transportIssue = issues.some(
-      (candidate) =>
-        candidate !== issue &&
-        candidate.url === issue.url &&
-        (candidate.category === "http" || candidate.category === "network"),
-    );
+    if (issue.category === "network" && issues.some((candidate) => candidate.category === "console" && candidate.ruleId.startsWith("console.cors.") && candidate.url === issue.url)) return false;
+    const transportIssue = issues.some((candidate) => candidate !== issue && candidate.url === issue.url && (candidate.category === "http" || candidate.category === "network"));
     if (!transportIssue) return true;
     if (issue.category === "console" && /Failed to load resource/i.test(issue.message)) return false;
     if (issue.category === "element" && issue.title === "Imagem quebrada na página") return false;
@@ -95,9 +88,7 @@ export async function annotateEvidence(page: Page, issues: Issue[]): Promise<voi
     }
     layer.appendChild(panel);
 
-    const candidates = [...document.querySelectorAll<HTMLElement>(
-      "img[src],script[src],link[href],iframe[src],source[src],video[src],audio[src],input[src],object[data]",
-    )];
+    const candidates = [...document.querySelectorAll<HTMLElement>("img[src],script[src],link[href],iframe[src],source[src],video[src],audio[src],input[src],object[data]")];
     const located: Array<{ number: number; selector: string; element: string; label: string; boundingBox: { x: number; y: number; width: number; height: number } | undefined }> = [];
     const marked = new Map<Element, HTMLElement>();
 
@@ -116,9 +107,7 @@ export async function annotateEvidence(page: Page, issues: Issue[]): Promise<voi
           const raw = candidate.getAttribute(attr);
           if (!raw) return false;
           try {
-            const resolved = candidate instanceof HTMLImageElement && candidate.currentSrc
-              ? candidate.currentSrc
-              : new URL(raw, document.baseURI).toString();
+            const resolved = candidate instanceof HTMLImageElement && candidate.currentSrc ? candidate.currentSrc : new URL(raw, document.baseURI).toString();
             return resolved === item.url;
           } catch {
             return false;
@@ -129,19 +118,11 @@ export async function annotateEvidence(page: Page, issues: Issue[]): Promise<voi
 
       const attr = element.hasAttribute("src") ? "src" : element.hasAttribute("href") ? "href" : "data";
       const raw = element.getAttribute(attr) ?? "";
-      const selector = element.id
-        ? `${element.tagName.toLowerCase()}#${CSS.escape(element.id)}`
-        : `${element.tagName.toLowerCase()}[${attr}="${CSS.escape(raw)}"]`;
-      const description =
-        element.getAttribute("alt") ||
-        element.getAttribute("aria-label") ||
-        element.getAttribute("title") ||
-        element.tagName.toLowerCase();
+      const selector = element.id ? `${element.tagName.toLowerCase()}#${CSS.escape(element.id)}` : `${element.tagName.toLowerCase()}[${attr}="${CSS.escape(raw)}"]`;
+      const description = element.getAttribute("alt") || element.getAttribute("aria-label") || element.getAttribute("title") || element.tagName.toLowerCase();
       const rect = element.getBoundingClientRect();
       const visible = rect.width > 0 && rect.height > 0;
-      const box = visible
-        ? { x: rect.left + window.scrollX, y: rect.top + window.scrollY, width: rect.width, height: rect.height }
-        : undefined;
+      const box = visible ? { x: rect.left + window.scrollX, y: rect.top + window.scrollY, width: rect.width, height: rect.height } : undefined;
       const label = `#${item.number} ${item.title.toUpperCase().slice(0, 34)}`;
       const markerLabel = `#${item.number}`;
       located.push({ number: item.number, selector, element: `${element.tagName.toLowerCase()} · ${description}`, label, boundingBox: box });
@@ -157,7 +138,8 @@ export async function annotateEvidence(page: Page, issues: Issue[]): Promise<voi
         const badge = document.createElement("b");
         badge.textContent = markerLabel;
         badge.title = item.title;
-        badge.style.cssText = "position:absolute;left:-13px;top:-13px;display:grid;place-items:center;min-width:28px;height:28px;white-space:nowrap;background:#dc2626;color:white;border:2px solid white;border-radius:999px;padding:0 5px;font-size:10px;line-height:1;font-weight:900;box-shadow:0 4px 12px #0009";
+        badge.style.cssText =
+          "position:absolute;left:-13px;top:-13px;display:grid;place-items:center;min-width:28px;height:28px;white-space:nowrap;background:#dc2626;color:white;border:2px solid white;border-radius:999px;padding:0 5px;font-size:10px;line-height:1;font-weight:900;box-shadow:0 4px 12px #0009";
         marker.appendChild(badge);
         layer.appendChild(marker);
         marked.set(element, badge);

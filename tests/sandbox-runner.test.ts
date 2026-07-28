@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, it } from "node:test";
 import { sandboxRequestSignature } from "../src/sandbox-client.js";
-import {
-  createSandboxRunnerServer,
-  type RunnerLimits,
-} from "../src/sandbox-runner.js";
+import { createSandboxRunnerServer, type RunnerLimits } from "../src/sandbox-runner.js";
 import type { DockerSandboxConfig, SandboxExecutionRequest } from "../src/sandbox-runtime.js";
 
 const SECRET = "runner-test-secret-com-pelo-menos-32-bytes";
@@ -26,17 +23,17 @@ const DOCKER: DockerSandboxConfig = {
 const servers: ReturnType<typeof createSandboxRunnerServer>[] = [];
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => {
-    server.close(() => resolve());
-  })));
+  await Promise.all(
+    servers.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        }),
+    ),
+  );
 });
 
-async function start(
-  runSandbox: (
-    request: SandboxExecutionRequest,
-    config: DockerSandboxConfig,
-  ) => Promise<{ exitCode: number; stdout: string; stderr: string }>,
-): Promise<string> {
+async function start(runSandbox: (request: SandboxExecutionRequest, config: DockerSandboxConfig) => Promise<{ exitCode: number; stdout: string; stderr: string }>): Promise<string> {
   const server = createSandboxRunnerServer(SECRET, LIMITS, DOCKER, 1, runSandbox);
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -82,11 +79,8 @@ describe("servidor do runner sandbox", () => {
       },
     });
 
-    const response = await fetch(`${baseUrl}/v1/executions`, signedRequest(
-      body,
-      "33333333-3333-4333-8333-333333333333",
-    ));
-    const result = await response.json() as Record<string, unknown>;
+    const response = await fetch(`${baseUrl}/v1/executions`, signedRequest(body, "33333333-3333-4333-8333-333333333333"));
+    const result = (await response.json()) as Record<string, unknown>;
 
     assert.equal(response.status, 200);
     assert.equal(result.executionId, received?.executionId);

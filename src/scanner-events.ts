@@ -15,14 +15,11 @@ function sourceFromConsole(message: ConsoleMessage): string | undefined {
 }
 
 export function cleanMessage(value: string): string {
+  // eslint-disable-next-line no-control-regex -- strips ANSI escape codes from console output
   return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "").trim();
 }
 
-export function consoleErrorIssue(
-  technicalMessage: string,
-  locationUrl?: string,
-  source?: string,
-): IssueInput {
+export function consoleErrorIssue(technicalMessage: string, locationUrl?: string, source?: string): IssueInput {
   const cors = /Access to (?:fetch|XMLHttpRequest) at '([^']+)' from origin '([^']+)' has been blocked by CORS policy:\s*(.+)/is.exec(technicalMessage);
   if (cors) {
     const target = cors[1] ?? "";
@@ -61,12 +58,14 @@ export function consoleErrorIssue(
     title: cookieBlocked ? "Cookie de terceiro bloqueado pelo navegador" : mimeBlocked ? "Recurso bloqueado por formato incorreto" : "Erro registrado pelo navegador",
     impact: cookieBlocked
       ? "Uma integração externa pode perder sessão ou preferências, mas a página pode continuar funcionando."
-      : mimeBlocked ? "Um estilo ou script não foi carregado, podendo quebrar o visual ou uma funcionalidade."
-      : "Pode existir uma funcionalidade quebrada ou recurso ausente na página.",
+      : mimeBlocked
+        ? "Um estilo ou script não foi carregado, podendo quebrar o visual ou uma funcionalidade."
+        : "Pode existir uma funcionalidade quebrada ou recurso ausente na página.",
     recommendation: cookieBlocked
       ? "Confirme se a integração realmente depende do cookie. O fornecedor deve usar SameSite=None; Secure quando apropriado."
-      : mimeBlocked ? "Garanta que a URL retorne o arquivo esperado e o Content-Type correto, sem redirecionar para uma página HTML."
-      : "Abra a ocorrência técnica, identifique o componente relacionado e reproduza a ação afetada.",
+      : mimeBlocked
+        ? "Garanta que a URL retorne o arquivo esperado e o Content-Type correto, sem redirecionar para uma página HTML."
+        : "Abra a ocorrência técnica, identifique o componente relacionado e reproduza a ação afetada.",
     message: technicalMessage,
     method: undefined,
     status: undefined,
@@ -85,14 +84,12 @@ function requestIssue(request: Request): IssueInput {
     ruleId: "network.request.failed",
     category: "network",
     severity: "error",
-    title: corruptedContent
-      ? "Conteúdo recebido em formato inválido"
-      : resourceType === "image" ? "Imagem não pôde ser carregada" : "Recurso não pôde ser carregado",
+    title: corruptedContent ? "Conteúdo recebido em formato inválido" : resourceType === "image" ? "Imagem não pôde ser carregada" : "Recurso não pôde ser carregado",
     impact: corruptedContent
       ? "O navegador bloqueou o arquivo porque o conteúdo recebido não corresponde ao formato esperado."
       : resourceType === "image"
-      ? "Uma imagem pode aparecer vazia ou quebrada para o usuário."
-      : "Parte da página pode não funcionar ou aparecer incompleta.",
+        ? "Uma imagem pode aparecer vazia ou quebrada para o usuário."
+        : "Parte da página pode não funcionar ou aparecer incompleta.",
     recommendation: corruptedContent
       ? "Verifique redirecionamentos, Content-Type, compressão e se a URL devolve o arquivo correto."
       : "Verifique a URL, disponibilidade do serviço, DNS, TLS e bloqueios de rede.",
@@ -112,32 +109,36 @@ function responseIssue(response: Response): IssueInput {
   const resourceType = request.resourceType();
   const isServerError = status >= 500;
   const breaksPage = ["document", "image", "stylesheet", "script"].includes(resourceType);
-  const title = resourceType === "image"
-    ? status === 404 ? "Imagem não encontrada" : "Imagem falhou no servidor"
-    : resourceType === "stylesheet"
-      ? "Estilo da página não foi carregado"
-      : resourceType === "script"
-        ? "Script não foi carregado"
-        : resourceType === "fetch" || resourceType === "xhr"
-          ? "Serviço da aplicação respondeu com erro"
-          : status === 404 ? "Recurso não encontrado" : "Servidor respondeu com erro";
+  const title =
+    resourceType === "image"
+      ? status === 404
+        ? "Imagem não encontrada"
+        : "Imagem falhou no servidor"
+      : resourceType === "stylesheet"
+        ? "Estilo da página não foi carregado"
+        : resourceType === "script"
+          ? "Script não foi carregado"
+          : resourceType === "fetch" || resourceType === "xhr"
+            ? "Serviço da aplicação respondeu com erro"
+            : status === 404
+              ? "Recurso não encontrado"
+              : "Servidor respondeu com erro";
   return {
     ruleId: "http.response.error",
     category: "http",
     severity: isServerError || breaksPage ? "error" : "warning",
     title,
-    impact: resourceType === "image"
-      ? "O usuário pode ver uma imagem quebrada ou conteúdo visual ausente."
-      : resourceType === "stylesheet"
-        ? "A página pode aparecer sem estilos ou com layout incorreto."
-        : resourceType === "script"
-          ? "Uma funcionalidade dependente desse script pode não funcionar."
-          : isServerError
-            ? "A funcionalidade dependente desse recurso pode estar indisponível."
-            : "O conteúdo solicitado não foi encontrado.",
-    recommendation: status === 404
-      ? "Corrija ou remova a referência para esse endereço."
-      : "Verifique os logs e a disponibilidade do serviço responsável.",
+    impact:
+      resourceType === "image"
+        ? "O usuário pode ver uma imagem quebrada ou conteúdo visual ausente."
+        : resourceType === "stylesheet"
+          ? "A página pode aparecer sem estilos ou com layout incorreto."
+          : resourceType === "script"
+            ? "Uma funcionalidade dependente desse script pode não funcionar."
+            : isServerError
+              ? "A funcionalidade dependente desse recurso pode estar indisponível."
+              : "O conteúdo solicitado não foi encontrado.",
+    recommendation: status === 404 ? "Corrija ou remova a referência para esse endereço." : "Verifique os logs e a disponibilidade do serviço responsável.",
     message: `${status} ${response.statusText()}`.trim(),
     method: request.method(),
     status,
@@ -163,9 +164,7 @@ export function attachListeners(page: Page, issues: IssueInput[], options: ScanO
       category: "javascript",
       severity: "error",
       title: invalidSyntax ? "Script retornou conteúdo que não pode ser executado" : "Falha na execução do JavaScript",
-      impact: invalidSyntax
-        ? "A funcionalidade carregada por esse script não foi iniciada."
-        : "Uma ação ou componente da página pode ter parado de funcionar.",
+      impact: invalidSyntax ? "A funcionalidade carregada por esse script não foi iniciada." : "Uma ação ou componente da página pode ter parado de funcionar.",
       recommendation: invalidSyntax
         ? "Inspecione a resposta do script: ela pode conter HTML, mensagem de conta suspensa ou outro conteúdo no lugar de JavaScript."
         : "Localize o script e a linha indicados, corrija a exceção e teste novamente o fluxo afetado.",

@@ -1,15 +1,5 @@
 export type BrowserName = "chromium" | "firefox" | "webkit";
-export type IssueCategory =
-  | "console"
-  | "javascript"
-  | "http"
-  | "network"
-  | "navigation"
-  | "performance"
-  | "best-practices"
-  | "seo"
-  | "element"
-  | "accessibility";
+export type IssueCategory = "console" | "javascript" | "http" | "network" | "navigation" | "performance" | "best-practices" | "seo" | "element" | "accessibility";
 export type Severity = "warning" | "error";
 export type FailOn = "none" | Severity;
 export type ReportFormat = "console" | "json" | "html" | "junit" | "sarif" | "all";
@@ -50,17 +40,7 @@ export interface ScanProgress {
   stage?: ScanStage;
 }
 
-export type ScanStage =
-  | "queued"
-  | "discovering-sitemap"
-  | "launching-browser"
-  | "navigating"
-  | "inspecting"
-  | "capturing-evidence"
-  | "consolidating"
-  | "writing-reports"
-  | "completed"
-  | "cancelled";
+export type ScanStage = "queued" | "discovering-sitemap" | "launching-browser" | "navigating" | "inspecting" | "capturing-evidence" | "consolidating" | "writing-reports" | "completed" | "cancelled";
 
 export interface ScanControl {
   signal?: AbortSignal;
@@ -94,12 +74,14 @@ export interface IssueEvidence {
   selector: string;
   element: string;
   label: string;
-  boundingBox: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | undefined;
+  boundingBox:
+    | {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }
+    | undefined;
 }
 
 export interface ScanSummary {

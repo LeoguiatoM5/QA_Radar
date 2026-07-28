@@ -63,9 +63,7 @@ describe("scanner integration", () => {
       assert.ok((compared.comparison?.existingIssues ?? 0) >= 2);
     } finally {
       await rm(baselineDir, { recursive: true, force: true });
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
   });
 
@@ -75,7 +73,7 @@ describe("scanner integration", () => {
         "content-type": "text/html; charset=utf-8",
         "content-security-policy": "default-src 'self'; script-src 'none'",
       });
-      response.end('<!doctype html><html><title>CSP estrita</title><main>Conteúdo</main>');
+      response.end("<!doctype html><html><title>CSP estrita</title><main>Conteúdo</main>");
     });
     await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
     const address = server.address();
@@ -99,9 +97,7 @@ describe("scanner integration", () => {
       assert.ok(report.issues.some((issue) => issue.ruleId === "axe.html-has-lang"));
       assert.ok(!report.issues.some((issue) => issue.ruleId === "accessibility.audit-failed"));
     } finally {
-      await new Promise<void>((resolveClose, reject) =>
-        server.close((error) => (error ? reject(error) : resolveClose())),
-      );
+      await new Promise<void>((resolveClose, reject) => server.close((error) => (error ? reject(error) : resolveClose())));
     }
   });
 
@@ -136,9 +132,7 @@ describe("scanner integration", () => {
       assert.equal(report.screenshotPath, undefined);
       assert.ok(report.issues.some((issue) => issue.ruleId === "navigation.failed"));
     } finally {
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
   });
 });

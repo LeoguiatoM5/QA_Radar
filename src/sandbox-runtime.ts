@@ -57,10 +57,7 @@ function memoryLimit(request: SandboxExecutionRequest, config: DockerSandboxConf
   return Math.min(request.limits.maxMemoryMiB, config.maxMemoryMiB);
 }
 
-export function dockerSandboxArguments(
-  request: SandboxExecutionRequest,
-  config: DockerSandboxConfig,
-): string[] {
+export function dockerSandboxArguments(request: SandboxExecutionRequest, config: DockerSandboxConfig): string[] {
   const name = containerName(request.executionId);
   const memoryMiB = memoryLimit(request, config);
   const publicEgress = config.networkPolicy === "public-egress";
@@ -68,71 +65,107 @@ export function dockerSandboxArguments(
     "run",
     "--rm",
     "--interactive",
-    "--name", name,
-    "--hostname", "sandbox",
+    "--name",
+    name,
+    "--hostname",
+    "sandbox",
     "--init",
-    "--stop-timeout", "1",
-    "--network", "none",
-    "--ipc", "private",
+    "--stop-timeout",
+    "1",
+    "--network",
+    "none",
+    "--ipc",
+    "private",
     "--read-only",
-    "--tmpfs", "/work:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700",
-    "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=1777",
-    "--shm-size", "64m",
-    "--user", "10001:10001",
-    "--cap-drop", "ALL",
-    "--security-opt", "no-new-privileges:true",
-    "--security-opt", "seccomp=builtin",
-    "--pids-limit", String(config.pidsLimit),
-    "--cpus", String(config.cpuLimit),
-    "--memory", `${memoryMiB}m`,
-    "--memory-swap", `${memoryMiB}m`,
-    "--ulimit", `nproc=${config.pidsLimit}:${config.pidsLimit}`,
-    "--ulimit", "nofile=1024:1024",
-    "--ulimit", "core=0:0",
-    "--env", "CI=1",
-    "--env", "HOME=/tmp",
-    "--env", "TMPDIR=/tmp",
-    "--env", "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
-    ...(publicEgress
-      ? [
-          "--env", "QA_RADAR_EGRESS_PROXY=1",
-          "--mount", `type=volume,src=${egressVolumeName(request.executionId)},dst=/run/egress,readonly`,
-        ]
-      : []),
-    "--workdir", "/work",
+    "--tmpfs",
+    "/work:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700",
+    "--tmpfs",
+    "/tmp:rw,noexec,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=1777",
+    "--shm-size",
+    "64m",
+    "--user",
+    "10001:10001",
+    "--cap-drop",
+    "ALL",
+    "--security-opt",
+    "no-new-privileges:true",
+    "--security-opt",
+    "seccomp=builtin",
+    "--pids-limit",
+    String(config.pidsLimit),
+    "--cpus",
+    String(config.cpuLimit),
+    "--memory",
+    `${memoryMiB}m`,
+    "--memory-swap",
+    `${memoryMiB}m`,
+    "--ulimit",
+    `nproc=${config.pidsLimit}:${config.pidsLimit}`,
+    "--ulimit",
+    "nofile=1024:1024",
+    "--ulimit",
+    "core=0:0",
+    "--env",
+    "CI=1",
+    "--env",
+    "HOME=/tmp",
+    "--env",
+    "TMPDIR=/tmp",
+    "--env",
+    "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
+    ...(publicEgress ? ["--env", "QA_RADAR_EGRESS_PROXY=1", "--mount", `type=volume,src=${egressVolumeName(request.executionId)},dst=/run/egress,readonly`] : []),
+    "--workdir",
+    "/work",
     config.image,
   ];
 }
 
-export function dockerEgressProxyArguments(
-  request: SandboxExecutionRequest,
-  config: DockerSandboxConfig,
-): string[] {
+export function dockerEgressProxyArguments(request: SandboxExecutionRequest, config: DockerSandboxConfig): string[] {
   return [
     "run",
     "--rm",
-    "--name", proxyContainerName(request.executionId),
-    "--hostname", "egress",
+    "--name",
+    proxyContainerName(request.executionId),
+    "--hostname",
+    "egress",
     "--init",
-    "--stop-timeout", "1",
-    "--network", "bridge",
-    "--ipc", "private",
+    "--stop-timeout",
+    "1",
+    "--network",
+    "bridge",
+    "--ipc",
+    "private",
     "--read-only",
-    "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=1777",
-    "--user", "10001:10001",
-    "--cap-drop", "ALL",
-    "--security-opt", "no-new-privileges:true",
-    "--security-opt", "seccomp=builtin",
-    "--pids-limit", "64",
-    "--cpus", "0.25",
-    "--memory", "128m",
-    "--memory-swap", "128m",
-    "--ulimit", "nofile=1024:1024",
-    "--ulimit", "core=0:0",
-    "--mount", `type=volume,src=${egressVolumeName(request.executionId)},dst=/run/egress`,
-    "--env", `QA_RADAR_EGRESS_MAX_BYTES=${config.egressMaxBytes ?? 64 * 1024 * 1024}`,
-    "--env", `QA_RADAR_EGRESS_MAX_CONNECTIONS=${config.egressMaxConnections ?? 32}`,
-    "--entrypoint", "node",
+    "--tmpfs",
+    "/tmp:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=1777",
+    "--user",
+    "10001:10001",
+    "--cap-drop",
+    "ALL",
+    "--security-opt",
+    "no-new-privileges:true",
+    "--security-opt",
+    "seccomp=builtin",
+    "--pids-limit",
+    "64",
+    "--cpus",
+    "0.25",
+    "--memory",
+    "128m",
+    "--memory-swap",
+    "128m",
+    "--ulimit",
+    "nofile=1024:1024",
+    "--ulimit",
+    "core=0:0",
+    "--mount",
+    `type=volume,src=${egressVolumeName(request.executionId)},dst=/run/egress`,
+    "--env",
+    `QA_RADAR_EGRESS_MAX_BYTES=${config.egressMaxBytes ?? 64 * 1024 * 1024}`,
+    "--env",
+    `QA_RADAR_EGRESS_MAX_CONNECTIONS=${config.egressMaxConnections ?? 32}`,
+    "--entrypoint",
+    "node",
     config.image,
     "/app/dist/sandbox-egress-proxy.js",
     "/run/egress/proxy.sock",
@@ -157,24 +190,12 @@ function waitForExit(child: ChildProcess, timeoutMs = 2_000): Promise<void> {
   });
 }
 
-async function dockerCleanupCommand(
-  dockerCommand: string,
-  args: readonly string[],
-  spawnProcess: SpawnProcess,
-): Promise<void> {
-  const cleanup = spawnProcess(
-    dockerCommand,
-    args,
-    { stdio: "ignore", windowsHide: true },
-  );
+async function dockerCleanupCommand(dockerCommand: string, args: readonly string[], spawnProcess: SpawnProcess): Promise<void> {
+  const cleanup = spawnProcess(dockerCommand, args, { stdio: "ignore", windowsHide: true });
   await waitForExit(cleanup);
 }
 
-function dockerCommand(
-  command: string,
-  args: readonly string[],
-  spawnProcess: SpawnProcess,
-): Promise<string> {
+function dockerCommand(command: string, args: readonly string[], spawnProcess: SpawnProcess): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawnProcess(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -198,28 +219,16 @@ function dockerCommand(
     child.once("error", reject);
     child.once("close", (code) => {
       if (code === 0) resolve(Buffer.concat(stdout).toString("utf8").trim());
-      else reject(new Error(
-        `O Docker recusou a preparação do sandbox: ${Buffer.concat(stderr).toString("utf8").slice(-2_000)}`,
-      ));
+      else reject(new Error(`O Docker recusou a preparação do sandbox: ${Buffer.concat(stderr).toString("utf8").slice(-2_000)}`));
     });
   });
 }
 
-export async function checkDockerSandboxReadiness(
-  config: DockerSandboxConfig,
-): Promise<DockerSandboxReadiness> {
+export async function checkDockerSandboxReadiness(config: DockerSandboxConfig): Promise<DockerSandboxReadiness> {
   const dockerCommandName = config.dockerCommand ?? "docker";
   const spawnProcess = config.spawnProcess ?? spawn;
-  const dockerVersion = await dockerCommand(
-    dockerCommandName,
-    ["version", "--format", "{{.Server.Version}}"],
-    spawnProcess,
-  );
-  await dockerCommand(
-    dockerCommandName,
-    ["image", "inspect", config.image, "--format", "{{.Id}}"],
-    spawnProcess,
-  );
+  const dockerVersion = await dockerCommand(dockerCommandName, ["version", "--format", "{{.Server.Version}}"], spawnProcess);
+  await dockerCommand(dockerCommandName, ["image", "inspect", config.image, "--format", "{{.Id}}"], spawnProcess);
   return { dockerVersion, image: config.image };
 }
 
@@ -251,13 +260,8 @@ function waitForProxyReady(child: ChildProcess, timeoutMs: number): Promise<void
       stderr.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     };
     const onError = (error: Error): void => finish(error);
-    const onClose = (code: number | null): void => finish(new Error(
-      `O proxy de egress encerrou antes de ficar pronto (${code ?? 1}): ${Buffer.concat(stderr).toString("utf8").slice(-2_000)}`,
-    ));
-    const deadline = setTimeout(
-      () => finish(new Error("O proxy de egress não ficou pronto dentro do limite.")),
-      timeoutMs,
-    );
+    const onClose = (code: number | null): void => finish(new Error(`O proxy de egress encerrou antes de ficar pronto (${code ?? 1}): ${Buffer.concat(stderr).toString("utf8").slice(-2_000)}`));
+    const deadline = setTimeout(() => finish(new Error("O proxy de egress não ficou pronto dentro do limite.")), timeoutMs);
     child.stdout?.on("data", onStdout);
     child.stderr?.on("data", onStderr);
     child.once("error", onError);
@@ -265,10 +269,7 @@ function waitForProxyReady(child: ChildProcess, timeoutMs: number): Promise<void
   });
 }
 
-function parseContainerResult(
-  raw: string,
-  request: SandboxExecutionRequest,
-): CodeExecutionResult {
+function parseContainerResult(raw: string, request: SandboxExecutionRequest): CodeExecutionResult {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -279,15 +280,10 @@ function parseContainerResult(
     throw new Error("O job sandbox retornou um resultado inválido.");
   }
   const result = value as Record<string, unknown>;
-  if (
-    !Number.isInteger(result.exitCode)
-    || typeof result.stdout !== "string"
-    || typeof result.stderr !== "string"
-  ) {
+  if (!Number.isInteger(result.exitCode) || typeof result.stdout !== "string" || typeof result.stderr !== "string") {
     throw new Error("O job sandbox retornou um resultado inválido.");
   }
-  const outputBytes = Buffer.byteLength(result.stdout, "utf8")
-    + Buffer.byteLength(result.stderr, "utf8");
+  const outputBytes = Buffer.byteLength(result.stdout, "utf8") + Buffer.byteLength(result.stderr, "utf8");
   if (outputBytes > request.limits.maxOutputBytes) {
     throw new Error("O job sandbox retornou saída acima do limite contratado.");
   }
@@ -298,11 +294,7 @@ function parseContainerResult(
   };
 }
 
-function executeJobContainer(
-  child: ChildProcess,
-  request: SandboxExecutionRequest,
-  timeoutMs: number,
-): Promise<CodeExecutionResult> {
+function executeJobContainer(child: ChildProcess, request: SandboxExecutionRequest, timeoutMs: number): Promise<CodeExecutionResult> {
   return new Promise((resolve, reject) => {
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
@@ -346,21 +338,17 @@ function executeJobContainer(
       }
     });
     child.stdin?.once("error", (error) => finish(error));
-    const deadline = setTimeout(
-      () => finish(new Error(`A execução sandbox excedeu o limite de ${request.limits.timeoutMs} ms.`)),
-      timeoutMs,
+    const deadline = setTimeout(() => finish(new Error(`A execução sandbox excedeu o limite de ${request.limits.timeoutMs} ms.`)), timeoutMs);
+    child.stdin?.end(
+      JSON.stringify({
+        code: request.code,
+        limits: request.limits,
+      }),
     );
-    child.stdin?.end(JSON.stringify({
-      code: request.code,
-      limits: request.limits,
-    }));
   });
 }
 
-export async function runDockerSandbox(
-  request: SandboxExecutionRequest,
-  config: DockerSandboxConfig,
-): Promise<CodeExecutionResult> {
+export async function runDockerSandbox(request: SandboxExecutionRequest, config: DockerSandboxConfig): Promise<CodeExecutionResult> {
   if (request.limits.timeoutMs > config.maxTimeoutMs) {
     throw new Error("O timeout solicitado excede o limite do runner.");
   }
@@ -382,38 +370,22 @@ export async function runDockerSandbox(
     if (publicEgress) {
       await dockerCommand(docker, ["volume", "create", volumeName], spawnProcess);
       volumeCreated = true;
-      proxyProcess = spawnProcess(
-        docker,
-        dockerEgressProxyArguments(request, config),
-        {
-          stdio: ["ignore", "pipe", "pipe"],
-          windowsHide: true,
-        },
-      );
-      const startupBudget = Math.min(
-        PROXY_STARTUP_TIMEOUT_MS,
-        Math.max(1, expiresAt - Date.now()),
-      );
+      proxyProcess = spawnProcess(docker, dockerEgressProxyArguments(request, config), {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
+      const startupBudget = Math.min(PROXY_STARTUP_TIMEOUT_MS, Math.max(1, expiresAt - Date.now()));
       await waitForProxyReady(proxyProcess, startupBudget);
     }
 
     const remainingMs = Math.max(1, expiresAt - Date.now());
-    const child = spawnProcess(
-      docker,
-      dockerSandboxArguments(request, config),
-      {
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-      } satisfies SpawnOptions,
-    );
+    const child = spawnProcess(docker, dockerSandboxArguments(request, config), {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    } satisfies SpawnOptions);
     return await executeJobContainer(child, request, remainingMs);
   } finally {
-    await Promise.all([
-      dockerCleanupCommand(docker, ["rm", "--force", jobName], spawnProcess),
-      ...(publicEgress
-        ? [dockerCleanupCommand(docker, ["rm", "--force", proxyName], spawnProcess)]
-        : []),
-    ]);
+    await Promise.all([dockerCleanupCommand(docker, ["rm", "--force", jobName], spawnProcess), ...(publicEgress ? [dockerCleanupCommand(docker, ["rm", "--force", proxyName], spawnProcess)] : [])]);
     proxyProcess?.kill("SIGKILL");
     if (volumeCreated) {
       await dockerCleanupCommand(docker, ["volume", "rm", "--force", volumeName], spawnProcess);

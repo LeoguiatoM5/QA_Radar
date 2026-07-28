@@ -28,11 +28,14 @@
     "sandbox:homologate": "tsx scripts/homologate-sandbox.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "node --import tsx --test tests/accessibility.test.ts tests/cli.test.ts tests/code-execution.test.ts tests/code-execution-job-store.test.ts tests/code-policy.test.ts tests/codegen-session-store.test.ts tests/env.test.ts tests/history.test.ts tests/http-helpers.test.ts tests/job-queue.test.ts tests/journey-evidence-report.test.ts tests/journey.test.ts tests/legacy-journey-registry.test.ts tests/lighthouse.test.ts tests/quality.test.ts tests/rate-limit.test.ts tests/reporters.test.ts tests/sandbox-client.test.ts tests/sandbox-runner.test.ts tests/sandbox-runtime.test.ts tests/scanner-events.test.ts tests/scanner-evidence.test.ts tests/schema.test.ts tests/security.test.ts tests/server.test.ts tests/sitemap.test.ts tests/web-page.test.ts",
     "test:integration": "node --import tsx --test tests/code-worker.integration.test.ts tests/journey-runner.integration.test.ts tests/responsive.integration.test.ts tests/scanner.integration.test.ts tests/suite.integration.test.ts tests/web.integration.test.ts",
     "test:lighthouse": "node --import tsx --test tests/lighthouse.integration.test.ts",
     "benchmark:sitemap": "node --import tsx scripts/benchmark-sitemap.ts",
-    "check": "npm run typecheck && npm test && npm run build",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build",
     "start": "node dist/index.js"
   },
   "keywords": [
@@ -52,9 +55,14 @@
     "lighthouse": "12.6.1",
     "playwright": "^1.61.1",
     "tsx": "^4.23.1",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1"
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^26.1.1",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.65.0"
   }
 }

@@ -11,7 +11,11 @@ export interface JourneyEvidenceMetadata {
 export type AssetReader = (relativePath: string) => Promise<Buffer>;
 
 const TEST_TYPE_LABELS: Record<JourneyTestType, string> = {
-  functional: "Funcional", smoke: "Smoke", regression: "Regressão", acceptance: "Aceitação", exploratory: "Exploratório",
+  functional: "Funcional",
+  smoke: "Smoke",
+  regression: "Regressão",
+  acceptance: "Aceitação",
+  exploratory: "Exploratório",
 };
 
 function escapeHtml(value: string): string {
@@ -120,19 +124,18 @@ async function videoSection(report: JourneyRunResult, readAsset: AssetReader): P
   return `<section class="head"><h2>Vídeo da jornada</h2><figure class="video"><video controls preload="metadata" src="${uri}"></video></figure></section>`;
 }
 
-export async function createJourneyEvidenceHtml(
-  report: JourneyRunResult,
-  metadata: JourneyEvidenceMetadata,
-  readAsset: AssetReader,
-  generatedAt = new Date(),
-): Promise<string> {
-  const stepArticles = await Promise.all(report.steps.map(async (step) => `<article class="step ${step.status}">
+export async function createJourneyEvidenceHtml(report: JourneyRunResult, metadata: JourneyEvidenceMetadata, readAsset: AssetReader, generatedAt = new Date()): Promise<string> {
+  const stepArticles = await Promise.all(
+    report.steps.map(
+      async (step) => `<article class="step ${step.status}">
     <header><span>Passo ${step.index + 1}</span><strong>${step.status === "passed" ? "Aprovado" : "Falhou"}</strong></header>
     <h2>${escapeHtml(step.description ?? step.action)}</h2>
     <p class="technical">Ação: <code>${escapeHtml(step.action)}</code> · ${step.durationMs} ms</p>
     ${step.error ? `<p class="error">${escapeHtml(friendlyStepFailureMessage(step.action))}</p>` : ""}
     ${await evidence(step, readAsset)}
-  </article>`));
+  </article>`,
+    ),
+  );
   const steps = `<p><a href="" download="qa-radar-evidencias.html">Baixar relatório HTML</a></p>` + stepArticles.join("\n");
   const video = await videoSection(report, readAsset);
   const passed = report.status === "passed";

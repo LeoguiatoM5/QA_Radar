@@ -3,12 +3,7 @@ import { spawn } from "node:child_process";
 import type { AddressInfo } from "node:net";
 import { createSandboxCodeRunner } from "../src/sandbox-client.js";
 import { createSandboxRunnerServer } from "../src/sandbox-runner.js";
-import {
-  dockerSandboxArguments,
-  runDockerSandbox,
-  type DockerSandboxConfig,
-  type SandboxExecutionRequest,
-} from "../src/sandbox-runtime.js";
+import { dockerSandboxArguments, runDockerSandbox, type DockerSandboxConfig, type SandboxExecutionRequest } from "../src/sandbox-runtime.js";
 
 const IMAGE = process.env.QA_RADAR_SANDBOX_JOB_IMAGE ?? "qa-radar-sandbox-job:3.1.0";
 const CONFIG: DockerSandboxConfig = {
@@ -40,11 +35,13 @@ function docker(args: readonly string[]): Promise<CommandResult> {
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
     child.once("error", reject);
-    child.once("close", (code) => resolve({
-      code: code ?? 1,
-      stdout: Buffer.concat(stdout).toString("utf8"),
-      stderr: Buffer.concat(stderr).toString("utf8"),
-    }));
+    child.once("close", (code) =>
+      resolve({
+        code: code ?? 1,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      }),
+    );
     child.stdin.end();
   });
 }
@@ -114,18 +111,21 @@ async function homologatePlaywrightJob(): Promise<void> {
 async function homologateTimeoutCleanup(): Promise<void> {
   const executionId = "66666666-6666-4666-8666-777777777777";
   await assert.rejects(
-    runDockerSandbox({
-      executionId,
-      code: `
+    runDockerSandbox(
+      {
+        executionId,
+        code: `
         import { test } from "playwright/test";
         test("cpu abusiva", () => { while (true) {} });
       `,
-      limits: {
-        timeoutMs: 15_000,
-        maxOutputBytes: 64 * 1024,
-        maxMemoryMiB: 256,
+        limits: {
+          timeoutMs: 15_000,
+          maxOutputBytes: 64 * 1024,
+          maxMemoryMiB: 256,
+        },
       },
-    }, CONFIG),
+      CONFIG,
+    ),
     /excedeu o limite de 15000 ms/,
   );
   const inspect = await docker(["inspect", `qa-radar-job-${executionId}`]);
@@ -194,10 +194,16 @@ async function homologateKernelControls(): Promise<Record<string, unknown>> {
 await homologatePlaywrightJob();
 await homologateTimeoutCleanup();
 const evidence = await homologateKernelControls();
-console.log(JSON.stringify({
-  status: "approved",
-  image: IMAGE,
-  jobNetwork: "none",
-  egressPolicy: "public-egress",
-  ...evidence,
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      status: "approved",
+      image: IMAGE,
+      jobNetwork: "none",
+      egressPolicy: "public-egress",
+      ...evidence,
+    },
+    null,
+    2,
+  ),
+);
