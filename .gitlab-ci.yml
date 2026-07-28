@@ -32,21 +32,21 @@ validate:
 
 playwright:
   stage: integration
-  image: mcr.microsoft.com/playwright:v1.62.0-noble
+  image: mcr.microsoft.com/playwright:v1.61.1-noble
   script:
     - npm ci
     - npm run test:integration
 
 lighthouse:
   stage: integration
-  image: mcr.microsoft.com/playwright:v1.62.0-noble
+  image: mcr.microsoft.com/playwright:v1.61.1-noble
   script:
     - npm ci
     - npm run test:lighthouse
 
 smoke-reports:
   stage: integration
-  image: mcr.microsoft.com/playwright:v1.62.0-noble
+  image: mcr.microsoft.com/playwright:v1.61.1-noble
   script:
     - npm ci
     - npm run build
