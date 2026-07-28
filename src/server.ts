@@ -71,7 +71,7 @@ export interface ServerOptions {
   // allowJourneys e os limites maxJourney* abaixo não são lidos de nenhuma
   // variável de ambiente em produção: a jornada declarativa em JSON é legado
   // e não faz parte do produto. Permanecem aqui apenas para os testes que
-  // ainda exercitam essa rota; ver docs/EVOLUTION_LOG.md.
+  // ainda exercitam essa rota.
   allowJourneys: boolean;
   allowCodeMode: boolean;
   codeModeAdminToken: string | undefined;

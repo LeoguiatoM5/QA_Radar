@@ -12,7 +12,6 @@
   "files": [
     "dist",
     "scripts",
-    "docs",
     "examples",
     "README.md",
     "CHANGELOG.md",
