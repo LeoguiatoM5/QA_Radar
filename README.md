@@ -639,13 +639,18 @@ camada de controle de abuso.
 
 ```bash
 npm run typecheck
+npm run lint
+npm run format:check
 npm test
 npm run test:integration
 npm run build
 npm run benchmark:sitemap
 
-# ou typecheck, testes unitários e build
+# ou typecheck, lint, formatação, testes unitários e build em um comando só
 npm run check
+
+# relatório de cobertura dos testes unitários (informativo, não bloqueia o CI)
+npm run test:coverage
 ```
 
 O benchmark cria localmente um sitemap sintético com 20 páginas, executa a

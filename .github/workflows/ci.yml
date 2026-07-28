@@ -31,6 +31,10 @@ jobs:
 
       - run: npm ci
       - run: npm run check
+      - name: Reportar cobertura de testes unitários (não bloqueante)
+        if: matrix.os == 'ubuntu-latest'
+        continue-on-error: true
+        run: npm run test:coverage
 
   integration:
     name: Integração Playwright

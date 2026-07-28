@@ -28,6 +28,7 @@ validate:
   script:
     - npm ci
     - npm run check
+    - npm run test:coverage || true
     - npm audit --omit=dev
 
 playwright:
