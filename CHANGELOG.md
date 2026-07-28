@@ -10,10 +10,16 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   de relatórios, com hash persistido durante a retenção e cookie `HttpOnly` na UI.
 - Timeout global do servidor e bloqueio de mudanças de resolução DNS durante uma
   análise pública.
-- Descrição opcional por passo de Jornada, nomes amigáveis para ações e guia dos
-  comandos disponíveis diretamente no dashboard.
-- Relatório HTML de evidências das Jornadas, com identidade do QA Radar,
-  responsável, tipo de teste, passos, descrições e capturas Antes/Depois.
+- Relatório HTML de evidências do Modo Jornada de Playwright, com identidade do
+  QA Radar, responsável, tipo de teste, passos, descrição por passo (editável,
+  derivada do `.spec.ts`) e capturas Antes/Depois.
+- Runner de sandbox hospedado (Docker) para execução isolada de `.spec.ts`:
+  protocolo assinado por HMAC, container descartável por job, rootfs somente
+  leitura e proxy de egress público que bloqueia rede privada e metadata.
+  Permanece desabilitado por padrão (`QA_RADAR_ENABLE_CODE_MODE=false`) até uma
+  instância dedicada ser publicada.
+- Captura de screenshot real por passo na execução local do Modo Jornada de
+  Playwright, sobrescrevendo o fixture `page` do Playwright Test.
 
 ### Alterado
 
@@ -23,13 +29,19 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   largura e cards; a apresentação do produto permanece concentrada na Home.
 - O CI agora valida as páginas principais em um viewport mobile de 390×844,
   incluindo overflow horizontal, hierarquia de títulos e controles fora da tela.
-- Jornadas agora oferece exemplos rápidos de smoke básico e login no SauceDemo,
-  com preenchimento automático da URL e do JSON.
+- A única experiência de automação do produto passou a ser o Modo Jornada de
+  Playwright baseado em arquivos `.spec.ts` reais (Codegen, editar, importar,
+  exportar, executar); o formulário visual e o modelo de jornada declarativa em
+  JSON foram removidos da Home, da documentação e de `/journeys`. O executor
+  JSON permanece no código como legado desabilitado, sem exposição na interface.
 - Jornadas do dashboard agora são jobs assíncronos protegidos por token, com
   consulta, cancelamento, timeout global e limites próprios de passos/payload.
-- Evidências e JSON de jornadas exigem autorização e não expõem caminhos internos.
-- O Blueprint do Render habilita Jornadas para homologação controlada, mantendo
-  os limites de 10 passos, 16 KiB de payload e 120 segundos por execução.
+- Evidências do Modo Jornada exigem autorização e não expõem caminhos internos;
+  relatórios baixados embutem screenshots e vídeo como base64 (data URI),
+  ficando 100% autocontidos offline.
+- `server.ts` foi dividido em módulos de rotas (`src/routes/*.ts`), `src/env.ts`,
+  `src/http-helpers.ts` e stores dedicados por domínio, sem mudança de contrato
+  HTTP: headers, cookies, CSP e mensagens de erro preservados.
 
 ### Corrigido
 
@@ -41,6 +53,13 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   quando a cobertura multipágina não está habilitada.
 - O botão de cancelamento substitui temporariamente o botão de execução e deixa
   de permanecer visível junto ao resultado concluído.
+- O vídeo de cada passo travava em 0:00 porque a rota de artefato não enviava
+  `Content-Length`, forçando `chunked` e quebrando a detecção de duração do
+  Chrome.
+- O download do relatório de evidências falhava silenciosamente porque a CSP
+  `sandbox` não tinha o token `allow-downloads` exigido pelo Chrome moderno.
+- A mesma screenshot final aparecia duplicada como Antes/Depois em todos os
+  passos; corrigido para capturar uma screenshot real por passo.
 
 ## [3.1.0] - 2026-07-22
 
