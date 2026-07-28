@@ -78,13 +78,14 @@ describe("web server", () => {
     assert.doesNotMatch(html, /id="journey-form"/);
   });
 
-  it("separa os Testes de API da Jornada e mostra indisponibilidade com segurança", async () => {
+  it("entrega os Testes de API como cliente HTTP interativo, separado da Jornada", async () => {
     const response = await fetch(`${baseUrl}/api-tests`);
     const html = await response.text();
     assert.equal(response.status, 200);
-    assert.match(html, /Recurso indisponível neste ambiente/);
+    assert.match(html, /id="http-client-panel"/);
+    assert.match(html, /id="http-send"/);
     assert.doesNotMatch(html, /id="scan-form"/);
-    assert.doesNotMatch(html, /id="codegen-start"/);
+    assert.doesNotMatch(html, /id="codegen-start"|id="playwright-code"/);
   });
 
   it("mantém jornadas desabilitadas por padrão", async () => {

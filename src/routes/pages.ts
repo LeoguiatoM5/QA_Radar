@@ -76,7 +76,7 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       "permissions-policy": "camera=(), microphone=(), geolocation=()",
       "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
     });
-    response.end(createApiTestsPage(config.allowCodeMode));
+    response.end(createApiTestsPage());
     return true;
   }
 

@@ -23,6 +23,7 @@ import { tryHandleCodegen } from "./routes/codegen.js";
 import { tryHandleCodeExecution } from "./routes/code-execution.js";
 import { tryHandleLegacyJourneys } from "./routes/journeys-legacy.js";
 import { tryHandleScans } from "./routes/scans.js";
+import { tryHandleHttpRequest } from "./routes/http-request.js";
 import type { SpawnProcess } from "./code-execution.js";
 import { SERVER_OPTION_DEFAULTS } from "./env.js";
 
@@ -122,7 +123,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   operationalLogger: defaultOperationalLogger,
 };
 
-const ROUTE_HANDLERS: RouteHandler[] = [tryHandlePages, tryHandleCodegen, tryHandleCodeExecution, tryHandleLegacyJourneys, tryHandleScans];
+const ROUTE_HANDLERS: RouteHandler[] = [tryHandlePages, tryHandleCodegen, tryHandleCodeExecution, tryHandleLegacyJourneys, tryHandleScans, tryHandleHttpRequest];
 
 export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Server {
   const config = { ...DEFAULT_OPTIONS, ...overrides };

@@ -315,30 +315,26 @@ não faz parte do produto, da interface ou da direção comercial.
 npm run web
 ```
 
-A rota `/api-tests` é uma aba própria, separada da Jornada, dedicada a testes
-de API puros — chamadas HTTP diretas sem depender do navegador. Usa o mesmo
-motor de execução do Modo Jornada de Playwright (arquivos `.spec.ts` reais,
-mesma fila de jobs, mesmo relatório de evidências, mesmas proteções de
-credenciais), só que o código escrito ali normalmente usa o fixture
-`request` do Playwright Test em vez do fixture `page`:
+A rota `/api-tests` é uma aba própria, separada da Jornada: um cliente HTTP
+interativo no estilo Postman, para validar uma API diretamente, sem escrever
+código nem esperar um job rodar.
 
-```ts
-import { test, expect } from "@playwright/test";
+- Monte a requisição (método, URL, headers, corpo) e clique em **Enviar** —
+  a chamada sai do próprio servidor do QA Radar (evita bloqueio de CORS do
+  navegador) e a resposta (status, headers, corpo) aparece na hora.
+- **Variáveis** — pares chave/valor substituídos em ocorrências `{{nome}}`
+  na URL, nos headers ou no corpo. Serve para guardar um token ou a URL base
+  uma vez só e reaproveitar em várias requisições, sem repetir.
+- **Collection** — salve requisições com um nome, reabra com um clique,
+  exporte/importe como JSON para levar para outra máquina ou compartilhar
+  com o time. A collection e as variáveis ficam salvas só no navegador
+  (`localStorage`); o QA Radar ainda não tem persistência no servidor.
+- A requisição sai do servidor e respeita a mesma proteção contra redes
+  privadas (SSRF) usada na Inspeção, inclusive re-validando cada
+  redirecionamento antes de segui-lo.
 
-test("consulta o endpoint de status", async ({ request }) => {
-  const apiResponse = await request.get("https://sua-api.exemplo.com/status");
-  expect(apiResponse.status()).toBe(200);
-});
-```
-
-Cada chamada `request.get/post/put/patch/delete/head/fetch(...)` vira um
-passo nomeado na lista de passos e no relatório de evidências, com método,
-URL, status HTTP e um trecho do corpo da requisição/resposta — o equivalente,
-para uma chamada de API, da screenshot capturada automaticamente por passo no
-Modo Jornada. O botão "Adicionar passo de API" insere um trecho de código
-pronto no editor. Assim como as screenshots por passo, essa captura de
-evidência só funciona na execução local — a execução hospedada recebe apenas
-a string de código, sem os arquivos auxiliares do fixture.
+Isso não tem relação com o Modo Jornada de Playwright — as duas ferramentas
+são independentes e não compartilham estado.
 
 ## Como interpretar os resultados
 

@@ -103,8 +103,98 @@ codeEvidenceButton.addEventListener('click',async()=>{
 if(journeyEvidenceForm)journeyEvidenceForm.addEventListener('submit',async event=>{if(!completedCodeExecutionId)return;event.preventDefault();const submit=journeyEvidenceForm.querySelector('button[type=submit]'),error=document.querySelector('#journey-evidence-error');error.style.display='none';submit.disabled=true;submit.innerHTML='<i class="loader"></i>Gerando HTML';const stepDescriptions=[...evidenceStepsBox?.querySelectorAll('.evidence-step input')??[]].map(input=>input.value);try{const response=await fetch('/api/code-executions/'+completedCodeExecutionId+'/evidence-report',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({testerName:document.querySelector('#journey-tester-name').value,testType:document.querySelector('#journey-test-type').value,...(stepDescriptions.length?{stepDescriptions}:{})})}),data=await response.json();if(!response.ok)throw new Error(data.error||'Não foi possível gerar o relatório.');journeyEvidenceModal.close();window.location.href=data.url}catch(reason){error.textContent=reason.message;error.style.display='block'}finally{submit.disabled=false;submit.textContent='Gerar HTML'}});
 if(codeStart)codeStart.addEventListener('click',async()=>{codeError.style.display='none';try{const response=await fetch('/api/codegen',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:codeUrl.value})}),data=await response.json();if(!response.ok)throw new Error(data.error||'Não foi possível iniciar o Codegen.');codegenId=data.id;codeStart.disabled=true;codeStop.disabled=false;codeStart.textContent='Gravando no navegador…';}catch(reason){codeError.textContent=reason.message;codeError.style.display='block'}});
 if(codeStop)codeStop.addEventListener('click',async()=>{if(!codegenId)return;codeStop.disabled=true;try{const response=await fetch('/api/codegen/'+codegenId),data=await response.json();if(data.status!=='completed'){codeError.textContent='Feche a janela do navegador para concluir a gravação e tente novamente.';codeError.style.display='block';return}codeEditor.value=data.code;codeStart.disabled=false;codeStart.textContent='Iniciar nova gravação';codegenId=undefined;}catch(reason){codeError.textContent=reason.message;codeError.style.display='block'}finally{codeStop.disabled=false}});
-document.querySelector('#code-api-step')?.addEventListener('click',()=>{const snippet='\n  // Passo de API — inclua "request" nos parâmetros do teste, ex.: async ({ page, request }) => {...}\n  const apiResponse = await request.get(\'https://sua-api.exemplo.com/endpoint\');\n  expect(apiResponse.status()).toBe(200);\n',start=codeEditor.selectionStart??codeEditor.value.length,end=codeEditor.selectionEnd??start;codeEditor.setRangeText(snippet,start,end,'end');codeEditor.focus()});
 document.querySelector('#code-save')?.addEventListener('click',()=>{const blob=new Blob([codeEditor.value],{type:'text/typescript'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='qa-radar.spec.ts';link.click();URL.revokeObjectURL(link.href)});
 const codeExecute=document.querySelector('#code-execute');codeExecute?.addEventListener('click',async()=>{codeExecute.disabled=true;codeExecute.innerHTML='<i class="loader"></i>Executando';codeError.style.display='none';codeResult.hidden=true;try{const response=await fetch('/api/code-execution',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:codeEditor.value})}),data=await response.json();if(!response.ok&&data.status!=='failed')throw new Error(data.error||'Não foi possível executar a jornada.');const report=data.report||{},passed=data.status==='passed',stats=report.stats||{},errors=report.errors||[],details=data.failureDetails||errors.map(error=>error.message).join('\n\n'),duration=Number(stats.duration||0);codeResult.className='code-result '+(passed?'pass':'fail');codeResult.innerHTML='<div class="code-result-head"><div><span>'+(passed?'✓ Jornada aprovada':'✕ Jornada reprovada')+'</span><small>Execução '+esc(data.id)+'</small></div><strong>'+((duration/1000).toFixed(1))+'s</strong></div><div class="code-result-metrics"><span><b>'+(stats.expected||0)+'</b> aprovados</span><span><b>'+(stats.unexpected||0)+'</b> falhas</span><span><b>'+(stats.skipped||0)+'</b> ignorados</span></div>'+(details?'<pre>'+esc(details)+'</pre>':'');codeResult.hidden=false;}catch(reason){codeError.textContent=reason.message;codeError.style.display='block'}finally{codeExecute.disabled=false;codeExecute.textContent='Executar'}});
 document.querySelector('#code-import')?.addEventListener('change',async event=>{const file=event.target.files?.[0];if(file)codeEditor.value=await file.text()});
+
+// Cliente HTTP interativo de /api-tests (estilo Postman) — independente do
+// Modo Jornada acima; não compartilha nenhum elemento com ele.
+const httpSend=document.querySelector('#http-send');
+if(httpSend){
+  const httpMethod=document.querySelector('#http-method'),httpUrl=document.querySelector('#http-url'),httpErrorBox=document.querySelector('#http-error'),httpBody=document.querySelector('#http-body'),httpHeaders=document.querySelector('#http-headers'),httpVariables=document.querySelector('#http-variables'),httpResponse=document.querySelector('#http-response'),httpResponseStatus=document.querySelector('#http-response-status'),httpResponseDuration=document.querySelector('#http-response-duration'),httpResponseHeaders=document.querySelector('#http-response-headers'),httpResponseBody=document.querySelector('#http-response-body'),httpCollectionList=document.querySelector('#http-collection-list'),httpCollectionName=document.querySelector('#http-collection-name');
+  const COLLECTION_KEY='qa-radar-api-collection';
+  function showHttpError(message){httpErrorBox.textContent=message;httpErrorBox.style.display='block'}
+  function kvRow(container,keyPlaceholder,valuePlaceholder){
+    const row=document.createElement('div');
+    row.className='http-kv-row';
+    row.innerHTML='<input type="text" class="http-kv-key" placeholder="'+esc(keyPlaceholder)+'"><input type="text" class="http-kv-value" placeholder="'+esc(valuePlaceholder)+'"><button type="button" class="secondary http-kv-remove" aria-label="Remover">×</button>';
+    row.querySelector('.http-kv-remove').addEventListener('click',()=>row.remove());
+    container.appendChild(row);
+    return row;
+  }
+  document.querySelector('#http-add-header')?.addEventListener('click',()=>kvRow(httpHeaders,'Nome','Valor'));
+  document.querySelector('#http-add-variable')?.addEventListener('click',()=>kvRow(httpVariables,'nome','valor'));
+  for(const container of [httpHeaders,httpVariables])container.querySelectorAll('.http-kv-remove').forEach(button=>button.addEventListener('click',()=>button.closest('.http-kv-row').remove()));
+
+  function kvPairs(container){
+    return [...container.querySelectorAll('.http-kv-row')].map(row=>({key:row.querySelector('.http-kv-key').value.trim(),value:row.querySelector('.http-kv-value').value})).filter(pair=>pair.key);
+  }
+  function applyVariables(text,variables){
+    return variables.reduce((value,variable)=>value.split('{{'+variable.key+'}}').join(variable.value),text);
+  }
+  function loadCollection(){
+    try{const raw=localStorage.getItem(COLLECTION_KEY),parsed=raw?JSON.parse(raw):{};return {requests:Array.isArray(parsed.requests)?parsed.requests:[]}}catch{return {requests:[]}}
+  }
+  function saveCollection(collection){try{localStorage.setItem(COLLECTION_KEY,JSON.stringify(collection))}catch{}}
+  function fillHeaders(container,pairs){
+    container.innerHTML='';
+    (pairs?.length?pairs:[{key:'',value:''}]).forEach(pair=>{const row=kvRow(container,'Nome','Valor');row.querySelector('.http-kv-key').value=pair.key||'';row.querySelector('.http-kv-value').value=pair.value||''});
+  }
+  function renderCollection(){
+    const collection=loadCollection();
+    if(!collection.requests.length){httpCollectionList.innerHTML='<p class="hint">Nenhuma requisição salva ainda.</p>';return}
+    httpCollectionList.innerHTML=collection.requests.map((item,index)=>'<div class="http-collection-item"><button type="button" class="http-collection-load" data-index="'+index+'"><strong>'+esc(item.name)+'</strong><span>'+esc(item.method)+' '+esc(item.url)+'</span></button><button type="button" class="secondary http-collection-delete" data-index="'+index+'">Remover</button></div>').join('');
+    httpCollectionList.querySelectorAll('.http-collection-load').forEach(button=>button.addEventListener('click',()=>{
+      const item=loadCollection().requests[Number(button.dataset.index)];
+      if(!item)return;
+      httpMethod.value=item.method;httpUrl.value=item.url;httpBody.value=item.body||'';
+      fillHeaders(httpHeaders,item.headers);
+    }));
+    httpCollectionList.querySelectorAll('.http-collection-delete').forEach(button=>button.addEventListener('click',()=>{
+      const collection=loadCollection();collection.requests.splice(Number(button.dataset.index),1);saveCollection(collection);renderCollection();
+    }));
+  }
+  renderCollection();
+
+  document.querySelector('#http-save-request')?.addEventListener('click',()=>{
+    const name=httpCollectionName.value.trim();
+    if(!name){showHttpError('Informe um nome para salvar a requisição.');return}
+    httpErrorBox.style.display='none';
+    const collection=loadCollection();
+    collection.requests.push({name,method:httpMethod.value,url:httpUrl.value,headers:kvPairs(httpHeaders),body:httpBody.value});
+    saveCollection(collection);httpCollectionName.value='';renderCollection();
+  });
+  document.querySelector('#http-collection-export')?.addEventListener('click',()=>{
+    const blob=new Blob([JSON.stringify(loadCollection(),null,2)],{type:'application/json'}),link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);link.download='qa-radar-api-collection.json';link.click();URL.revokeObjectURL(link.href);
+  });
+  document.querySelector('#http-collection-import')?.addEventListener('change',async event=>{
+    const file=event.target.files?.[0];if(!file)return;
+    try{const imported=JSON.parse(await file.text());if(!Array.isArray(imported.requests))throw new Error();saveCollection({requests:imported.requests});renderCollection();httpErrorBox.style.display='none'}
+    catch{showHttpError('Arquivo de collection inválido.')}
+  });
+
+  httpSend.addEventListener('click',async()=>{
+    httpErrorBox.style.display='none';
+    const variables=kvPairs(httpVariables),method=httpMethod.value,url=applyVariables(httpUrl.value.trim(),variables);
+    if(!url){showHttpError('Informe a URL da requisição.');return}
+    const headers={};
+    kvPairs(httpHeaders).forEach(pair=>{headers[pair.key]=applyVariables(pair.value,variables)});
+    const body=method==='GET'||method==='HEAD'?undefined:applyVariables(httpBody.value,variables);
+    httpSend.disabled=true;httpSend.innerHTML='<i class="loader"></i>Enviando';
+    try{
+      const response=await fetch('/api/http-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({method,url,headers,...(body?{body}:{})})}),data=await response.json();
+      if(!response.ok)throw new Error(data.error||'Não foi possível enviar a requisição.');
+      httpResponse.hidden=false;
+      const statusClass=data.status>=200&&data.status<300?'ok':data.status>=300&&data.status<400?'redirect':'error';
+      httpResponseStatus.className='http-status '+statusClass;httpResponseStatus.textContent=data.status+' '+data.statusText;
+      httpResponseDuration.textContent=data.durationMs+' ms';
+      httpResponseHeaders.textContent=Object.entries(data.headers||{}).map(([key,value])=>key+': '+value).join('\n')||'(sem headers)';
+      let prettyBody=data.body;
+      try{prettyBody=JSON.stringify(JSON.parse(data.body),null,2)}catch{}
+      httpResponseBody.textContent=prettyBody+(data.bodyTruncated?'\n\n[corpo truncado]':'');
+    }catch(error){showHttpError(error.message);httpResponse.hidden=true}
+    finally{httpSend.disabled=false;httpSend.textContent='Enviar'}
+  });
+}
 `;

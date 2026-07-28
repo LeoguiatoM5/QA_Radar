@@ -20,12 +20,19 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   instância dedicada ser publicada.
 - Captura de screenshot real por passo na execução local do Modo Jornada de
   Playwright, sobrescrevendo o fixture `page` do Playwright Test.
-- Nova aba "Testes de API" (`/api-tests`), separada da Jornada, para testes de
-  API puros com o fixture `request` do Playwright Test. Reaproveita o mesmo
-  motor de execução, fila de jobs e relatório de evidências do Modo Jornada;
-  cada chamada `request.get/post/put/patch/delete/head/fetch(...)` vira um
-  passo nomeado com método, URL, status e corpo da requisição/resposta
-  capturados como evidência, na execução local.
+- Nova aba "Testes de API" (`/api-tests`), separada da Jornada: cliente HTTP
+  interativo no estilo Postman (método, URL, headers, corpo), com resposta
+  exibida imediatamente via um novo endpoint `POST /api/http-request` que
+  faz a chamada a partir do servidor (evita CORS) e revalida a proteção
+  contra redes privadas a cada redirecionamento seguido, não só na URL
+  inicial. Variáveis reutilizáveis (`{{nome}}`) e a collection de
+  requisições salvas ficam no `localStorage` do navegador, com
+  exportação/importação em JSON.
+- Suporte a passos de API (`request.get/post/put/patch/delete/head/fetch`)
+  dentro de um `.spec.ts` do Modo Jornada de Playwright: reconhecidos como
+  passo nomeado, com método, URL, status e corpo da requisição/resposta
+  capturados como evidência (execução local), da mesma forma que a
+  screenshot por passo já existente.
 
 ### Alterado
 

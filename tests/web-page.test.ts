@@ -55,26 +55,22 @@ describe("dashboard components", () => {
     assert.doesNotMatch(html, /id="journey-form"|Modelo JSON/);
   });
 
-  it("compõe os Testes de API como página própria, separada da Jornada", () => {
-    const html = createApiTestsPage(true);
-
-    assert.match(html, /<header class="tool-header">.*<h1>Testes de API<\/h1>/);
-    assert.match(html, /id="code-mode-panel"/);
-    assert.match(html, /id="playwright-code"/);
-    assert.match(html, /id="code-api-step"/);
-    assert.match(html, /id="code-execute"/);
-    assert.match(html, />Executar<\/button>/);
-    assert.doesNotMatch(html, /id="codegen-start"|id="codegen-stop"|Grave o fluxo no navegador/);
-    assert.doesNotMatch(html, /id="scan-form"/);
-    assert.doesNotMatch(html, /id="results"/);
-  });
-
-  it("mantém os Testes de API indisponíveis quando o ambiente não habilita execução", () => {
+  it("compõe os Testes de API como cliente HTTP interativo, separado da Jornada e sempre disponível", () => {
     const html = createApiTestsPage();
 
-    assert.match(html, /Recurso indisponível neste ambiente/);
-    assert.doesNotMatch(html, /id="playwright-code"/);
-    assert.doesNotMatch(html, /id="code-api-step"/);
+    assert.match(html, /<header class="tool-header">.*<h1>Testes de API<\/h1>/);
+    assert.match(html, /id="http-client-panel"/);
+    assert.match(html, /id="http-method"/);
+    assert.match(html, /id="http-url"/);
+    assert.match(html, /id="http-send"/);
+    assert.match(html, /id="http-headers"/);
+    assert.match(html, /id="http-variables"/);
+    assert.match(html, /id="http-collection-list"/);
+    assert.match(html, />Enviar<\/button>/);
+    assert.doesNotMatch(html, /Recurso indisponível neste ambiente/);
+    assert.doesNotMatch(html, /id="playwright-code"|id="codegen-start"|id="codegen-stop"|id="code-mode-panel"/);
+    assert.doesNotMatch(html, /id="scan-form"/);
+    assert.doesNotMatch(html, /id="results"/);
   });
 
   it("compõe estrutura, estilos e comportamento do cliente", () => {
