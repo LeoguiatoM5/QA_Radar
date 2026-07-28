@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.62.0-noble AS build
+FROM mcr.microsoft.com/playwright:v1.61.1-noble AS build
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -7,7 +7,7 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
-FROM mcr.microsoft.com/playwright:v1.62.0-noble
+FROM mcr.microsoft.com/playwright:v1.61.1-noble
 
 ENV NODE_ENV=production \
     CI=1 \
