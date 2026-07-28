@@ -72,6 +72,32 @@ async function dataUri(readAsset: AssetReader, relativePath: string | undefined)
   }
 }
 
+function friendlyStepFailureMessage(action: string): string {
+  const messages: Record<string, string> = {
+    goto: "Este passo falhou: não foi possível abrir a página esperada.",
+    click: "Este passo falhou: o elemento esperado não foi encontrado a tempo para o clique.",
+    fill: "Este passo falhou: o campo esperado não foi encontrado a tempo para o preenchimento.",
+    select: "Este passo falhou: o campo esperado não foi encontrado a tempo para a seleção.",
+    assertVisible: "Este passo falhou: o elemento esperado não ficou visível na página a tempo.",
+    assertText: "Este passo falhou: o texto esperado não foi encontrado na página a tempo.",
+    waitFor: "Este passo falhou: o elemento esperado não apareceu na página a tempo.",
+  };
+  return messages[action] ?? "Este passo não foi concluído como esperado.";
+}
+
+// Uma <a href="data:...;base64,..." target="_blank"> é bloqueada pelo Chrome
+// (não permite navegação de nova aba direto para uma data: URL) e abre em
+// about:blank. Em vez de link para nova aba, clicar na imagem expande a
+// própria <figure> em tela cheia via :target — sem duplicar a imagem (o que
+// dobraria o base64 embutido) e sem depender de script, já que o relatório
+// é servido com uma CSP que não libera script-src.
+function figure(step: JourneyRunResult["steps"][number], uri: string, kind: "before" | "after", caption: string): string {
+  const label = kind === "before" ? "antes" : "depois";
+  const id = `lightbox-${step.index}-${kind}`;
+  const alt = `Evidência ${label} do passo ${step.index + 1}`;
+  return `<figure id="${id}" class="zoomable">${caption}<a class="thumb" href="#${id}"><img src="${uri}" alt="${alt}"></a><a class="lightbox-close" href="#" aria-label="Fechar imagem ampliada">×</a></figure>`;
+}
+
 async function evidence(step: JourneyRunResult["steps"][number], readAsset: AssetReader): Promise<string> {
   if (!step.evidence) return '<p class="empty">Nenhuma imagem foi gerada para este passo.</p>';
   const before = await dataUri(readAsset, step.evidence.before);
@@ -81,10 +107,8 @@ async function evidence(step: JourneyRunResult["steps"][number], readAsset: Asse
   // fato (jornada declarativa); com uma única imagem (Modo Código) o rótulo
   // é ruído, então some.
   const showLabels = Boolean(before) && Boolean(after);
-  const beforeCaption = showLabels ? "<figcaption>Antes</figcaption>" : "";
-  const afterCaption = showLabels ? "<figcaption>Depois</figcaption>" : "";
-  const beforeFigure = before ? `<figure>${beforeCaption}<a href="${before}" target="_blank"><img src="${before}" alt="Evidência antes do passo ${step.index + 1}"></a></figure>` : "";
-  const afterFigure = after ? `<figure>${afterCaption}<a href="${after}" target="_blank"><img src="${after}" alt="Evidência depois do passo ${step.index + 1}"></a></figure>` : "";
+  const beforeFigure = before ? figure(step, before, "before", showLabels ? "<figcaption>Antes</figcaption>" : "") : "";
+  const afterFigure = after ? figure(step, after, "after", showLabels ? "<figcaption>Depois</figcaption>" : "") : "";
   return `<div class="evidence">${beforeFigure}${afterFigure}</div>`;
 }
 
@@ -106,7 +130,7 @@ export async function createJourneyEvidenceHtml(
     <header><span>Passo ${step.index + 1}</span><strong>${step.status === "passed" ? "Aprovado" : "Falhou"}</strong></header>
     <h2>${escapeHtml(step.description ?? step.action)}</h2>
     <p class="technical">Ação: <code>${escapeHtml(step.action)}</code> · ${step.durationMs} ms</p>
-    ${step.error ? `<p class="error">${escapeHtml(step.error)}</p>` : ""}
+    ${step.error ? `<p class="error">${escapeHtml(friendlyStepFailureMessage(step.action))}</p>` : ""}
     ${await evidence(step, readAsset)}
   </article>`));
   const steps = `<p><a href="" download="qa-radar-evidencias.html">Baixar relatório HTML</a></p>` + stepArticles.join("\n");
@@ -115,6 +139,6 @@ export async function createJourneyEvidenceHtml(
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Evidências — ${escapeHtml(report.name)}</title><style>
-:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#07101d;color:#e7eef8}*{box-sizing:border-box}body{margin:0;padding:32px;background:#07101d}.shell{max-width:1100px;margin:auto}.head,.step{background:#0e1a2b;border:1px solid #263953;border-radius:16px;padding:22px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:.12em;margin-bottom:12px}.back{display:inline-block;color:#67e8f9;text-decoration:none;border:1px solid #263953;border-radius:8px;padding:8px 11px;font-size:13px;margin-bottom:18px}.back:hover{border-color:#67e8f9}.radar{width:30px;height:30px;border:2px solid #67e8f9;border-radius:50%;position:relative;box-shadow:0 0 18px #67e8f955}.radar:before{content:"";position:absolute;inset:7px;border:1px solid #67e8f999;border-radius:50%}.radar:after{content:"";position:absolute;width:5px;height:5px;left:11px;top:11px;border-radius:50%;background:#67e8f9}.eyebrow{color:#67e8f9;text-transform:uppercase;letter-spacing:.15em;font-size:12px;font-weight:800}h1{margin:8px 0 18px}.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.meta div{background:#07101d;border-radius:10px;padding:12px}.meta small{display:block;color:#91a4bd}.status{color:${passed ? "#6ee7b7" : "#fca5a5"};font-weight:900}.step header{display:flex;justify-content:space-between;color:#91a4bd}.step header strong{color:#6ee7b7}.step.failed header strong,.error{color:#fca5a5}.step h2{font-size:20px;margin:14px 0 6px}.technical{color:#91a4bd}.evidence{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}figure{margin:0}figcaption{margin-bottom:7px;color:#67e8f9;font-weight:700}img,video{width:100%;max-height:620px;object-fit:contain;object-position:top;background:#050b14;border:1px solid #263953;border-radius:10px}.video{grid-column:1/-1}.empty{color:#91a4bd}@media(max-width:760px){body{padding:14px}.meta,.evidence{grid-template-columns:1fr}}
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#07101d;color:#e7eef8}*{box-sizing:border-box}body{margin:0;padding:32px;background:#07101d}.shell{max-width:1100px;margin:auto}.head,.step{background:#0e1a2b;border:1px solid #263953;border-radius:16px;padding:22px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:.12em;margin-bottom:12px}.back{display:inline-block;color:#67e8f9;text-decoration:none;border:1px solid #263953;border-radius:8px;padding:8px 11px;font-size:13px;margin-bottom:18px}.back:hover{border-color:#67e8f9}.radar{width:30px;height:30px;border:2px solid #67e8f9;border-radius:50%;position:relative;box-shadow:0 0 18px #67e8f955}.radar:before{content:"";position:absolute;inset:7px;border:1px solid #67e8f999;border-radius:50%}.radar:after{content:"";position:absolute;width:5px;height:5px;left:11px;top:11px;border-radius:50%;background:#67e8f9}.eyebrow{color:#67e8f9;text-transform:uppercase;letter-spacing:.15em;font-size:12px;font-weight:800}h1{margin:8px 0 18px}.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.meta div{background:#07101d;border-radius:10px;padding:12px}.meta small{display:block;color:#91a4bd}.status{color:${passed ? "#6ee7b7" : "#fca5a5"};font-weight:900}.step header{display:flex;justify-content:space-between;color:#91a4bd}.step header strong{color:#6ee7b7}.step.failed header strong,.error{color:#fca5a5}.step h2{font-size:20px;margin:14px 0 6px}.technical{color:#91a4bd}.evidence{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}figure{margin:0}figcaption{margin-bottom:7px;color:#67e8f9;font-weight:700}img,video{width:100%;max-height:620px;object-fit:contain;object-position:top;background:#050b14;border:1px solid #263953;border-radius:10px}.video{grid-column:1/-1}.empty{color:#91a4bd}a.thumb{display:block;cursor:zoom-in}figure.zoomable{position:relative}figure.zoomable .lightbox-close{display:none}figure.zoomable:target{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;margin:0;padding:32px;background:#000c}figure.zoomable:target figcaption{display:none}figure.zoomable:target a.thumb{width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:default}figure.zoomable:target img{width:auto;height:auto;max-width:100%;max-height:100%}figure.zoomable:target .lightbox-close{display:flex;position:fixed;top:18px;right:22px;width:38px;height:38px;align-items:center;justify-content:center;color:#e7eef8;font-size:22px;text-decoration:none;border-radius:8px;background:#0e1a2b;border:1px solid #263953}figure.zoomable:target .lightbox-close:hover{border-color:#67e8f9}@media(max-width:760px){body{padding:14px}.meta,.evidence{grid-template-columns:1fr}}
 </style></head><body><main class="shell"><section class="head"><a class="back" href="/journeys">← Voltar para Jornadas</a><div class="brand"><i class="radar"></i>QA RADAR</div><div class="eyebrow">Relatório de evidências</div><h1>${escapeHtml(report.name)}</h1><div class="meta"><div><small>Responsável</small>${escapeHtml(metadata.testerName)}</div><div><small>Tipo de teste</small>${TEST_TYPE_LABELS[metadata.testType]}</div><div><small>Resultado</small><span class="status">${passed ? "APROVADA" : "REPROVADA"}</span></div><div><small>Gerado em</small>${escapeHtml(generatedAt.toLocaleString("pt-BR"))}</div></div></section>${video}${steps}</main></body></html>`;
 }
