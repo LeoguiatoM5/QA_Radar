@@ -431,9 +431,6 @@ ambiente autenticado.
 
 As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeitas a mudanças conforme o uso e o feedback recebido.
 
-O plano incremental, as regras de compatibilidade e as evidências de validação de
-cada etapa são mantidos em [`docs/EVOLUTION_LOG.md`](docs/EVOLUTION_LOG.md).
-
 ### Modo Jornada de Playwright
 
 A gravação com Playwright Codegen, a conversão automática em `.spec.ts`, o
@@ -534,9 +531,8 @@ processos, `process.env`, `require`, `eval`, importação dinâmica e construç�
 dinâmica de funções. Essa política reduz vetores triviais, mas não é tratada
 como fronteira de segurança contra código deliberadamente ofuscado.
 
-O contrato versionado, a assinatura HMAC, a proteção contra replay e os
-requisitos obrigatórios do ambiente descartável estão em
-[`docs/SANDBOX_RUNNER_PROTOCOL.md`](docs/SANDBOX_RUNNER_PROTOCOL.md).
+O runner aplica contrato versionado, assinatura HMAC, proteção contra replay e
+requisitos obrigatórios de ambiente descartável.
 
 O repositório também contém uma implementação de referência do runner Docker.
 Ela cria um container por job com CPU, memória, PIDs e tempo limitados, rootfs

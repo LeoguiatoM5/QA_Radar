@@ -66,10 +66,9 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
       await mkdir(outputDir, { recursive: true });
       await writeFile(join(outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
       const specPath = join(outputDir, "qa-radar.spec.ts");
-      // A execução hospedada recebe só a string de código (ver
-      // docs/SANDBOX_RUNNER_PROTOCOL.md) e nunca vê os arquivos irmãos
-      // gravados neste diretório, então só a execução local pode apontar o
-      // import para o fixture que captura screenshot por passo.
+      // A execução hospedada recebe só a string de código e nunca vê os
+      // arquivos irmãos gravados neste diretório, então só a execução local
+      // pode apontar o import para o fixture que captura screenshot por passo.
       const runtimeCode = hostedExecution
         ? code.replaceAll("@playwright/test", "playwright/test")
         : code.replaceAll("@playwright/test", "./qa-radar-fixtures.js");
