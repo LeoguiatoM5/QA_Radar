@@ -41,9 +41,10 @@ describe("web server", () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
     assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
+    assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'unsafe-inline'/);
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
-    assert.match(html, /Inspecionar aplicação/);
-    assert.match(html, /Modo Jornada de Playwright/);
+    assert.match(html, /Executar inspeção/);
+    assert.match(html, /Executar jornada/);
     assert.doesNotMatch(html, /id="scan-form"/);
   });
 
@@ -61,11 +62,11 @@ describe("web server", () => {
     assert.doesNotMatch(html, /id="journey-form"/);
   });
 
-  it("entrega a documentação em rota própria", async () => {
+  it("entrega a ajuda em rota própria", async () => {
     const response = await fetch(`${baseUrl}/docs`);
     const html = await response.text();
     assert.equal(response.status, 200);
-    assert.match(html, /Como usar o QA Radar/);
+    assert.match(html, /Perguntas frequentes/);
     assert.match(html, /href="\/scanner"/);
   });
 
@@ -1038,6 +1039,96 @@ describe("web server", () => {
   it("não expõe histórico quando o recurso está desabilitado", async () => {
     const response = await fetch(`${baseUrl}/api/history?project=loja&environment=staging`);
     assert.equal(response.status, 403);
+  });
+
+  it("persiste atividades do dashboard com isolamento por navegador", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-dashboard-"));
+    const dashboardServer = createQaRadarServer({ resultsDir });
+    await new Promise<void>((resolve) => dashboardServer.listen(0, "127.0.0.1", resolve));
+    const address = dashboardServer.address() as AddressInfo;
+    const dashboardUrl = `http://127.0.0.1:${address.port}/api/dashboard/activity`;
+    let cookie = "";
+    try {
+      const initialResponse = await fetch(dashboardUrl);
+      cookie = (initialResponse.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      assert.match(cookie, /^qa_radar_dashboard=[0-9a-f-]+$/);
+      assert.deepEqual(await initialResponse.json(), { activities: [] });
+
+      const streamAbort = new AbortController();
+      const streamResponse = await fetch(`${dashboardUrl}/events`, {
+        headers: { cookie },
+        signal: streamAbort.signal,
+      });
+      assert.equal(streamResponse.status, 200);
+      assert.match(streamResponse.headers.get("content-type") ?? "", /^text\/event-stream/);
+      const streamReader = streamResponse.body?.getReader();
+      assert.ok(streamReader);
+      const decoder = new TextDecoder();
+      assert.match(decoder.decode((await streamReader.read()).value), /retry: 3000/);
+
+      const createResponse = await fetch(dashboardUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          id: "api-1",
+          type: "api",
+          title: "GET jsonplaceholder.typicode.com/todos/1",
+          detail: "200 OK",
+          status: "success",
+          errors: 0,
+          warnings: 0,
+          durationMs: 120,
+          href: "/api-tests?activity=1234567890123",
+          scores: { http: 100 },
+        }),
+      });
+      assert.equal(createResponse.status, 201);
+      const streamedActivity = decoder.decode((await streamReader.read()).value);
+      assert.match(streamedActivity, /^data: /);
+      assert.equal((JSON.parse(streamedActivity.slice(6)) as { id: string }).id, "api-1");
+      streamAbort.abort();
+
+      const ownResponse = await fetch(dashboardUrl, { headers: { cookie } });
+      const ownBody = (await ownResponse.json()) as { activities: Array<{ id: string; href: string }> };
+      assert.equal(ownBody.activities.length, 1);
+      assert.equal(ownBody.activities[0]?.id, "api-1");
+      assert.equal(ownBody.activities[0]?.href, "/api-tests?activity=1234567890123");
+
+      const isolatedResponse = await fetch(dashboardUrl);
+      assert.deepEqual(await isolatedResponse.json(), { activities: [] });
+
+      const unsafeResponse = await fetch(dashboardUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          id: "unsafe",
+          type: "api",
+          title: "Inseguro",
+          detail: "",
+          status: "success",
+          errors: 0,
+          warnings: 0,
+          durationMs: 1,
+          href: "https://example.com/",
+          scores: {},
+        }),
+      });
+      assert.equal(unsafeResponse.status, 400);
+    } finally {
+      await new Promise<void>((resolve) => dashboardServer.close(() => resolve()));
+    }
+
+    const restartedServer = createQaRadarServer({ resultsDir });
+    await new Promise<void>((resolve) => restartedServer.listen(0, "127.0.0.1", resolve));
+    const restartedAddress = restartedServer.address() as AddressInfo;
+    try {
+      const response = await fetch(`http://127.0.0.1:${restartedAddress.port}/api/dashboard/activity`, { headers: { cookie } });
+      const body = (await response.json()) as { activities: Array<{ id: string }> };
+      assert.equal(body.activities[0]?.id, "api-1");
+    } finally {
+      await new Promise<void>((resolve) => restartedServer.close(() => resolve()));
+      await rm(resultsDir, { recursive: true, force: true });
+    }
   });
 
   it("recupera relatórios do disco quando o job não está mais na memória", async () => {

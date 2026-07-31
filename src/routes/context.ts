@@ -5,6 +5,7 @@ import type { LegacyJourneyRegistry, JourneyJob } from "../legacy-journey-regist
 import type { CodegenSessionStore, CodegenSession } from "../codegen-session-store.js";
 import type { CodeExecutionJobStore, CodeExecutionJob } from "../code-execution-job-store.js";
 import type { JourneyRunResult } from "../journey-runner.js";
+import type { DashboardActivityStore } from "../dashboard-activity-store.js";
 
 /**
  * Shared state and helpers threaded into every route module's tryHandle().
@@ -18,6 +19,7 @@ export interface RequestContext {
   legacyJourneys: LegacyJourneyRegistry;
   codegenSessions: CodegenSessionStore;
   codeExecutionJobs: CodeExecutionJobStore;
+  dashboardActivity: DashboardActivityStore;
   queueStats: () => { active: number; queued: number; jobs: number };
   schedule: () => void;
   consumeRateLimit: (request: IncomingMessage, response: ServerResponse) => boolean;

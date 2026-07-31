@@ -8,8 +8,46 @@ describe("dashboard components", () => {
     const html = createHomePage();
 
     assert.match(html, /^<!doctype html>/);
-    assert.match(html, /Encontre problemas antes que cheguem ao/);
-    assert.match(html, /Inspecionar aplicação/);
+    assert.match(html, /<h1>Visão geral<\/h1>/);
+    assert.match(html, /Mapa de qualidade/);
+    assert.match(html, /Executar inspeção/);
+    assert.match(html, /id="dashboard-last-scan"/);
+    assert.match(html, /id="dashboard-last-journey"/);
+    assert.match(html, /id="dashboard-last-api"/);
+    assert.match(html, /Última execução/);
+    assert.match(html, /Aguardando execução/);
+    assert.match(html, /id="dashboard-quality-index"/);
+    assert.match(html, /data-radar-point="http"/);
+    assert.match(html, /Índice de qualidade/);
+    assert.match(html, /class="radar-svg"/);
+    assert.match(html, /<text x="200" y="[\d.]+">75<\/text>/);
+    assert.match(html, /id="dashboard-recent-list"/);
+    assert.match(html, /id="dashboard-signal-list"/);
+    assert.match(html, /data-dashboard-filter="scan"/);
+    assert.match(html, /id="dashboard-history-toggle"/);
+    assert.match(html, /id="dashboard-table-head"/);
+    assert.match(html, /dashboardShowAll/);
+    assert.match(html, /run-score/);
+    assert.match(html, /class="home-dashboard"/);
+    assert.match(html, /class="nav-icon icon-overview"/);
+    assert.match(html, /class="nav-group"/);
+    assert.match(html, /nav-group-support/);
+    assert.match(html, /class="sidebar-help/);
+    assert.match(html, />Ajuda</);
+    assert.match(html, /qa-radar-activity/);
+    assert.match(html, /class="app-sidebar"/);
+    assert.match(html, /class="context-bar"/);
+    assert.match(html, /QA Radar Web/);
+    assert.match(html, /id="context-clock"/);
+    assert.match(html, /Últimas 24h/);
+    assert.match(html, /updateContextClock/);
+    assert.match(html, /class="mobile-nav-toggle"/);
+    assert.match(html, /setMobileNavigation/);
+    assert.match(html, /\/api\/dashboard\/activity/);
+    assert.match(html, /\/api\/dashboard\/activity\/events/);
+    assert.match(html, /id="dashboard-live-state"/);
+    assert.match(html, /new EventSource/);
+    assert.doesNotMatch(html, /Plano Empresarial|Plano empresarial/);
     assert.match(html, /href="\/scanner"/);
     assert.match(html, /href="\/journeys"/);
     assert.match(html, /href="\/api-tests"/);
@@ -17,10 +55,27 @@ describe("dashboard components", () => {
     assert.doesNotMatch(html, /id="scan-form"/);
   });
 
-  it("compõe a documentação com navegação para as ferramentas", () => {
+  it("desenha a grade do radar na mesma escala usada pelos dados", () => {
+    const html = createHomePage();
+    const attribute = (name: string) => Number(html.match(new RegExp(`data-radar-${name}="([\\d.]+)"`))?.[1]);
+    const center = attribute("center");
+    const radius = attribute("radius");
+    const floor = attribute("floor");
+    const span = attribute("span");
+    const rings = [...html.matchAll(new RegExp(`<circle cx="${center}" cy="${center}" r="([\\d.]+)"/>`, "g"))].map((match) => Number(match[1]));
+
+    // Um eixo com valor 75 tem que cair exatamente sobre o anel do 75; era essa
+    // divergência que fazia o desenho parecer torto.
+    for (const value of [100, 75, 50, 25]) {
+      const expected = Number((radius * (floor + span * value)).toFixed(1));
+      assert.ok(rings.includes(expected), `anel ausente para ${value} (esperado r=${expected}, anéis: ${rings.join(", ")})`);
+    }
+  });
+
+  it("compõe a ajuda como FAQ com navegação para as ferramentas", () => {
     const html = createDocsPage();
 
-    assert.match(html, /Como usar o QA Radar/);
+    assert.match(html, /Perguntas frequentes/);
     assert.match(html, /href="\/scanner"/);
     assert.match(html, /href="\/journeys"/);
     assert.match(html, /href="\/api-tests"/);
@@ -28,6 +83,17 @@ describe("dashboard components", () => {
     assert.doesNotMatch(html, /Jornada visual|Modelo JSON/);
     assert.equal((html.match(/<h1>/g) ?? []).length, 1);
     assert.doesNotMatch(html, /id="scan-form"/);
+    assert.match(html, /<details class="faq-item"/);
+    assert.match(html, /<summary>/);
+  });
+
+  it("expõe no FAQ as âncoras usadas pela navegação lateral", () => {
+    const html = createDocsPage();
+
+    // A sidebar aponta para /docs#<id>; sem esses ids os links não levam a lugar nenhum.
+    for (const anchor of ["relatorios", "central-de-qualidade", "alertas", "ambientes", "configuracoes"]) {
+      assert.match(html, new RegExp(`<details class="faq-item" id="${anchor}"`), `âncora ausente: ${anchor}`);
+    }
   });
 
   it("compõe somente o Modo Jornada de Playwright na página de automação", () => {
@@ -37,7 +103,7 @@ describe("dashboard components", () => {
     assert.match(html, /id="code-mode-panel"/);
     assert.match(html, /id="playwright-code"/);
     assert.match(html, /id="code-execute"/);
-    assert.match(html, /\.nav-links\{display:flex;flex-wrap:wrap/);
+    assert.match(html, /\.app-sidebar \.nav-link\{/);
     assert.match(html, />Executar<\/button>/);
     assert.doesNotMatch(html, /somente local|Executar localmente/);
     assert.doesNotMatch(html, /id="visual-mode-tab"|id="journey-form"|Modelo JSON/);
@@ -63,9 +129,24 @@ describe("dashboard components", () => {
     assert.match(html, /id="http-method"/);
     assert.match(html, /id="http-url"/);
     assert.match(html, /id="http-send"/);
+    assert.match(html, /id="http-clear"/);
+    assert.match(html, /id="http-params"/);
+    assert.match(html, /id="http-auth-type"/);
+    assert.match(html, /id="http-auth-bearer-token"/);
+    assert.match(html, /id="http-auth-api-key-location"/);
     assert.match(html, /id="http-headers"/);
+    assert.match(html, /id="http-format-body"/);
     assert.match(html, /id="http-variables"/);
+    assert.match(html, /id="http-response-empty"/);
+    assert.match(html, /id="http-copy-response"/);
     assert.match(html, /id="http-collection-list"/);
+    assert.match(html, /id="http-collection-search"/);
+    assert.match(html, /id="http-history-list"/);
+    assert.match(html, /id="http-clear-history"/);
+    assert.match(html, /qa-radar-api-variables/);
+    assert.match(html, /qa-radar-api-history/);
+    assert.match(html, /new AbortController\(\)/);
+    assert.match(html, /event\.key==='Enter'/);
     assert.match(html, />Enviar<\/button>/);
     assert.doesNotMatch(html, /Recurso indisponível neste ambiente/);
     assert.doesNotMatch(html, /id="playwright-code"|id="codegen-start"|id="codegen-stop"|id="code-mode-panel"/);

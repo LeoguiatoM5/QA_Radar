@@ -24,8 +24,10 @@ import { tryHandleCodeExecution } from "./routes/code-execution.js";
 import { tryHandleLegacyJourneys } from "./routes/journeys-legacy.js";
 import { tryHandleScans } from "./routes/scans.js";
 import { tryHandleHttpRequest } from "./routes/http-request.js";
+import { tryHandleDashboardActivity } from "./routes/dashboard-activity.js";
 import type { SpawnProcess } from "./code-execution.js";
 import { SERVER_OPTION_DEFAULTS } from "./env.js";
+import { DashboardActivityStore } from "./dashboard-activity-store.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -123,7 +125,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   operationalLogger: defaultOperationalLogger,
 };
 
-const ROUTE_HANDLERS: RouteHandler[] = [tryHandlePages, tryHandleCodegen, tryHandleCodeExecution, tryHandleLegacyJourneys, tryHandleScans, tryHandleHttpRequest];
+const ROUTE_HANDLERS: RouteHandler[] = [tryHandlePages, tryHandleDashboardActivity, tryHandleCodegen, tryHandleCodeExecution, tryHandleLegacyJourneys, tryHandleScans, tryHandleHttpRequest];
 
 export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Server {
   const config = { ...DEFAULT_OPTIONS, ...overrides };
@@ -163,6 +165,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const legacyJourneys = new LegacyJourneyRegistry();
   const codegenSessions = new CodegenSessionStore();
   const codeExecutionJobs = new CodeExecutionJobStore();
+  const dashboardActivity = new DashboardActivityStore(config.resultsDir);
 
   const loadCodeExecutionJob = async (id: string): Promise<CodeExecutionJob | undefined> => {
     const memoryJob = codeExecutionJobs.get(id);
@@ -527,6 +530,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     legacyJourneys,
     codegenSessions,
     codeExecutionJobs,
+    dashboardActivity,
     queueStats,
     schedule,
     consumeRateLimit,
