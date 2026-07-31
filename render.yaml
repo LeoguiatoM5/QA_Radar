@@ -9,10 +9,6 @@ services:
     #   QA_RADAR_ALLOW_PRIVATE_TARGETS — nunca deve ser true num deploy público.
     #   QA_RADAR_ENABLE_HISTORY — histórico compartilhado sem autenticação
     #     não deve ser exposto no deploy público (ver README, seção Segurança).
-    #   QA_RADAR_SANDBOX_URL / QA_RADAR_SANDBOX_SIGNING_SECRET — moot enquanto
-    #     QA_RADAR_ENABLE_CODE_MODE=false; exigem um runner dedicado publicado
-    #     à parte antes de fazer sentido setar (ver docs/SANDBOX_RUNNER_PROTOCOL.md
-    #     no histórico do git — o arquivo foi removido da árvore trackeada).
     #   QA_RADAR_MAX_CODE_EXECUTION_MS / MAX_CODE_OUTPUT_BYTES / MAX_CODE_MEMORY_MIB /
     #     MAX_CODEGEN_DURATION_MS — só têm efeito com o Modo Código habilitado.
     #   TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY — exigem um widget criado à
@@ -33,8 +29,19 @@ services:
         value: 180000
       - key: QA_RADAR_MAX_SITEMAP_PAGES
         value: 5
+      # As três abaixo ligam a Jornada hospedada e são gerenciadas no painel do
+      # Render, não aqui: `sync: false` faz o Blueprint declarar a chave sem
+      # ditar o valor. Fixar `value: false` neste arquivo já desligou a Jornada
+      # em produção uma vez, porque todo sync do Blueprint sobrescrevia o que
+      # estava no painel. Enquanto QA_RADAR_SANDBOX_URL/SIGNING_SECRET estiverem
+      # vazias, a execução hospedada falha fechado com 503 e nunca cai para o
+      # worker local. Ver README, "Publicar o runner em uma VM".
       - key: QA_RADAR_ENABLE_CODE_MODE
-        value: false
+        sync: false
+      - key: QA_RADAR_SANDBOX_URL
+        sync: false
+      - key: QA_RADAR_SANDBOX_SIGNING_SECRET
+        sync: false
       - key: QA_RADAR_CODE_MODE_ADMIN_TOKEN
         generateValue: true
       - key: QA_RADAR_TRUST_PROXY

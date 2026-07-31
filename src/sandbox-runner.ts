@@ -137,7 +137,9 @@ function runnerConfiguration(): {
   limits: RunnerLimits;
   docker: DockerSandboxConfig;
 } {
-  const secret = process.env.QA_RADAR_SANDBOX_SIGNING_SECRET ?? "";
+  // Normalização idêntica à do lado do QA Radar (ver env.ts): o segredo chega
+  // por .env/painel e um \n acidental viraria um 401 sem diagnóstico.
+  const secret = process.env.QA_RADAR_SANDBOX_SIGNING_SECRET?.trim() ?? "";
   if (Buffer.byteLength(secret, "utf8") < 32 || Buffer.byteLength(secret, "utf8") > 512) {
     throw new Error("QA_RADAR_SANDBOX_SIGNING_SECRET deve ter entre 32 e 512 bytes.");
   }

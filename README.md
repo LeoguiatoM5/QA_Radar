@@ -635,9 +635,9 @@ QA_RADAR_SANDBOX_SIGNING_SECRET='secret-aleatorio-com-32-bytes-ou-mais' \
 npm run sandbox
 ```
 
-O Blueprint público continua desabilitado porque ainda precisa apontar para uma
-instância dedicada desse runner, protegida por HTTPS. Não monte o socket Docker
-no processo HTTP público.
+O Blueprint público sai desligado porque ainda precisa apontar para uma instância
+dedicada desse runner, protegida por HTTPS. Não monte o socket Docker no processo
+HTTP público.
 
 #### Publicar o runner em uma VM e ligar a Jornada no deploy
 
@@ -658,7 +658,9 @@ VM Linux com Docker — 2 vCPU e 4 GB dão folga para o Chromium do job.
    npm run sandbox:homologate   # valida isolamento, limites e egress
    ```
 
-4. **Subir o runner** com o compose (Caddy + runner na mesma rede interna):
+4. **Subir o runner** com o compose. O runner fica numa rede `internal`, sem rota
+   externa; só o Caddy também entra numa rede com saída, porque o ACME do Let's
+   Encrypt exige que ele alcance a API do CA para emitir o certificado:
 
    ```bash
    printf 'QA_RADAR_SANDBOX_SIGNING_SECRET=%s\n' "$SEGREDO" > .env.runner
@@ -668,14 +670,24 @@ VM Linux com Docker — 2 vCPU e 4 GB dão folga para o Chromium do job.
      docker compose -f docker-compose.sandbox.yml up -d
    ```
 
+   Confirme a emissão do certificado antes de seguir — sem isso o passo 5 falha
+   com erro de TLS, não com uma mensagem do QA Radar:
+
+   ```bash
+   docker compose -f docker-compose.sandbox.yml logs caddy | grep -i "certificate obtained"
+   curl -sS https://sandbox.seu-dominio.com/health
+   ```
+
    Restrinja a porta 443 da VM ao egress do Render (firewall/security group): o
    runner não é um serviço público.
 
-5. **Apontar o QA Radar.** No serviço web do Render, defina:
-   `QA_RADAR_ENABLE_CODE_MODE=true`, `QA_RADAR_SANDBOX_URL=https://sandbox.seu-dominio.com`,
-   `QA_RADAR_SANDBOX_SIGNING_SECRET` com o mesmo segredo. O
-   `QA_RADAR_CODE_MODE_ADMIN_TOKEN` já é gerado pelo Blueprint — copie o valor do
-   painel do Render.
+5. **Apontar o QA Radar.** No painel do Render (Environment do serviço web), defina
+   `QA_RADAR_ENABLE_CODE_MODE=true`, `QA_RADAR_SANDBOX_URL=https://sandbox.seu-dominio.com`
+   e `QA_RADAR_SANDBOX_SIGNING_SECRET` com o mesmo segredo. As três estão no
+   Blueprint como `sync: false` justamente para o painel ser a fonte da verdade: um
+   valor fixado no `render.yaml` seria reimposto a cada sync e desligaria a Jornada
+   de novo. O `QA_RADAR_CODE_MODE_ADMIN_TOKEN` continua gerado pelo Blueprint —
+   copie o valor do painel.
 6. **Usar.** Em `/journeys`, cole o `.spec.ts` e clique em Executar. Como a
    requisição vem de fora, o servidor pede o token administrativo: cole o valor do
    passo anterior no campo que aparece. Ele fica só na aba do navegador (sessão) e
@@ -684,7 +696,14 @@ VM Linux com Docker — 2 vCPU e 4 GB dão folga para o Chromium do job.
 
 Se a execução responder `503 Runner sandbox hospedado não está configurado`, o par
 `QA_RADAR_SANDBOX_URL`/`SIGNING_SECRET` não chegou ao processo; `401`/`403` é o token
-administrativo ausente ou divergente.
+administrativo ausente ou divergente. Um `401` vindo do próprio runner (dentro da
+mensagem `O sandbox recusou a execução`) é segredo divergente entre os dois lados.
+
+`POST /api/code-execution` responde de forma síncrona: a conexão fica aberta até a
+jornada terminar. Jornadas longas podem esbarrar no tempo limite de requisição do
+proxy da hospedagem antes do limite do QA Radar, e nesse caso o navegador mostra
+erro de rede enquanto a execução seguiu no runner. Ajuste
+`QA_RADAR_MAX_CODE_EXECUTION_MS` para caber nessa janela.
 
 O servidor limita por padrão cada endereço a 10 novas análises por minuto,
 retorna os cabeçalhos `X-RateLimit-Limit`, `X-RateLimit-Remaining` e
