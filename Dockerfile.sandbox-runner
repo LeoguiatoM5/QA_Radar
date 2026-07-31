@@ -14,8 +14,18 @@ ENV NODE_ENV=production \
     QA_RADAR_SANDBOX_HOST=0.0.0.0 \
     QA_RADAR_SANDBOX_PORT=4180
 
+# O CLI oficial, não o docker.io do Debian: o runner comanda o daemon do host, e
+# um CLI mais antigo que ele não entende `--security-opt seccomp=builtin` — trata
+# "builtin" como caminho de arquivo e derruba toda execução com egress. Manter os
+# dois lados na mesma linha evita essa classe de divergência de versão.
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y docker.io ca-certificates \
+    && apt-get install --no-install-recommends -y ca-certificates curl \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install --no-install-recommends -y docker-ce-cli \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 runner \
     && if getent group ${DOCKER_GID} >/dev/null; then DOCKER_GROUP=$(getent group ${DOCKER_GID} | cut -d: -f1); else groupadd --gid ${DOCKER_GID} dockerhost; DOCKER_GROUP=dockerhost; fi \
@@ -26,7 +36,10 @@ COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 
-USER 10001:10001
+# Pelo nome, não por uid:gid numérico: com `USER 10001:10001` o Docker não
+# resolve /etc/group, e o processo perde o grupo do socket criado logo acima —
+# o runner sobe, mas todo /ready falha porque não enxerga o daemon.
+USER runner
 EXPOSE 4180
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:4180/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
