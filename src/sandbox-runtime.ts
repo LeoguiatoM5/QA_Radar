@@ -172,7 +172,14 @@ export function dockerEgressProxyArguments(request: SandboxExecutionRequest, con
   ];
 }
 
-function waitForExit(child: ChildProcess, timeoutMs = 2_000): Promise<void> {
+// `docker rm --force` precisa parar um container que pode estar consumindo 100%
+// de CPU, e o host pode ter um único núcleo. Dois segundos bastavam na máquina
+// de desenvolvimento, mas numa VM pequena a limpeza era morta antes de terminar
+// e o container sobrevivia — vazando proxy de egress e volume a cada timeout,
+// silenciosamente, porque o chamador considerava a limpeza concluída.
+const CLEANUP_TIMEOUT_MS = 30_000;
+
+function waitForExit(child: ChildProcess, timeoutMs = CLEANUP_TIMEOUT_MS): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (): void => {
