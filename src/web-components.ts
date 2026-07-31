@@ -1,3 +1,23 @@
+type NavSection = "home" | "scanner" | "journeys" | "api" | "docs" | "construcao";
+
+/** Ambientes oferecidos no seletor da barra de contexto. */
+export const ENVIRONMENTS = [
+  { slug: "local", label: "Local" },
+  { slug: "homologacao", label: "Homologação" },
+  { slug: "producao", label: "Produção" },
+] as const;
+
+/** Áreas de apoio que ainda não existem: a navegação leva ao aviso de construção. */
+export const CONSTRUCTION_AREAS = {
+  relatorios: { label: "Relatórios", summary: "Uma área dedicada a consolidar os relatórios de todas as execuções, com filtros por projeto, período e ambiente." },
+  "central-de-qualidade": { label: "Central de qualidade", summary: "O painel de padrões, tendências e evolução da qualidade do projeto ao longo do tempo." },
+  alertas: { label: "Alertas", summary: "Notificações automáticas quando uma execução falhar ou um indicador de qualidade piorar." },
+  ambientes: { label: "Ambientes", summary: "O cadastro de ambientes do projeto, com URLs, credenciais e histórico separados por ambiente." },
+  configuracoes: { label: "Configurações", summary: "As preferências do projeto e da conta reunidas em um só lugar." },
+} as const;
+
+type ConstructionArea = keyof typeof CONSTRUCTION_AREAS;
+
 export interface DashboardOptions {
   allowHistory: boolean;
   maxSitemapPages: number;
@@ -37,11 +57,13 @@ export function renderDashboard(options: DashboardOptions): string {
   ${renderWorkspaceEnd()}`;
 }
 
-function renderAppNav(active: "home" | "scanner" | "journeys" | "api" | "docs"): string {
-  const link = (id: typeof active, label: string, href: string, icon: string) =>
+function renderAppNav(active: NavSection, area = ""): string {
+  const link = (id: NavSection, label: string, href: string, icon: string) =>
     `<a class="nav-link ${active === id ? "active" : ""}" href="${href}"${active === id ? ' aria-current="page"' : ""}><span class="nav-icon icon-${icon}" aria-hidden="true"><i></i></span><span>${label}</span></a>`;
-  const supportingLink = (label: string, href: string, icon: string) =>
-    `<a class="nav-link nav-link-supporting" href="${href}"><span class="nav-icon icon-${icon}" aria-hidden="true"><i></i></span><span>${label}</span></a>`;
+  // As áreas de apoio ainda não existem: todas levam ao aviso de construção, e a
+  // que estiver aberta é destacada pelo slug da área.
+  const supportingLink = (slug: string, label: string, icon: string) =>
+    `<a class="nav-link nav-link-supporting ${area === slug ? "active" : ""}" href="/em-construcao?area=${slug}"${area === slug ? ' aria-current="page"' : ""}><span class="nav-icon icon-${icon}" aria-hidden="true"><i></i></span><span>${label}</span></a>`;
   return `<aside class="app-sidebar">
     <div class="sidebar-brand"><a class="logo" href="/"><i class="radar"></i><span>QA RADAR</span></a><button class="mobile-nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation" aria-label="Abrir menu"><i></i></button></div>
     <nav class="nav-links" id="primary-navigation" aria-label="Navegação principal">
@@ -50,26 +72,26 @@ function renderAppNav(active: "home" | "scanner" | "journeys" | "api" | "docs"):
         ${link("scanner", "Inspeção", "/scanner", "inspection")}
         ${link("journeys", "Jornada", "/journeys", "journey")}
         ${link("api", "Testes de API", "/api-tests", "api")}
-        ${supportingLink("Relatórios", "/docs#relatorios", "reports")}
-        ${supportingLink("Central de qualidade", "/docs#central-de-qualidade", "quality")}
+        ${supportingLink("relatorios", "Relatórios", "reports")}
+        ${supportingLink("central-de-qualidade", "Central de qualidade", "quality")}
       </div>
       <div class="nav-group nav-group-support">
-        ${supportingLink("Alertas", "/docs#alertas", "alerts")}
-        ${supportingLink("Ambientes", "/docs#ambientes", "environments")}
-        ${supportingLink("Configurações", "/docs#configuracoes", "settings")}
+        ${supportingLink("alertas", "Alertas", "alerts")}
+        ${supportingLink("ambientes", "Ambientes", "environments")}
+        ${supportingLink("configuracoes", "Configurações", "settings")}
       </div>
     </nav>
     <a class="sidebar-help ${active === "docs" ? "active" : ""}" href="/docs"><span class="help-mark">?</span><span>Ajuda</span></a>
   </aside>`;
 }
 
-function renderWorkspaceStart(active: "home" | "scanner" | "journeys" | "api" | "docs", section: string): string {
+function renderWorkspaceStart(active: NavSection, section: string, area = ""): string {
   return `<main class="shell ${active === "home" ? "home-shell" : ""}">
-  ${renderAppNav(active)}
+  ${renderAppNav(active, area)}
   <div class="app-main">
     <header class="context-bar">
       <div class="context-item context-project"><small>Projeto</small><strong>QA Radar Web</strong></div>
-      <div class="context-item context-environment"><small>Ambiente</small><strong><span class="live-dot"></span>Local</strong></div>
+      <div class="context-item context-environment" data-environment="local"><small>Ambiente</small><strong><span class="live-dot"></span><span id="context-environment-label">Local</span></strong><select id="context-environment" aria-label="Ambiente do projeto">${ENVIRONMENTS.map((environment) => `<option value="${environment.slug}">${environment.label}</option>`).join("")}</select></div>
       <div class="context-section"><span class="context-page">${section}</span><span class="context-clock"><i aria-hidden="true"></i><time id="context-clock" datetime="">--/--/---- --:--</time></span><span class="context-period" title="Janela usada nos indicadores do dashboard">Últimas 24h</span></div>
     </header>
     <div class="app-page app-page-${active}">`;
@@ -254,7 +276,7 @@ export function renderHome(): string {
         <a class="execution-card" href="/journeys"><span class="execution-icon"><em class="tool-icon icon-journey"><i></i></em></span><span class="execution-copy"><strong>Jornada</strong><small>Execute fluxos automatizados com Playwright e valide experiências reais.</small></span><span class="execution-action"><b>Executar jornada</b><small id="dashboard-last-journey">Sem execuções recentes</small></span></a>
         <a class="execution-card" href="/api-tests"><span class="execution-icon execution-icon-plain"><em class="tool-icon icon-api"><i></i></em></span><span class="execution-copy"><strong>Testes de API</strong><small>Valide contratos, respostas e regras de negócio das suas APIs.</small></span><span class="execution-action"><b>Executar testes</b><small id="dashboard-last-api">Sem execuções recentes</small></span></a>
       </div>
-      <a class="executions-link" href="/docs#relatorios">Ver todas as execuções <span>→</span></a>
+      <a class="executions-link" href="/em-construcao?area=relatorios">Ver todas as execuções <span>→</span></a>
       </div>
       </section>
       <section class="recent-runs">
@@ -269,8 +291,27 @@ export function renderHome(): string {
       <div class="signal-list" id="dashboard-signal-list"></div>
       <div class="signal-empty" id="dashboard-signal-empty"><i>⌁</i><strong>Aguardando execução</strong><p>Erros, avisos e sucessos aparecerão aqui durante as análises.</p></div>
       <a class="signals-link" href="/scanner">Ver todos os sinais <span>→</span></a>
-      <a class="quality-center-card" href="/docs#central-de-qualidade"><span class="quality-center-icon"><i class="icon-overview"><b></b></i></span><span><strong>Central de qualidade</strong><small>Acompanhe padrões, tendências e a evolução da qualidade do projeto.</small><b>Acessar central <i>→</i></b></span></a>
+      <a class="quality-center-card" href="/em-construcao?area=central-de-qualidade"><span class="quality-center-icon"><i class="icon-overview"><b></b></i></span><span><strong>Central de qualidade</strong><small>Acompanhe padrões, tendências e a evolução da qualidade do projeto.</small><b>Acessar central <i>→</i></b></span></a>
     </aside>
+  </section>
+  ${renderWorkspaceEnd()}`;
+}
+
+export function renderConstructionPage(area: string): string {
+  const slug: ConstructionArea = Object.hasOwn(CONSTRUCTION_AREAS, area) ? (area as ConstructionArea) : "central-de-qualidade";
+  const { label, summary } = CONSTRUCTION_AREAS[slug];
+  return `${renderWorkspaceStart("construcao", label, slug)}
+  <section class="panel construction-panel">
+    <span class="construction-mark" aria-hidden="true"><i></i></span>
+    <div class="eyebrow">${label}</div>
+    <h1>Em construção</h1>
+    <p class="lead">${summary}</p>
+    <p class="construction-note">Esta área ainda não foi montada. Enquanto isso, as três ferramentas do QA Radar já estão disponíveis e alimentam a Visão geral.</p>
+    <div class="construction-actions">
+      <a href="/">Voltar para a Visão geral</a>
+      <a href="/scanner">Executar uma inspeção</a>
+      <a href="/docs">Ver perguntas frequentes</a>
+    </div>
   </section>
   ${renderWorkspaceEnd()}`;
 }
