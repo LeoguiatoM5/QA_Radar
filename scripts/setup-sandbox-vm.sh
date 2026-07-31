@@ -27,7 +27,7 @@ morrer() {
 [ -f "$COMPOSE" ] || morrer "rode a partir da raiz do repositório (não encontrei $COMPOSE)."
 
 # ---------------------------------------------------------------------------
-etapa "1/8  Docker"
+etapa "1/9  Docker"
 if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh
   usermod -aG docker "${SUDO_USER:-$USER}" || true
@@ -39,7 +39,7 @@ verde "Docker $(docker version --format '{{.Server.Version}}') ok"
 # ---------------------------------------------------------------------------
 # Feito cedo de propósito: numa VM ARM (Oracle Ampere, AWS Graviton) a imagem do
 # Playwright pode não trazer Chromium, e aí nada do resto adianta.
-etapa "2/8  Chromium na arquitetura desta VM ($(uname -m))"
+etapa "2/9  Chromium na arquitetura desta VM ($(uname -m))"
 docker pull -q "$IMAGEM_BASE" >/dev/null || morrer "não consegui baixar $IMAGEM_BASE."
 if docker run --rm "$IMAGEM_BASE" ls /ms-playwright 2>/dev/null | grep -q '^chromium'; then
   verde "Chromium presente na imagem para $(uname -m)"
@@ -50,7 +50,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-etapa "3/8  Portas 80 e 443 no firewall local"
+# Os free tiers que rodam Docker (Oracle E2.1.Micro, GCP e2-micro) dão 1 GB de
+# RAM, e o job carrega Chromium. Sem swap o container morre por OOM no meio da
+# jornada, com um erro que não parece falta de memória.
+etapa "3/9  Swap para caber o Chromium"
+memoria_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+echo "    RAM detectada: ${memoria_mb} MB"
+if [ "$memoria_mb" -lt 2048 ]; then
+  if swapon --show 2>/dev/null | grep -q .; then
+    verde "Swap já ativo"
+  else
+    fallocate -l 4G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
+    verde "Swap de 4 GB criado e ativado"
+  fi
+  # Com 1 GB de RAM o teto padrão de 512 MiB por job não deixa margem para o
+  # runner e o Docker. 384 MiB ainda roda uma jornada simples.
+  LIMITE_MEMORIA_JOB=384
+  echo "    Limite de memória por job ajustado para ${LIMITE_MEMORIA_JOB} MiB"
+else
+  LIMITE_MEMORIA_JOB=512
+fi
+
+# ---------------------------------------------------------------------------
+etapa "4/9  Portas 80 e 443 no firewall local"
 # Imagens de nuvem (sobretudo Oracle) vêm com iptables restritivo pré-instalado:
 # abrir só o security group do provedor não basta.
 if command -v iptables >/dev/null 2>&1; then
@@ -65,7 +91,7 @@ fi
 echo "    Lembre: libere 80 e 443 também no security group do provedor."
 
 # ---------------------------------------------------------------------------
-etapa "4/8  DNS de $DOMINIO"
+etapa "5/9  DNS de $DOMINIO"
 ip_publico="$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || echo '')"
 ip_dominio="$(getent hosts "$DOMINIO" | awk '{print $1}' | head -1 || echo '')"
 [ -n "$ip_dominio" ] || morrer "$DOMINIO não resolve. Crie o registro A antes de continuar."
@@ -76,7 +102,7 @@ fi
 verde "$DOMINIO -> $ip_dominio"
 
 # ---------------------------------------------------------------------------
-etapa "5/8  Dependências e imagem do job"
+etapa "6/9  Dependências e imagem do job"
 command -v node >/dev/null 2>&1 || morrer "Node 20+ não encontrado. Instale antes (nodesource)."
 versao_node="$(node -v | sed 's/v\([0-9]*\).*/\1/')"
 [ "$versao_node" -ge 20 ] || morrer "Node $versao_node é antigo demais; precisa de 20+."
@@ -85,13 +111,13 @@ npm run sandbox:image
 verde "Imagem $IMAGEM_JOB construída"
 
 # ---------------------------------------------------------------------------
-etapa "6/8  Homologação do isolamento"
+etapa "7/9  Homologação do isolamento"
 # É o teste que prova que os limites e o egress se comportam nesta VM.
 npm run sandbox:homologate || morrer "a homologação falhou. Não suba o runner assim."
 verde "Isolamento, limites e egress homologados"
 
 # ---------------------------------------------------------------------------
-etapa "7/8  Segredo e subida do runner"
+etapa "8/9  Segredo e subida do runner"
 if [ -f .env.runner ] && grep -q '^QA_RADAR_SANDBOX_SIGNING_SECRET=.\{32,\}' .env.runner; then
   verde "Reaproveitando o segredo já existente em .env.runner"
 else
@@ -99,8 +125,16 @@ else
   {
     printf 'QA_RADAR_SANDBOX_SIGNING_SECRET=%s\n' "$(openssl rand -base64 48)"
     echo 'QA_RADAR_SANDBOX_NETWORK_POLICY=public-egress'
+    printf 'QA_RADAR_SANDBOX_MAX_MEMORY_MIB=%s\n' "$LIMITE_MEMORIA_JOB"
   } >.env.runner
   verde "Segredo novo gerado em .env.runner (permissão 600)"
+fi
+# O teto de memória depende da RAM da VM, então é reaplicado mesmo quando o
+# .env.runner é reaproveitado de uma execução anterior.
+if grep -q '^QA_RADAR_SANDBOX_MAX_MEMORY_MIB=' .env.runner; then
+  sed -i "s/^QA_RADAR_SANDBOX_MAX_MEMORY_MIB=.*/QA_RADAR_SANDBOX_MAX_MEMORY_MIB=${LIMITE_MEMORIA_JOB}/" .env.runner
+else
+  printf 'QA_RADAR_SANDBOX_MAX_MEMORY_MIB=%s\n' "$LIMITE_MEMORIA_JOB" >>.env.runner
 fi
 segredo="$(grep '^QA_RADAR_SANDBOX_SIGNING_SECRET=' .env.runner | cut -d= -f2-)"
 
@@ -109,7 +143,7 @@ DOCKER_GID="$(getent group docker | cut -d: -f3)" \
   docker compose -f "$COMPOSE" up -d --build
 
 # ---------------------------------------------------------------------------
-etapa "8/8  Certificado TLS"
+etapa "9/9  Certificado TLS"
 # A emissão ACME leva alguns segundos; sem ela o QA Radar recusa a URL do sandbox.
 for tentativa in $(seq 1 30); do
   if curl -fsS --max-time 5 "https://$DOMINIO/health" >/dev/null 2>&1; then
