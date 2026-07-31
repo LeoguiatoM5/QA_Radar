@@ -12,6 +12,11 @@ services:
       QA_RADAR_SANDBOX_HOST: 0.0.0.0
       QA_RADAR_SANDBOX_PORT: 4180
       QA_RADAR_SANDBOX_JOB_IMAGE: qa-radar-sandbox-job:3.1.0
+    # O grupo do socket é uma propriedade do host, não da imagem: um runner
+    # construído numa máquina e executado noutra herdaria o GID errado e falharia
+    # em todo /ready. Concedido em tempo de execução, acompanha o host.
+    group_add:
+      - "${DOCKER_GID:?set DOCKER_GID to the host docker.sock group id}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     expose:

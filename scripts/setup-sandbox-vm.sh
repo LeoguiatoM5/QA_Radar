@@ -67,12 +67,18 @@ if [ "$memoria_mb" -lt 2048 ]; then
     grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
     verde "Swap de 4 GB criado e ativado"
   fi
-  # Com 1 GB de RAM o teto padrão de 512 MiB por job não deixa margem para o
-  # runner e o Docker. 384 MiB ainda roda uma jornada simples.
-  LIMITE_MEMORIA_JOB=384
-  echo "    Limite de memória por job ajustado para ${LIMITE_MEMORIA_JOB} MiB"
+  # Contraintuitivo: num host pequeno o job precisa de MAIS memória, não menos.
+  # O container roda com --memory-swap igual a --memory, ou seja, sem swap: o
+  # Chromium tem de caber em RAM real. Medido nesta classe de VM (1 OCPU/1 GB),
+  # 384 MiB estoura o timeout de 30s só para iniciar o navegador, e 768 MiB sobe
+  # em 15s. O swap acima serve para o resto do sistema sair da frente, não para
+  # o job. Com 0,5 CPU a inicialização também não fecha, daí 1 CPU inteira.
+  LIMITE_MEMORIA_JOB=768
+  LIMITE_CPU_JOB=1.0
+  echo "    Job com ${LIMITE_MEMORIA_JOB} MiB e ${LIMITE_CPU_JOB} CPU (mínimo medido para o Chromium subir)"
 else
-  LIMITE_MEMORIA_JOB=512
+  LIMITE_MEMORIA_JOB=768
+  LIMITE_CPU_JOB=1.0
 fi
 
 # ---------------------------------------------------------------------------
@@ -81,8 +87,11 @@ etapa "4/9  Portas 80 e 443 no firewall local"
 # abrir só o security group do provedor não basta.
 if command -v iptables >/dev/null 2>&1; then
   for porta in 80 443; do
-    if ! iptables -C INPUT -p tcp --dport "$porta" -j ACCEPT 2>/dev/null; then
-      iptables -I INPUT -m state --state NEW -p tcp --dport "$porta" -j ACCEPT || true
+    if ! iptables -C INPUT -m state --state NEW -p tcp --dport "$porta" -j ACCEPT 2>/dev/null; then
+      # Posição 1, não o fim da cadeia: a imagem da Oracle termina o INPUT com um
+      # REJECT geral, e uma regra ACCEPT inserida depois dele nunca é avaliada —
+      # a porta continua fechada e o `iptables -C` seguinte diz que está aberta.
+      iptables -I INPUT 1 -m state --state NEW -p tcp --dport "$porta" -j ACCEPT || true
     fi
   done
   command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1 || true
@@ -126,16 +135,20 @@ else
     printf 'QA_RADAR_SANDBOX_SIGNING_SECRET=%s\n' "$(openssl rand -base64 48)"
     echo 'QA_RADAR_SANDBOX_NETWORK_POLICY=public-egress'
     printf 'QA_RADAR_SANDBOX_MAX_MEMORY_MIB=%s\n' "$LIMITE_MEMORIA_JOB"
+    printf 'QA_RADAR_SANDBOX_CPUS=%s\n' "$LIMITE_CPU_JOB"
   } >.env.runner
   verde "Segredo novo gerado em .env.runner (permissão 600)"
 fi
 # O teto de memória depende da RAM da VM, então é reaplicado mesmo quando o
 # .env.runner é reaproveitado de uma execução anterior.
-if grep -q '^QA_RADAR_SANDBOX_MAX_MEMORY_MIB=' .env.runner; then
-  sed -i "s/^QA_RADAR_SANDBOX_MAX_MEMORY_MIB=.*/QA_RADAR_SANDBOX_MAX_MEMORY_MIB=${LIMITE_MEMORIA_JOB}/" .env.runner
-else
-  printf 'QA_RADAR_SANDBOX_MAX_MEMORY_MIB=%s\n' "$LIMITE_MEMORIA_JOB" >>.env.runner
-fi
+for par in "QA_RADAR_SANDBOX_MAX_MEMORY_MIB=${LIMITE_MEMORIA_JOB}" "QA_RADAR_SANDBOX_CPUS=${LIMITE_CPU_JOB}"; do
+  chave="${par%%=*}"
+  if grep -q "^${chave}=" .env.runner; then
+    sed -i "s|^${chave}=.*|${par}|" .env.runner
+  else
+    echo "$par" >>.env.runner
+  fi
+done
 segredo="$(grep '^QA_RADAR_SANDBOX_SIGNING_SECRET=' .env.runner | cut -d= -f2-)"
 
 DOCKER_GID="$(getent group docker | cut -d: -f3)" \
