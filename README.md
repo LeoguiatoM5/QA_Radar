@@ -645,6 +645,18 @@ O runner precisa do socket Docker para criar um container por job, então não r
 em PaaS gerenciada (Render, Heroku, Fly Machines com Docker desabilitado). Use uma
 VM Linux com Docker — 2 vCPU e 4 GB dão folga para o Chromium do job.
 
+Com a VM criada e o DNS apontado, `scripts/setup-sandbox-vm.sh` faz os passos 3 a
+6 de uma vez e imprime no final os valores para colar no painel:
+
+```bash
+sudo ./scripts/setup-sandbox-vm.sh sandbox.seu-dominio.com
+```
+
+Ele checa antes se a imagem do Playwright traz Chromium para a arquitetura da VM
+— numa VM ARM isso pode não existir, e é melhor descobrir no primeiro minuto. Não
+mexe em firewall: restringir a 443 continua manual (passo 7). Os passos abaixo são
+o mesmo roteiro, manual, para quando algo falhar no meio.
+
 1. **DNS.** Aponte um subdomínio para a VM (ex.: `sandbox.seu-dominio.com`). O Caddy
    do compose emite o certificado sozinho; sem DNS resolvendo não há HTTPS, e o
    servidor exige `QA_RADAR_SANDBOX_URL` em HTTPS.
