@@ -74,7 +74,10 @@ describe("web server", () => {
     const response = await fetch(`${baseUrl}/journeys`);
     const html = await response.text();
     assert.equal(response.status, 200);
-    assert.match(html, /Recurso indisponível neste ambiente/);
+    assert.match(html, /Execução desligada neste servidor/);
+    // Sem execução habilitada a página não pode oferecer o editor, só explicar como habilitar.
+    assert.doesNotMatch(html, /id="playwright-code"/);
+    assert.match(html, /QA_RADAR_SANDBOX_URL/);
     assert.doesNotMatch(html, /id="scan-form"/);
     assert.doesNotMatch(html, /id="journey-form"/);
   });

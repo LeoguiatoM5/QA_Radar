@@ -639,6 +639,53 @@ O Blueprint público continua desabilitado porque ainda precisa apontar para uma
 instância dedicada desse runner, protegida por HTTPS. Não monte o socket Docker
 no processo HTTP público.
 
+#### Publicar o runner em uma VM e ligar a Jornada no deploy
+
+O runner precisa do socket Docker para criar um container por job, então não roda
+em PaaS gerenciada (Render, Heroku, Fly Machines com Docker desabilitado). Use uma
+VM Linux com Docker — 2 vCPU e 4 GB dão folga para o Chromium do job.
+
+1. **DNS.** Aponte um subdomínio para a VM (ex.: `sandbox.seu-dominio.com`). O Caddy
+   do compose emite o certificado sozinho; sem DNS resolvendo não há HTTPS, e o
+   servidor exige `QA_RADAR_SANDBOX_URL` em HTTPS.
+2. **Segredo.** Gere o segredo compartilhado entre o QA Radar e o runner:
+   `openssl rand -base64 48` (o runner recusa menos de 32 bytes).
+3. **Imagem do job e homologação**, na VM, com o repositório clonado:
+
+   ```bash
+   npm ci
+   npm run sandbox:image        # constrói qa-radar-sandbox-job:3.1.0
+   npm run sandbox:homologate   # valida isolamento, limites e egress
+   ```
+
+4. **Subir o runner** com o compose (Caddy + runner na mesma rede interna):
+
+   ```bash
+   printf 'QA_RADAR_SANDBOX_SIGNING_SECRET=%s\n' "$SEGREDO" > .env.runner
+   echo 'QA_RADAR_SANDBOX_NETWORK_POLICY=public-egress' >> .env.runner
+   DOCKER_GID=$(getent group docker | cut -d: -f3) \
+   SANDBOX_RUNNER_DOMAIN=sandbox.seu-dominio.com \
+     docker compose -f docker-compose.sandbox.yml up -d
+   ```
+
+   Restrinja a porta 443 da VM ao egress do Render (firewall/security group): o
+   runner não é um serviço público.
+
+5. **Apontar o QA Radar.** No serviço web do Render, defina:
+   `QA_RADAR_ENABLE_CODE_MODE=true`, `QA_RADAR_SANDBOX_URL=https://sandbox.seu-dominio.com`,
+   `QA_RADAR_SANDBOX_SIGNING_SECRET` com o mesmo segredo. O
+   `QA_RADAR_CODE_MODE_ADMIN_TOKEN` já é gerado pelo Blueprint — copie o valor do
+   painel do Render.
+6. **Usar.** Em `/journeys`, cole o `.spec.ts` e clique em Executar. Como a
+   requisição vem de fora, o servidor pede o token administrativo: cole o valor do
+   passo anterior no campo que aparece. Ele fica só na aba do navegador (sessão) e
+   segue como `Authorization: Bearer` em cada execução. O gravador Codegen continua
+   local, porque abre um navegador na máquina que roda o servidor.
+
+Se a execução responder `503 Runner sandbox hospedado não está configurado`, o par
+`QA_RADAR_SANDBOX_URL`/`SIGNING_SECRET` não chegou ao processo; `401`/`403` é o token
+administrativo ausente ou divergente.
+
 O servidor limita por padrão cada endereço a 10 novas análises por minuto,
 retorna os cabeçalhos `X-RateLimit-Limit`, `X-RateLimit-Remaining` e
 `X-RateLimit-Reset`, mantém resultados por uma hora e expõe `GET /health` para

@@ -148,6 +148,10 @@ describe("dashboard components", () => {
     assert.match(html, /id="code-mode-panel"/);
     assert.match(html, /id="playwright-code"/);
     assert.match(html, /id="code-execute"/);
+    // A execução hospedada exige o token administrativo; a interface precisa saber pedi-lo.
+    assert.match(html, /id="journey-admin-token"/);
+    assert.match(html, /qa-radar-code-admin-token/);
+    assert.match(html, /authorization:'Bearer '\+token/);
     assert.match(html, /\.app-sidebar \.nav-link\{/);
     assert.match(html, />Executar<\/button>/);
     assert.doesNotMatch(html, /somente local|Executar localmente/);
@@ -159,7 +163,11 @@ describe("dashboard components", () => {
   it("mantém o Modo Jornada indisponível quando o ambiente não habilita execução", () => {
     const html = createJourneyPage();
 
-    assert.match(html, /Recurso indisponível neste ambiente/);
+    assert.match(html, /Execução desligada neste servidor/);
+    // O aviso precisa dizer o que fazer: rodar local ou apontar um runner sandbox.
+    assert.match(html, /npm run web/);
+    assert.match(html, /QA_RADAR_ENABLE_CODE_MODE=true/);
+    assert.match(html, /QA_RADAR_SANDBOX_URL/);
     assert.doesNotMatch(html, /id="code-mode-tab"/);
     assert.doesNotMatch(html, /id="code-execution"/);
     assert.doesNotMatch(html, /id="playwright-code"/);
@@ -193,7 +201,7 @@ describe("dashboard components", () => {
     assert.match(html, /new AbortController\(\)/);
     assert.match(html, /event\.key==='Enter'/);
     assert.match(html, />Enviar<\/button>/);
-    assert.doesNotMatch(html, /Recurso indisponível neste ambiente/);
+    assert.doesNotMatch(html, /Execução desligada neste servidor/);
     assert.doesNotMatch(html, /id="playwright-code"|id="codegen-start"|id="codegen-stop"|id="code-mode-panel"/);
     assert.doesNotMatch(html, /id="scan-form"/);
     assert.doesNotMatch(html, /id="results"/);

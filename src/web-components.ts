@@ -111,7 +111,23 @@ function renderToolHeader(eyebrow: string, title: string, description: string): 
 export function renderJourneyPage(allowCodeMode: boolean): string {
   const enabled = allowCodeMode;
   return `${renderWorkspaceStart("journeys", "Jornada")}
-  ${enabled ? `${renderToolHeader("Automação Playwright", "Modo Jornada de Playwright", "Grave, revise e execute jornadas Playwright em TypeScript.")}<section class="journey-workspace">${renderCodePanel()}</section>${renderEvidenceModal()}` : '<section class="panel"><div class="eyebrow">Modo Jornada de Playwright</div><h1>Recurso indisponível neste ambiente</h1><p class="lead">A execução de jornadas ainda não está habilitada nesta implantação.</p><p><a class="home-action" href="/docs"><strong>Consultar configuração</strong><span>Veja os requisitos de infraestrutura para habilitar o recurso.</span></a></p></section>'}
+  ${
+    enabled
+      ? `${renderToolHeader("Automação Playwright", "Modo Jornada de Playwright", "Grave, revise e execute jornadas Playwright em TypeScript.")}<section class="journey-workspace">${renderCodePanel()}</section>${renderEvidenceModal()}`
+      : `<section class="panel"><div class="eyebrow">Modo Jornada de Playwright</div><h1>Execução desligada neste servidor</h1><p class="lead">A Jornada executa o código Playwright que você escreve. Neste servidor a execução está desligada — ligá-la sem isolamento deixaria qualquer visitante rodar código na máquina.</p>
+    <h2 class="journey-setup-title">Para usar agora</h2>
+    <p>Rode o QA Radar na sua máquina: em <code>localhost</code> a execução vem habilitada por padrão, com o gravador Codegen e o navegador visível.</p>
+    <pre class="journey-setup"><code>npm install
+npm run web   # abre em http://localhost:4173/journeys</code></pre>
+    <h2 class="journey-setup-title">Para habilitar neste servidor</h2>
+    <p>É preciso um runner sandbox dedicado — o servidor recusa execução hospedada sem ele, sem cair para o worker local:</p>
+    <ul class="journey-setup-list">
+      <li><code>QA_RADAR_ENABLE_CODE_MODE=true</code></li>
+      <li><code>QA_RADAR_SANDBOX_URL</code> (HTTPS) e <code>QA_RADAR_SANDBOX_SIGNING_SECRET</code> apontando para o runner isolado</li>
+      <li><code>QA_RADAR_CODE_MODE_ADMIN_TOKEN</code>, exigido como Bearer em toda execução remota</li>
+    </ul>
+    <div class="construction-actions"><a href="/docs">Ver perguntas frequentes</a><a href="/scanner">Executar uma inspeção</a><a href="/">Voltar para a Visão geral</a></div></section>`
+  }
   ${renderWorkspaceEnd()}`;
 }
 
@@ -127,7 +143,7 @@ function renderEvidenceModal(): string {
 }
 
 function renderCodePanel(): string {
-  return `<section class="panel" id="code-mode-panel"><div class="eyebrow">Jornada Playwright</div><h2>Teste Playwright em TypeScript</h2><p class="sub">Grave o fluxo no navegador, revise o código oficial e execute a jornada no ambiente configurado.</p><div class="code-flow"><span><b>1</b>Gravar</span><span><b>2</b>Revisar</span><span><b>3</b>Executar</span></div><label for="codegen-url">URL inicial da gravação</label><input id="codegen-url" type="url" placeholder="https://staging.sua-aplicacao.com"><div class="journey-controls"><button id="codegen-start" type="button">Abrir gravador</button><button id="codegen-stop" class="secondary" type="button" disabled>Usar código gravado</button></div><div class="error-box" id="codegen-error"></div><div class="code-editor-head"><div><label for="playwright-code">Arquivo Playwright</label><small>qa-radar.spec.ts</small></div><label class="code-import" for="code-import">Importar arquivo</label><input id="code-import" type="file" accept=".ts,.spec.ts" hidden></div><textarea id="playwright-code" rows="18" spellcheck="false" aria-label="Código do teste Playwright" placeholder="import { test, expect } from '@playwright/test';"></textarea><div class="journey-controls code-actions"><button id="code-save" class="secondary" type="button">Exportar .spec.ts</button><button id="code-execute" type="button">Executar</button></div><div id="code-result" hidden aria-live="polite"></div><p class="hint">Este recurso executa código informado pelo usuário. Revise o arquivo antes de executar.</p></section>`;
+  return `<section class="panel" id="code-mode-panel"><div class="eyebrow">Jornada Playwright</div><h2>Teste Playwright em TypeScript</h2><p class="sub">Grave o fluxo no navegador, revise o código oficial e execute a jornada no ambiente configurado.</p><div class="code-flow"><span><b>1</b>Gravar</span><span><b>2</b>Revisar</span><span><b>3</b>Executar</span></div><label for="codegen-url">URL inicial da gravação</label><input id="codegen-url" type="url" placeholder="https://staging.sua-aplicacao.com"><div class="journey-controls"><button id="codegen-start" type="button">Abrir gravador</button><button id="codegen-stop" class="secondary" type="button" disabled>Usar código gravado</button></div><div class="error-box" id="codegen-error"></div><div class="code-editor-head"><div><label for="playwright-code">Arquivo Playwright</label><small>qa-radar.spec.ts</small></div><label class="code-import" for="code-import">Importar arquivo</label><input id="code-import" type="file" accept=".ts,.spec.ts" hidden></div><textarea id="playwright-code" rows="18" spellcheck="false" aria-label="Código do teste Playwright" placeholder="import { test, expect } from '@playwright/test';"></textarea><div class="journey-controls code-actions"><button id="code-save" class="secondary" type="button">Exportar .spec.ts</button><button id="code-execute" type="button">Executar</button></div><div class="journey-admin" id="journey-admin" hidden><div class="error-box" id="journey-admin-error" role="alert"></div><label for="journey-admin-token">Token administrativo</label><small class="hint">Este servidor só aceita execução hospedada com o token <code>QA_RADAR_CODE_MODE_ADMIN_TOKEN</code>. Ele fica guardado apenas nesta aba do navegador.</small><div class="journey-admin-row"><input id="journey-admin-token" type="password" autocomplete="off" spellcheck="false" placeholder="Cole o token administrativo"><button id="journey-admin-save" type="button">Salvar e executar</button></div></div><div id="code-result" hidden aria-live="polite"></div><p class="hint">Este recurso executa código informado pelo usuário. Revise o arquivo antes de executar.</p></section>`;
 }
 
 function renderHttpKeyValueRow(keyPlaceholder: string, valuePlaceholder: string): string {
