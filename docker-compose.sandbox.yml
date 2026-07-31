@@ -42,12 +42,19 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
+      # sandbox-control alcança o runner; sandbox-egress dá a saída para a
+      # internet que o ACME exige (o Caddy precisa falar com a API do Let's
+      # Encrypt para emitir e renovar o certificado). Só o Caddy entra nas duas:
+      # o runner continua sem rota externa nenhuma.
       - sandbox-control
+      - sandbox-egress
 
 networks:
   sandbox-control:
     driver: bridge
     internal: true
+  sandbox-egress:
+    driver: bridge
 
 volumes:
   sandbox-caddy-data:

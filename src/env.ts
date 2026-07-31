@@ -1,9 +1,13 @@
 import type { ServerOptions } from "./server.js";
 
 export function codeModeEnabledForHost(host: string, setting?: string): boolean {
-  if (setting === "true") return true;
-  if (setting === "false") return false;
-  if (setting !== undefined) {
+  // Um painel de hospedagem pode criar a chave sem valor (Render faz isso com
+  // envVars marcadas `sync: false` antes do primeiro preenchimento). Tratar ""
+  // como "não informado" evita derrubar o processo no boot por causa disso.
+  const value = setting?.trim();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (value !== undefined && value !== "") {
     throw new Error("QA_RADAR_ENABLE_CODE_MODE deve ser true ou false.");
   }
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
@@ -53,7 +57,10 @@ export interface EnvironmentConfig {
 export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): EnvironmentConfig {
   const host = source.HOST ?? "127.0.0.1";
   const sandboxUrl = source.QA_RADAR_SANDBOX_URL?.trim();
-  const sandboxSigningSecret = source.QA_RADAR_SANDBOX_SIGNING_SECRET;
+  // O segredo é comparado byte a byte com o do runner. Um \n ou espaço colado
+  // junto no painel da hospedagem quebraria o HMAC com um 401 sem explicação,
+  // então os dois lados normalizam igual (ver sandbox-runner.ts).
+  const sandboxSigningSecret = source.QA_RADAR_SANDBOX_SIGNING_SECRET?.trim();
   if (Boolean(sandboxUrl) !== Boolean(sandboxSigningSecret)) {
     throw new Error("Configure QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto.");
   }

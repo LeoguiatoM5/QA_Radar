@@ -13,6 +13,17 @@ describe("configuração de ambiente", () => {
     assert.throws(() => codeModeEnabledForHost("127.0.0.1", "yes"), /deve ser true ou false/);
   });
 
+  it("trata QA_RADAR_ENABLE_CODE_MODE vazio como não informado", () => {
+    // Um painel de hospedagem pode criar a chave sem valor; isso não pode
+    // derrubar o processo no boot, só cair no padrão por host.
+    assert.equal(codeModeEnabledForHost("0.0.0.0", ""), false);
+    assert.equal(codeModeEnabledForHost("0.0.0.0", "   "), false);
+    assert.equal(codeModeEnabledForHost("127.0.0.1", ""), true);
+    assert.equal(codeModeEnabledForHost("0.0.0.0", " true "), true);
+    assert.equal(codeModeEnabledForHost("127.0.0.1", " false "), false);
+    assert.equal(loadEnvironmentConfig({ HOST: "0.0.0.0", QA_RADAR_ENABLE_CODE_MODE: "" }).serverOptions.allowCodeMode, false);
+  });
+
   it("aplica os valores padrão quando nenhuma variável é informada", () => {
     const env = loadEnvironmentConfig({});
     assert.equal(env.host, "127.0.0.1");
@@ -77,5 +88,19 @@ describe("configuração de ambiente", () => {
       url: "https://sandbox.example.com",
       signingSecret: "segredo-com-32-bytes-no-minimo-ok",
     });
+  });
+
+  it("normaliza o segredo do sandbox e ignora par vazio vindo do painel", () => {
+    // O segredo é comparado byte a byte com o do runner: um \n colado junto
+    // viraria 401 sem diagnóstico, então os dois lados fazem trim.
+    const env = loadEnvironmentConfig({
+      QA_RADAR_SANDBOX_URL: "https://sandbox.example.com",
+      QA_RADAR_SANDBOX_SIGNING_SECRET: " segredo-com-32-bytes-no-minimo-ok\n",
+    });
+    assert.equal(env.sandbox?.signingSecret, "segredo-com-32-bytes-no-minimo-ok");
+    // Chaves declaradas com `sync: false` no Blueprint chegam vazias até serem
+    // preenchidas: isso é "sandbox não configurado", não erro de configuração.
+    assert.equal(loadEnvironmentConfig({ QA_RADAR_SANDBOX_URL: "", QA_RADAR_SANDBOX_SIGNING_SECRET: "" }).sandbox, undefined);
+    assert.equal(loadEnvironmentConfig({ QA_RADAR_SANDBOX_URL: "  ", QA_RADAR_SANDBOX_SIGNING_SECRET: "  " }).sandbox, undefined);
   });
 });

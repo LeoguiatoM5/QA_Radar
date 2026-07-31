@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { describe, it } from "node:test";
 import type { SpawnProcess } from "../src/code-execution.js";
 import { dockerEgressProxyArguments, dockerSandboxArguments, runDockerSandbox, type DockerSandboxConfig, type SandboxExecutionRequest } from "../src/sandbox-runtime.js";
