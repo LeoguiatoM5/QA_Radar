@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
-import { createApiTestsPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
+import { CONSTRUCTION_AREAS, renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
+import { createApiTestsPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
 
 describe("dashboard components", () => {
   it("compõe a Home sem carregar o cliente do scanner", () => {
@@ -90,10 +90,55 @@ describe("dashboard components", () => {
   it("expõe no FAQ as âncoras usadas pela navegação lateral", () => {
     const html = createDocsPage();
 
-    // A sidebar aponta para /docs#<id>; sem esses ids os links não levam a lugar nenhum.
     for (const anchor of ["relatorios", "central-de-qualidade", "alertas", "ambientes", "configuracoes"]) {
       assert.match(html, new RegExp(`<details class="faq-item" id="${anchor}"`), `âncora ausente: ${anchor}`);
     }
+  });
+
+  it("leva as áreas ainda não construídas para o aviso de construção", () => {
+    const html = createHomePage();
+
+    // Nenhuma dessas áreas existe: a navegação precisa avisar em vez de fingir uma página.
+    for (const area of Object.keys(CONSTRUCTION_AREAS)) {
+      assert.match(html, new RegExp(`href="/em-construcao\\?area=${area}"`), `link ausente: ${area}`);
+    }
+    assert.doesNotMatch(html, /href="\/docs#/);
+  });
+
+  it("compõe o aviso de construção com o nome da área e caminhos de volta", () => {
+    const html = createConstructionPage("alertas");
+
+    assert.match(html, /<h1>Em construção<\/h1>/);
+    assert.match(html, /<div class="eyebrow">Alertas<\/div>/);
+    assert.match(html, /href="\/">Voltar para a Visão geral</);
+    assert.match(html, /href="\/scanner"/);
+    assert.match(html, /class="app-sidebar"/);
+    // A área aberta fica destacada na navegação lateral.
+    assert.match(html, /nav-link-supporting active" href="\/em-construcao\?area=alertas" aria-current="page"/);
+  });
+
+  it("cai na Central de qualidade quando a área pedida não existe", () => {
+    for (const area of ["", "inexistente", "<script>alert(1)</script>"]) {
+      const html = createConstructionPage(area);
+      assert.match(html, /<div class="eyebrow">Central de qualidade<\/div>/);
+      assert.doesNotMatch(html, /<script>alert/);
+    }
+  });
+
+  it("oferece Produção, Homologação e Local no seletor de ambiente", () => {
+    const html = createHomePage();
+
+    assert.match(html, /<select id="context-environment" aria-label="Ambiente do projeto">/);
+    for (const [slug, label] of [
+      ["local", "Local"],
+      ["homologacao", "Homologação"],
+      ["producao", "Produção"],
+    ]) {
+      assert.match(html, new RegExp(`<option value="${slug}">${label}</option>`), `ambiente ausente: ${label}`);
+    }
+    // A escolha vale para as demais páginas e chega ao campo Ambiente da Inspeção.
+    assert.match(html, /qa-radar-environment/);
+    assert.match(html, /createWebPage|#environment/);
   });
 
   it("compõe somente o Modo Jornada de Playwright na página de automação", () => {

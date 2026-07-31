@@ -378,6 +378,27 @@ function updateContextClock(){
 }
 updateContextClock();
 if(contextClock)setInterval(updateContextClock,30000);
+// O ambiente escolhido na barra de contexto vale para todas as páginas: fica no
+// navegador e alimenta o campo "Ambiente" da Inspeção.
+const environmentKey='qa-radar-environment';
+const environmentSelect=document.querySelector('#context-environment');
+const environmentLabel=document.querySelector('#context-environment-label');
+function applyEnvironment(slug,persist){
+  if(!environmentSelect)return;
+  const option=[...environmentSelect.options].find(item=>item.value===slug)||environmentSelect.options[0];
+  environmentSelect.value=option.value;
+  if(environmentLabel)environmentLabel.textContent=option.textContent;
+  environmentSelect.closest('.context-item')?.setAttribute('data-environment',option.value);
+  if(persist){try{localStorage.setItem(environmentKey,option.value)}catch{}}
+  const scanEnvironment=document.querySelector('#environment');
+  if(scanEnvironment&&!scanEnvironment.disabled)scanEnvironment.value=option.value;
+}
+if(environmentSelect){
+  let storedEnvironment='';
+  try{storedEnvironment=localStorage.getItem(environmentKey)||''}catch{}
+  applyEnvironment(storedEnvironment||environmentSelect.value,false);
+  environmentSelect.addEventListener('change',()=>applyEnvironment(environmentSelect.value,true));
+}
 function setMobileNavigation(open){
   if(!appSidebar||!mobileNavToggle)return;
   appSidebar.classList.toggle('nav-open',open);
