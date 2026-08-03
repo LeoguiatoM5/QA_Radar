@@ -6,6 +6,8 @@ import { createQaRadarServer } from "../src/server.js";
 import { InMemoryScanJobRepository, type ScanJobRepository } from "../src/scan-job-repository.js";
 import { NO_SCAN_JOB_PERSISTENCE, createScanJobPersistence, toPersistedScanJob } from "../src/scan-job-persistence.js";
 import type { ScanJob } from "../src/job-queue.js";
+import { InMemoryIdempotencyKeys } from "../src/idempotency-store.js";
+import { createDerivedAccessTokenIssuer } from "../src/access-token.js";
 
 function persistence(repository: ScanJobRepository, onError: (operation: string, error: unknown) => void = () => {}) {
   return createScanJobPersistence({ repository, retentionMs: 3_600_000, onError });
@@ -18,8 +20,13 @@ function persistence(repository: ScanJobRepository, onError: (operation: string,
  * copia só as propriedades próprias e deixa todos os métodos para trás.
  */
 class BrokenRepository extends InMemoryScanJobRepository {
-  constructor(private readonly failing: { insert?: boolean; update?: boolean }) {
+  constructor(private readonly failing: { insert?: boolean; update?: boolean; counts?: boolean }) {
     super();
+  }
+
+  override async counts(): Promise<{ active: number; queued: number; jobs: number }> {
+    if (this.failing.counts) throw new Error("banco fora");
+    return super.counts();
   }
 
   override async insert(job: Parameters<ScanJobRepository["insert"]>[0]): Promise<void> {
@@ -70,6 +77,15 @@ describe("scan job persistence", () => {
     await NO_SCAN_JOB_PERSISTENCE.removed(job.id);
     assert.equal(await NO_SCAN_JOB_PERSISTENCE.load(job.id), undefined);
     assert.deepEqual(await NO_SCAN_JOB_PERSISTENCE.recoverOrphans(), []);
+    assert.deepEqual(await NO_SCAN_JOB_PERSISTENCE.pending(), []);
+    assert.equal(await NO_SCAN_JOB_PERSISTENCE.status(), "disabled");
+  });
+
+  it("relata o banco como inacessível em vez de lançar no readiness", async () => {
+    // O /ready reprova com isto; lançar aqui derrubaria a própria sondagem.
+    const store = persistence(new BrokenRepository({ counts: true }));
+    assert.equal(await store.status(), "unreachable");
+    assert.equal(await persistence(new InMemoryScanJobRepository()).status(), "ok");
   });
 
   it("descarta o AbortController ao gravar, que não faz sentido fora do processo", () => {
@@ -205,6 +221,56 @@ describe("scan job persistence", () => {
       // As opções vieram do banco, não de memória nenhuma.
       assert.match(executed, /^http:\/\/127\.0\.0\.1:/);
       assert.equal((await repository.get(created.id))?.status, "failed");
+    } finally {
+      await new Promise<void>((resolve) => second.close(() => resolve()));
+    }
+  });
+
+  it("reemite o token na repetição depois de o processo reiniciar", async () => {
+    // A razão de o token ser derivado do id: aqui a primeira instância morreu,
+    // e mesmo assim a repetição devolve um token que abre a mesma análise.
+    const repository = new InMemoryScanJobRepository();
+    const scanJobs = persistence(repository);
+    const idempotencyKeys = new InMemoryIdempotencyKeys(3_600_000);
+    const accessTokens = createDerivedAccessTokenIssuer("segredo-de-servidor-com-32-bytes");
+    const options = { concurrency: 0, allowPrivateTargets: true, scanJobs, idempotencyKeys, accessTokens };
+
+    const first = createQaRadarServer(options);
+    await new Promise<void>((resolve) => first.listen(0, "127.0.0.1", resolve));
+    const firstUrl = `http://127.0.0.1:${(first.address() as AddressInfo).port}`;
+    let created: { id: string; accessToken: string };
+    try {
+      created = (await (
+        await fetch(`${firstUrl}/api/v1/scans`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": "chave-que-atravessa" },
+          body: JSON.stringify({ url: firstUrl }),
+        })
+      ).json()) as { id: string; accessToken: string };
+    } finally {
+      await new Promise<void>((resolve) => first.close(() => resolve()));
+    }
+
+    // Instância nova, memória zerada, mesmas chaves e mesmo segredo.
+    const second = createQaRadarServer({ ...options, concurrency: 0 });
+    await new Promise<void>((resolve) => second.listen(0, "127.0.0.1", resolve));
+    const secondUrl = `http://127.0.0.1:${(second.address() as AddressInfo).port}`;
+    try {
+      const replay = await fetch(`${secondUrl}/api/v1/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": "chave-que-atravessa" },
+        body: JSON.stringify({ url: firstUrl }),
+      });
+      assert.equal(replay.status, 200, "a repetição não podia criar uma segunda análise");
+      const replayed = (await replay.json()) as { id: string; accessToken: string };
+      assert.equal(replayed.id, created.id);
+      assert.equal(replayed.accessToken, created.accessToken, "o token reemitido tem de ser o mesmo");
+
+      // E ele realmente abre a análise.
+      const consulted = await fetch(`${secondUrl}/api/v1/scans/${created.id}`, {
+        headers: { authorization: `Bearer ${replayed.accessToken}` },
+      });
+      assert.equal(consulted.status, 200);
     } finally {
       await new Promise<void>((resolve) => second.close(() => resolve()));
     }

@@ -41,6 +41,22 @@ export const MIGRATIONS: Migration[] = [
       `create index if not exists scan_jobs_expires_idx on scan_jobs (expires_at)`,
     ],
   },
+  {
+    id: "0002_idempotency_keys",
+    statements: [
+      // Sem coluna de token de propósito: ele é derivado do id do job por HMAC
+      // (ver src/access-token.ts), então gravá-lo aqui seria guardar um bearer
+      // token em texto claro sem necessidade nenhuma.
+      `create table if not exists idempotency_keys (
+         scope text primary key,
+         fingerprint text not null,
+         job_id uuid,
+         created_at timestamptz not null default now(),
+         expires_at timestamptz not null
+       )`,
+      `create index if not exists idempotency_keys_expires_idx on idempotency_keys (expires_at)`,
+    ],
+  },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `create table if not exists schema_migrations (

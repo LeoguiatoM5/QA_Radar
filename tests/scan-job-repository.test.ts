@@ -5,6 +5,7 @@ import { createDatabase, type Database } from "../src/database.js";
 import { runMigrations } from "../src/migrations.js";
 import { InMemoryScanJobRepository, PostgresScanJobRepository, deserializeOptions, serializeOptions, type PersistedScanJob, type ScanJobRepository } from "../src/scan-job-repository.js";
 import type { ScanOptions } from "../src/types.js";
+import { PostgresIdempotencyKeys, idempotencyScope } from "../src/idempotency-store.js";
 
 function options(overrides: Partial<ScanOptions> = {}): ScanOptions {
   return {
@@ -206,6 +207,64 @@ if (TEST_DATABASE_URL) {
       },
     },
   );
+}
+
+if (TEST_DATABASE_URL) {
+  describe("idempotency keys (postgres)", () => {
+    let database: Database;
+    before(async () => {
+      database = createDatabase(TEST_DATABASE_URL);
+      await runMigrations(database);
+      await database.query("delete from idempotency_keys");
+    });
+    after(async () => {
+      await database.close();
+    });
+
+    it("guarda a reserva e a completa, sem nunca gravar token", async () => {
+      const keys = new PostgresIdempotencyKeys(database, 3_600_000);
+      const scope = idempotencyScope("10.0.0.1", `chave-${randomUUID()}`);
+      await keys.reserve(scope, "impressao");
+      assert.equal((await keys.get(scope))?.jobId, undefined);
+
+      const jobId = randomUUID();
+      await database.query(
+        "insert into scan_jobs (id, status, created_at, updated_at, expires_at, options, progress, access_token_hash) values ($1,'queued',now(),now(),now() + interval '1 hour','{}','{}','x')",
+        [jobId],
+      );
+      await keys.complete(scope, jobId);
+      const stored = await keys.get(scope);
+      assert.equal(stored?.jobId, jobId);
+      // O token é derivado do id, então não tem por que estar aqui — e um
+      // bearer token em texto claro seria pior que a situação anterior.
+      assert.equal(stored?.accessToken, undefined);
+      const columns = await database.query<{ column_name: string }>("select column_name from information_schema.columns where table_name='idempotency_keys'");
+      assert.equal(
+        columns.some((column) => /token/i.test(column.column_name)),
+        false,
+        "a tabela não pode ter coluna de token",
+      );
+    });
+
+    it("some quando vence, em vez de prender a chave", async () => {
+      const keys = new PostgresIdempotencyKeys(database, 1000);
+      const scope = idempotencyScope("10.0.0.2", `chave-${randomUUID()}`);
+      await keys.reserve(scope, "impressao");
+      assert.ok(await keys.get(scope));
+      assert.equal(await keys.get(scope, Date.now() + 2000), undefined);
+    });
+
+    it("libera a chave e permite reservá-la de novo", async () => {
+      const keys = new PostgresIdempotencyKeys(database, 3_600_000);
+      const scope = idempotencyScope("10.0.0.3", `chave-${randomUUID()}`);
+      await keys.reserve(scope, "impressao-a");
+      await keys.release(scope);
+      assert.equal(await keys.get(scope), undefined);
+      // Reservar de novo depois de liberar não pode colidir com a chave antiga.
+      await keys.reserve(scope, "impressao-b");
+      assert.equal((await keys.get(scope))?.fingerprint, "impressao-b");
+    });
+  });
 }
 
 describe("serialização de opções", () => {
