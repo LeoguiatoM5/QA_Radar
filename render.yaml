@@ -72,3 +72,11 @@ services:
       # Trocar este valor invalida os tokens em circulação.
       - key: QA_RADAR_ACCESS_TOKEN_SECRET
         generateValue: true
+      # Login por GitHub. Sem as duas, a entrada não aparece e o produto segue
+      # anônimo: roda a análise e o token dela é o que abre o resultado. O
+      # callback cadastrado no OAuth App precisa ser exatamente
+      # https://qa-radar.onrender.com/api/v1/auth/github/callback
+      - key: QA_RADAR_GITHUB_CLIENT_ID
+        sync: false
+      - key: QA_RADAR_GITHUB_CLIENT_SECRET
+        sync: false
