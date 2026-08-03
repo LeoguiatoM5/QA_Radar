@@ -103,4 +103,15 @@ describe("configuração de ambiente", () => {
     assert.equal(loadEnvironmentConfig({ QA_RADAR_SANDBOX_URL: "", QA_RADAR_SANDBOX_SIGNING_SECRET: "" }).sandbox, undefined);
     assert.equal(loadEnvironmentConfig({ QA_RADAR_SANDBOX_URL: "  ", QA_RADAR_SANDBOX_SIGNING_SECRET: "  " }).sandbox, undefined);
   });
+
+  it("trata a persistência como opcional e ignora URL de banco vazia", () => {
+    // Sem a variável o produto roda inteiro em memória: a CLI e o dashboard
+    // local não podem passar a exigir um banco para funcionar.
+    assert.equal(loadEnvironmentConfig({}).databaseUrl, undefined);
+    // Chave declarada no Blueprint mas ainda não preenchida chega vazia, e isso
+    // é "sem banco", não configuração inválida.
+    assert.equal(loadEnvironmentConfig({ QA_RADAR_DATABASE_URL: "" }).databaseUrl, undefined);
+    assert.equal(loadEnvironmentConfig({ QA_RADAR_DATABASE_URL: "   " }).databaseUrl, undefined);
+    assert.equal(loadEnvironmentConfig({ QA_RADAR_DATABASE_URL: " postgresql://u:p@host/db " }).databaseUrl, "postgresql://u:p@host/db");
+  });
 });

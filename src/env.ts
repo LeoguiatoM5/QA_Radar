@@ -52,6 +52,11 @@ export interface EnvironmentConfig {
   port: number;
   serverOptions: Partial<ServerOptions>;
   sandbox: { url: string; signingSecret: string } | undefined;
+  /**
+   * Ausente = tudo em memória, como sempre. A persistência é opcional para que
+   * a CLI e o dashboard local não passem a exigir um banco para rodar.
+   */
+  databaseUrl: string | undefined;
 }
 
 export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): EnvironmentConfig {
@@ -68,6 +73,7 @@ export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): 
     host,
     port: portFromEnvironment(source),
     sandbox: sandboxUrl && sandboxSigningSecret ? { url: sandboxUrl, signingSecret: sandboxSigningSecret } : undefined,
+    databaseUrl: source.QA_RADAR_DATABASE_URL?.trim() || undefined,
     serverOptions: {
       allowPrivateTargets: booleanFromEnvironment(source, "QA_RADAR_ALLOW_PRIVATE_TARGETS"),
       trustProxy: booleanFromEnvironment(source, "QA_RADAR_TRUST_PROXY"),
