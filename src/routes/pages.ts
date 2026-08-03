@@ -2,6 +2,7 @@ import { access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { createApiTestsPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../web-page.js";
 import { json } from "../http-helpers.js";
+import { createOpenApiDocument } from "../openapi.js";
 import type { RouteHandler } from "./context.js";
 
 async function resultsDirWritable(resultsDir: string): Promise<boolean> {
@@ -16,6 +17,13 @@ async function resultsDirWritable(resultsDir: string): Promise<boolean> {
 
 export const tryHandlePages: RouteHandler = async (context, request, response, url) => {
   const { config } = context;
+
+  // O prefixo de versão já foi retirado no despacho, então este caminho cobre
+  // /api/v1/openapi.json e o alias /api/openapi.json.
+  if (request.method === "GET" && url.pathname === "/api/openapi.json") {
+    json(response, 200, createOpenApiDocument());
+    return true;
+  }
 
   // Vivacidade: o processo está de pé e responde. Não consulta dependência
   // nenhuma de propósito — quem consome isto (HEALTHCHECK do Docker) reinicia o

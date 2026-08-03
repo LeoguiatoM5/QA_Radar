@@ -510,6 +510,27 @@ pipelines de CI e integrações existentes.
   `/api/v1` nunca recebe de volta um caminho `/api`.
 - `/health` e `/ready` ficam de fora do versionamento de propósito: são
   endpoints operacionais da instância, não parte do contrato de dados.
+
+#### Contrato OpenAPI
+
+A própria instância publica sua especificação OpenAPI 3.1 em
+`GET /api/v1/openapi.json` — use para gerar cliente, importar no Postman/Insomnia
+ou validar uma integração:
+
+```bash
+curl -sS http://127.0.0.1:4173/api/v1/openapi.json
+```
+
+O documento é gerado a partir do código, não mantido à mão: os códigos de erro
+saem da mesma tabela que define os status HTTP, e a versão sai do pacote. Há
+teste travando as duas invariantes que fazem uma especificação valer alguma
+coisa — todo código de erro aparece documentado, e todo caminho documentado é
+de fato roteado pelo servidor.
+
+Ficam fora do documento, de propósito, `/api/dashboard/activity` (estado
+interno da interface) e `/api/journeys` (jornada declarativa em JSON, legado
+desligado que não faz parte do produto).
+
 - A GitHub Action composta já segue este modelo hoje: é publicada com uma
   tag de versão maior (`@v3`) que os consumidores fixam no workflow, e seus
   `inputs`/`outputs` documentados não mudam de formato dentro da mesma
