@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
+import { ApiError } from "./api-error.js";
 
 const BLOCKED_ADDRESSES = new BlockList();
 
@@ -68,23 +69,30 @@ export type PublicUrlResolver = (hostname: string) => Promise<ResolvedAddress[]>
 const systemResolver: PublicUrlResolver = async (hostname) => (isIP(hostname) ? [{ address: hostname }] : lookup(hostname, { all: true, verbatim: true }));
 
 async function publicResolution(rawUrl: string, resolver: PublicUrlResolver): Promise<PublicResolution> {
-  const url = new URL(rawUrl);
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("O destino deve utilizar HTTP ou HTTPS.");
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    // Sem este catch a URL malformada sobe como TypeError e o servidor a
+    // classifica como falha interna (500) em vez de entrada inválida.
+    throw new ApiError("invalid_target", "A URL informada é inválida.");
   }
-  if (url.username || url.password) throw new Error("URLs com credenciais não são permitidas.");
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new ApiError("invalid_target", "O destino deve utilizar HTTP ou HTTPS.");
+  }
+  if (url.username || url.password) throw new ApiError("invalid_target", "URLs com credenciais não são permitidas.");
   const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
-    throw new Error("Endereços locais ou privados não são permitidos.");
+    throw new ApiError("invalid_target", "Endereços locais ou privados não são permitidos.");
   }
   let addresses: ResolvedAddress[];
   try {
     addresses = await resolver(hostname);
   } catch {
-    throw new Error("Não foi possível resolver o endereço informado.");
+    throw new ApiError("invalid_target", "Não foi possível resolver o endereço informado.");
   }
   if (!addresses.length || addresses.some(({ address }) => isBlockedNetworkAddress(address))) {
-    throw new Error("Endereços locais ou privados não são permitidos.");
+    throw new ApiError("invalid_target", "Endereços locais ou privados não são permitidos.");
   }
   return {
     hostname,
@@ -102,7 +110,7 @@ export class PublicNetworkGuard {
     const resolution = await publicResolution(rawUrl, this.resolver);
     const previous = this.#resolutions.get(resolution.hostname);
     if (previous !== undefined && previous !== resolution.fingerprint) {
-      throw new Error("O endereço do destino mudou durante a análise; possível DNS rebinding bloqueado.");
+      throw new ApiError("invalid_target", "O endereço do destino mudou durante a análise; possível DNS rebinding bloqueado.");
     }
     this.#resolutions.set(resolution.hostname, resolution.fingerprint);
     return resolution;

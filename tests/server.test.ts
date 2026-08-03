@@ -507,6 +507,58 @@ describe("web server", () => {
     }
   });
 
+  it("responde 500 genérico a falhas não previstas, sem vazar a mensagem interna", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-internal-error-"));
+    // O spawner é injetável e roda no caminho da requisição sem try/catch
+    // local: é a forma determinística de provocar uma exceção não prevista.
+    const failingServer = createQaRadarServer({
+      allowCodeMode: true,
+      resultsDir,
+      codegenSpawner: () => {
+        throw new TypeError("spawn ENOENT /caminho/interno/playwright/cli.js");
+      },
+    });
+    await new Promise<void>((resolve) => failingServer.listen(0, "127.0.0.1", resolve));
+    const address = failingServer.address() as AddressInfo;
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/codegen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com" }),
+      });
+      // Antes do contrato de erros isto respondia 400 com a mensagem crua,
+      // classificando um bug interno como erro do cliente.
+      assert.equal(response.status, 500);
+      const body = (await response.json()) as { error: string; code: string };
+      assert.equal(body.code, "internal_error");
+      assert.doesNotMatch(body.error, /spawn|caminho\/interno|cli\.js/);
+    } finally {
+      console.error = originalError;
+      await new Promise<void>((resolve, reject) => failingServer.close((error) => (error ? reject(error) : resolve())));
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("acompanha toda resposta de erro de um código estável de contrato", async () => {
+    const notFound = await fetch(`${baseUrl}/rota-inexistente`);
+    assert.equal(notFound.status, 404);
+    assert.deepEqual(await notFound.json(), { error: "Rota não encontrada.", code: "not_found" });
+
+    const invalid = await fetch(`${baseUrl}/api/scans`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal(((await invalid.json()) as { code: string }).code, "invalid_request");
+
+    const disabled = await fetch(`${baseUrl}/api/history?project=loja&environment=staging`);
+    assert.equal(disabled.status, 403);
+    assert.equal(((await disabled.json()) as { code: string }).code, "feature_disabled");
+  });
+
   it("valida entrada e libera nova gravação do Codegen após falha do processo", async () => {
     const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-codegen-validation-"));
     const processEvents = new EventEmitter();

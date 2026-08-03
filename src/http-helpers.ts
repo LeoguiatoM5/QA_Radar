@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ApiError, type ApiErrorCode } from "./api-error.js";
 
 export const ACCESS_HASH_FILE = ".access-token.sha256";
 
@@ -13,6 +14,18 @@ export function json(response: ServerResponse, status: number, body: unknown): v
     "referrer-policy": "no-referrer",
   });
   response.end(JSON.stringify(body));
+}
+
+/**
+ * Única saída de erro da API. Emite `{ error, code }` com o status derivado do
+ * código, para que nenhuma rota escolha status e corpo de forma independente.
+ */
+export function jsonError(response: ServerResponse, error: ApiError): void;
+export function jsonError(response: ServerResponse, code: ApiErrorCode, message: string, headers?: Record<string, string | number>): void;
+export function jsonError(response: ServerResponse, errorOrCode: ApiError | ApiErrorCode, message?: string, headers: Record<string, string | number> = {}): void {
+  const error = errorOrCode instanceof ApiError ? errorOrCode : new ApiError(errorOrCode, message ?? "", headers);
+  for (const [name, value] of Object.entries(error.headers)) response.setHeader(name, value);
+  json(response, error.status, error.body());
 }
 
 export function tokenHash(token: string): string {
@@ -43,8 +56,9 @@ export function requestToken(request: IncomingMessage): string | undefined {
 export function requireAccess(request: IncomingMessage, response: ServerResponse, expectedHash: string): boolean {
   const token = requestToken(request);
   if (token && tokenMatches(token, expectedHash)) return true;
-  response.setHeader("www-authenticate", 'Bearer realm="QA Radar report"');
-  json(response, token ? 403 : 401, { error: "Token de acesso da análise ausente ou inválido." });
+  jsonError(response, token ? "forbidden" : "unauthorized", "Token de acesso da análise ausente ou inválido.", {
+    "www-authenticate": 'Bearer realm="QA Radar report"',
+  });
   return false;
 }
 
@@ -69,7 +83,7 @@ export async function readJson(request: IncomingMessage, maxBytes: number): Prom
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > maxBytes) throw new Error("Requisição muito grande.");
+    if (size > maxBytes) throw new ApiError("payload_too_large", "Requisição muito grande.");
     chunks.push(buffer);
   }
   try {
@@ -77,7 +91,7 @@ export async function readJson(request: IncomingMessage, maxBytes: number): Prom
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("O corpo deve ser um objeto JSON.");
     return value as Record<string, unknown>;
   } catch {
-    throw new Error("Corpo JSON inválido.");
+    throw new ApiError("invalid_request", "Corpo JSON inválido.");
   }
 }
 

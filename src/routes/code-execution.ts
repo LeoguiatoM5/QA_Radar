@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { assertHostedPlaywrightCode } from "../code-policy.js";
 import { applyStepDescriptionOverrides, createJourneyEvidenceHtml, parseJourneyEvidenceMetadata, parseStepDescriptionOverrides } from "../journey-evidence-report.js";
-import { ACCESS_HASH_FILE, accessCookie, json, readJson, requireAccess, tokenHash } from "../http-helpers.js";
+import { ACCESS_HASH_FILE, accessCookie, json, jsonError, readJson, requireAccess, tokenHash } from "../http-helpers.js";
+import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { MAX_CODE_FILE_BYTES, MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import { CODE_STEP_FIXTURES_SOURCE } from "../code-step-fixtures.js";
 import type { CodeExecutionJob } from "../code-execution-job-store.js";
@@ -42,24 +43,24 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
     if (!context.requireCodeModeCreation(request, response, true)) return true;
     if (!context.consumeRateLimit(request, response)) return true;
     if (codeExecutionJobs.isActive()) {
-      json(response, 429, { error: "Já existe uma execução do Modo Jornada de Playwright em andamento." });
+      jsonError(response, "resource_in_use", "Já existe uma execução do Modo Jornada de Playwright em andamento.");
       return true;
     }
     const body = await readJson(request, MAX_JSON_BODY_BYTES);
     const code = body.code;
     const hostedExecution = !context.isLocalRequest(request);
     const headed = hostedExecution ? false : body.headed !== false;
-    if (typeof code !== "string" || !code.trim()) throw new Error("Informe o conteúdo do arquivo .spec.ts.");
-    if (Buffer.byteLength(code, "utf8") > MAX_CODE_FILE_BYTES) throw new Error("O arquivo .spec.ts deve ter no máximo 256 KB.");
+    if (typeof code !== "string" || !code.trim()) throw invalidRequest("Informe o conteúdo do arquivo .spec.ts.");
+    if (Buffer.byteLength(code, "utf8") > MAX_CODE_FILE_BYTES) throw new ApiError("payload_too_large", "O arquivo .spec.ts deve ter no máximo 256 KB.");
     if (hostedExecution) {
-      assertHostedPlaywrightCode(code);
+      validating(() => assertHostedPlaywrightCode(code));
       if (!config.hostedCodeRunner) {
-        json(response, 503, { error: "Runner sandbox hospedado não está configurado neste servidor." });
+        jsonError(response, "service_unavailable", "Runner sandbox hospedado não está configurado neste servidor.");
         return true;
       }
     }
     const runner = hostedExecution ? config.hostedCodeRunner : config.codeRunner;
-    if (!runner) throw new Error("Runner Playwright indisponível.");
+    if (!runner) throw new ApiError("service_unavailable", "Runner Playwright indisponível.");
     const id = randomUUID();
     const outputDir = join(config.resultsDir, `code-${id}`);
     const accessToken = randomBytes(32).toString("base64url");
@@ -120,7 +121,7 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
     if (!context.requireCodeModeEnabled(response)) return true;
     const job = await context.loadCodeExecutionJob(codeSteps[1] ?? "");
     if (!job) {
-      json(response, 404, { error: "Execução de código não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Execução de código não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
@@ -134,13 +135,13 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
     if (!context.requireCodeModeEnabled(response)) return true;
     const job = await context.loadCodeExecutionJob(codeEvidence[1] ?? "");
     if (!job) {
-      json(response, 404, { error: "Execução de código não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Execução de código não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
     const body = await readJson(request, MAX_JSON_BODY_BYTES);
-    const metadata = parseJourneyEvidenceMetadata({ testerName: body.testerName, testType: body.testType });
-    const overrides = parseStepDescriptionOverrides(body.stepDescriptions);
+    const metadata = validating(() => parseJourneyEvidenceMetadata({ testerName: body.testerName, testType: body.testType }));
+    const overrides = validating(() => parseStepDescriptionOverrides(body.stepDescriptions));
     const journey = applyStepDescriptionOverrides(await context.codeReportAsJourney(job), overrides);
     const html = await createJourneyEvidenceHtml(journey, metadata, (relative) => readFile(join(job.outputDir, relative)));
     await writeFile(join(job.outputDir, "code-evidence.html"), html, "utf8");
@@ -153,14 +154,14 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
     if (!context.requireCodeModeEnabled(response)) return true;
     const job = await context.loadCodeExecutionJob(codeArtifact[1] ?? "");
     if (!job) {
-      json(response, 404, { error: "Execução de código não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Execução de código não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
     try {
       const name = decodeURIComponent(codeArtifact[2] ?? "");
       if (name !== "code-evidence.html" && (!name.startsWith("test-results/") || name.includes(".."))) {
-        json(response, 404, { error: "Artefato inválido" });
+        jsonError(response, "not_found", "Artefato inválido");
         return true;
       }
       const artifactPath = name === "code-evidence.html" ? join(job.outputDir, name) : join(job.outputDir, ...name.split("/"));
@@ -175,7 +176,7 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
       });
       response.end(content);
     } catch {
-      json(response, 404, { error: "O relatório HTML ainda não foi gerado." });
+      jsonError(response, "not_found", "O relatório HTML ainda não foi gerado.");
     }
     return true;
   }
