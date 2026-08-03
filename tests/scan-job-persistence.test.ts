@@ -160,6 +160,56 @@ describe("scan job persistence", () => {
     }
   });
 
+  it("executa a análise que ficou na fila quando o processo reiniciou", async () => {
+    // A lacuna que isto fecha: o registro sobrevivia ao reinício, mas o
+    // trabalho não. A análise ficava `queued` no banco para sempre e quem
+    // consultava via "na fila" indefinidamente — pior do que falhar.
+    const repository = new InMemoryScanJobRepository();
+    const scanJobs = persistence(repository);
+
+    // Instância 1: concorrência zero deixa a análise parada na fila.
+    const first = createQaRadarServer({ concurrency: 0, allowPrivateTargets: true, scanJobs });
+    await new Promise<void>((resolve) => first.listen(0, "127.0.0.1", resolve));
+    const firstUrl = `http://127.0.0.1:${(first.address() as AddressInfo).port}`;
+    let created: { id: string; accessToken: string };
+    try {
+      created = (await (
+        await fetch(`${firstUrl}/api/v1/scans`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: firstUrl }),
+        })
+      ).json()) as { id: string; accessToken: string };
+    } finally {
+      await new Promise<void>((resolve) => first.close(() => resolve()));
+    }
+    assert.equal((await repository.get(created.id))?.status, "queued");
+
+    // Instância 2: já com capacidade, e um runner que não toca em navegador.
+    let executed = "";
+    const second = createQaRadarServer({
+      concurrency: 1,
+      allowPrivateTargets: true,
+      scanJobs,
+      scanRunner: async (options) => {
+        executed = options.url;
+        throw new Error("parou aqui de propósito: o que importa é ter começado");
+      },
+    });
+    await new Promise<void>((resolve) => second.listen(0, "127.0.0.1", resolve));
+    try {
+      for (let attempt = 0; attempt < 60 && !executed; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.ok(executed, "a análise enfileirada deveria ter sido retomada");
+      // As opções vieram do banco, não de memória nenhuma.
+      assert.match(executed, /^http:\/\/127\.0\.0\.1:/);
+      assert.equal((await repository.get(created.id))?.status, "failed");
+    } finally {
+      await new Promise<void>((resolve) => second.close(() => resolve()));
+    }
+  });
+
   it("recusa criar a análise quando a gravação falha", async () => {
     // Sem isto o cliente receberia 202 com o id de uma análise que só existe na
     // memória daquela instância.

@@ -37,6 +37,8 @@ export interface ScanJobRepository {
   transition(id: string, to: JobStatus, error?: string): Promise<PersistedScanJob | undefined>;
   /** Jobs presos em `running`, usado para fechar órfãos de uma instância morta. */
   runningJobs(): Promise<PersistedScanJob[]>;
+  /** Jobs ainda `queued`, em ordem de chegada, para reenfileirar no boot. */
+  queuedJobs(): Promise<PersistedScanJob[]>;
   delete(id: string): Promise<void>;
   /** Posição na fila, 1 para o próximo. `undefined` se o job não está na fila. */
   position(id: string): Promise<number | undefined>;
@@ -123,6 +125,13 @@ export class InMemoryScanJobRepository implements ScanJobRepository {
 
   async runningJobs(): Promise<PersistedScanJob[]> {
     return [...this.#jobs.values()].filter((job) => job.status === "running").map((job) => ({ ...job }));
+  }
+
+  async queuedJobs(): Promise<PersistedScanJob[]> {
+    return this.#order.flatMap((id) => {
+      const job = this.#jobs.get(id);
+      return job?.status === "queued" ? [{ ...job }] : [];
+    });
   }
 
   async delete(id: string): Promise<void> {
@@ -263,6 +272,11 @@ export class PostgresScanJobRepository implements ScanJobRepository {
 
   async runningJobs(): Promise<PersistedScanJob[]> {
     const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where status = 'running'`);
+    return rows.map(fromRow);
+  }
+
+  async queuedJobs(): Promise<PersistedScanJob[]> {
+    const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where status = 'queued' order by queued_at`);
     return rows.map(fromRow);
   }
 
