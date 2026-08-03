@@ -57,6 +57,38 @@ export const MIGRATIONS: Migration[] = [
       `create index if not exists idempotency_keys_expires_idx on idempotency_keys (expires_at)`,
     ],
   },
+  {
+    id: "0003_users_and_sessions",
+    statements: [
+      // `provider` + `provider_account_id` em vez de uma coluna `github_id`:
+      // somar Google depois não deve exigir migration nova nem outra tabela.
+      `create table if not exists users (
+         id uuid primary key,
+         provider text not null,
+         provider_account_id text not null,
+         login text not null,
+         name text,
+         avatar_url text,
+         created_at timestamptz not null default now(),
+         last_seen_at timestamptz not null default now(),
+         unique (provider, provider_account_id)
+       )`,
+      // O id da sessão é o próprio segredo do cookie, então guarda-se o hash:
+      // um vazamento do banco não pode virar sessão válida de ninguém.
+      `create table if not exists sessions (
+         id text primary key,
+         user_id uuid not null references users (id) on delete cascade,
+         created_at timestamptz not null default now(),
+         expires_at timestamptz not null
+       )`,
+      `create index if not exists sessions_user_idx on sessions (user_id)`,
+      `create index if not exists sessions_expires_idx on sessions (expires_at)`,
+      // Nulo = análise anônima, que continua acessível só pelo token. A coluna
+      // é de dono, e não de usuário, para virar organização sem migration nova.
+      `alter table scan_jobs add column if not exists owner_id uuid references users (id) on delete set null`,
+      `create index if not exists scan_jobs_owner_idx on scan_jobs (owner_id, created_at desc)`,
+    ],
+  },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `create table if not exists schema_migrations (
