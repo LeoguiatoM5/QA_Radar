@@ -1,6 +1,7 @@
 import type { ScanOptions, ScanProgress, ScanReport } from "./types.js";
+import { transitionJob, type JobStatus } from "./job-state.js";
 
-export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type { JobStatus };
 
 export interface ScanJob {
   id: string;
@@ -43,7 +44,7 @@ export class JobQueue {
       const job = this.#jobs.get(id);
       if (!job || job.status !== "queued") continue;
       this.#active += 1;
-      job.status = "running";
+      transitionJob(job, "running");
       return job;
     }
   }
@@ -58,7 +59,7 @@ export class JobQueue {
     if (!job || job.status !== "queued") return false;
     const index = this.#pending.indexOf(id);
     if (index >= 0) this.#pending.splice(index, 1);
-    job.status = "cancelled";
+    transitionJob(job, "cancelled");
     return true;
   }
 
