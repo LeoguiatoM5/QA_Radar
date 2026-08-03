@@ -16,3 +16,6 @@ NEXT_SESSION_HANDOFF.md
 *.log
 .DS_Store
 .env.runner
+# Spec de rascunho gravado à mão na raiz para testar a Jornada manualmente.
+# Ancorado na raiz para não esconder nada dentro de tests/.
+/saucedemo.spec.ts
