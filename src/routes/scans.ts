@@ -6,14 +6,15 @@ import { assertPublicUrl } from "../security.js";
 import { listProjectHistory } from "../history.js";
 import type { ScanOptions, ScanReport } from "../types.js";
 import type { ScanJob } from "../job-queue.js";
-import { ACCESS_HASH_FILE, accessCookie, json, numberField, readJson, requireAccess, storedAccessHash, textField, tokenHash } from "../http-helpers.js";
+import { ACCESS_HASH_FILE, accessCookie, json, jsonError, numberField, readJson, requireAccess, storedAccessHash, textField, tokenHash } from "../http-helpers.js";
+import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import type { ServerOptions } from "../server.js";
 import type { RouteHandler } from "./context.js";
 
 export function scanOptions(body: Record<string, unknown>, outputDir: string, config: ServerOptions): ScanOptions {
   const url = textField(body, "url");
-  if (!url) throw new Error("Informe a URL da aplicação.");
+  if (!url) throw invalidRequest("Informe a URL da aplicação.");
   const args = [url, "--output", outputDir, "--format", "all"];
   const fields: Array<[string, string | undefined]> = [
     ["--browser", textField(body, "browser")],
@@ -35,16 +36,16 @@ export function scanOptions(body: Record<string, unknown>, outputDir: string, co
   if (body.regressionsOnly === true) args.push("--regressions-only");
   if (body.acceptBaseline === true) args.push("--accept-baseline");
   if (textField(body, "project")) args.push("--history-dir", config.historyDir);
-  const parsed = parseCli(args);
-  if (!parsed.options) throw new Error("Não foi possível preparar a análise.");
+  const parsed = validating(() => parseCli(args));
+  if (!parsed.options) throw invalidRequest("Não foi possível preparar a análise.");
   const options = parsed.options;
-  if (options.timeoutMs > 120_000) throw new Error("O timeout máximo é 120000 ms.");
-  if (options.settleMs > 30_000) throw new Error("O tempo de observação máximo é 30000 ms.");
+  if (options.timeoutMs > 120_000) throw invalidRequest("O timeout máximo é 120000 ms.");
+  if (options.settleMs > 30_000) throw invalidRequest("O tempo de observação máximo é 30000 ms.");
   if (options.sitemap && (options.maxPages ?? 20) > config.maxSitemapPages) {
-    throw new Error(`O limite de páginas neste servidor é ${config.maxSitemapPages}.`);
+    throw invalidRequest(`O limite de páginas neste servidor é ${config.maxSitemapPages}.`);
   }
   if (options.project && !config.allowHistory) {
-    throw new Error("Histórico por projeto está desabilitado neste servidor.");
+    throw new ApiError("feature_disabled", "Histórico por projeto está desabilitado neste servidor.");
   }
   return options;
 }
@@ -92,13 +93,13 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
 
   if (request.method === "GET" && url.pathname === "/api/history") {
     if (!config.allowHistory) {
-      json(response, 403, { error: "Histórico está desabilitado neste servidor." });
+      jsonError(response, "feature_disabled", "Histórico está desabilitado neste servidor.");
       return true;
     }
     const project = url.searchParams.get("project")?.trim();
     const environment = url.searchParams.get("environment")?.trim();
     if (!project || !environment) {
-      json(response, 400, { error: "Informe projeto e ambiente para consultar o histórico." });
+      jsonError(response, "invalid_request", "Informe projeto e ambiente para consultar o histórico.");
       return true;
     }
     json(response, 200, await listProjectHistory(config.historyDir, project, environment));
@@ -107,19 +108,19 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
 
   if (request.method === "POST" && url.pathname === "/api/scans") {
     if (legacyJourneys.isActive()) {
-      json(response, 429, { error: "Já existe uma jornada usando o navegador neste servidor." });
+      jsonError(response, "resource_in_use", "Já existe uma jornada usando o navegador neste servidor.");
       return true;
     }
     if (!context.consumeRateLimit(request, response)) return true;
     const stats = context.queueStats();
     if (stats.queued + stats.active >= config.maxQueueSize) {
-      json(response, 429, { error: "O serviço está ocupado. Tente novamente em alguns instantes." });
+      jsonError(response, "server_busy", "O serviço está ocupado. Tente novamente em alguns instantes.");
       return true;
     }
     const body = await readJson(request, MAX_JSON_BODY_BYTES);
     if (config.turnstileSecretKey) {
       const token = textField(body, "cf-turnstile-response");
-      if (!token || token.length > 2048) throw new Error("Conclua a verificação de segurança.");
+      if (!token || token.length > 2048) throw invalidRequest("Conclua a verificação de segurança.");
       const verification = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -131,10 +132,10 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
         }),
       });
       const result = (await verification.json()) as { success?: boolean };
-      if (!verification.ok || !result.success) throw new Error("A verificação de segurança expirou ou é inválida. Tente novamente.");
+      if (!verification.ok || !result.success) throw invalidRequest("A verificação de segurança expirou ou é inválida. Tente novamente.");
     }
     if (!config.allowCustomIgnorePatterns && textField(body, "ignoredUrl")) {
-      throw new Error("Filtros regex personalizados estão desabilitados neste servidor.");
+      throw new ApiError("feature_disabled", "Filtros regex personalizados estão desabilitados neste servidor.");
     }
     const id = randomUUID();
     const options = scanOptions(body, join(config.resultsDir, id), config);
@@ -176,12 +177,12 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     const id = cancelMatch[1];
     const job = id ? jobQueue.get(id) : undefined;
     if (!job) {
-      json(response, 404, { error: "Análise não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Análise não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
     if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
-      json(response, 409, { error: "A análise já foi finalizada." });
+      jsonError(response, "conflict", "A análise já foi finalizada.");
       return true;
     }
     job.cancelRequested = true;
@@ -206,13 +207,13 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     const id = match[1];
     const artifact = match[2];
     if (!id) {
-      json(response, 404, { error: "Análise não encontrada." });
+      jsonError(response, "not_found", "Análise não encontrada.");
       return true;
     }
     const job = jobQueue.get(id);
     const expectedHash = job?.accessTokenHash ?? (await storedAccessHash(config.resultsDir, id));
     if (!expectedHash) {
-      json(response, 404, { error: "Análise não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Análise não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, expectedHash)) return true;
@@ -226,11 +227,11 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
         json(response, 200, recovered);
         return true;
       }
-      json(response, 404, { error: "Análise não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Análise não encontrada ou já expirada.");
       return true;
     }
     if (job && job.status !== "completed") {
-      json(response, 409, { error: "A análise ainda não foi concluída." });
+      jsonError(response, "conflict", "A análise ainda não foi concluída.");
       return true;
     }
     const outputDir = job?.options.outputDir ?? join(config.resultsDir, id);

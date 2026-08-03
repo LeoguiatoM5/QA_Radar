@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { DashboardActivity, DashboardActivityStatus, DashboardActivityType } from "../dashboard-activity-store.js";
-import { json, readJson } from "../http-helpers.js";
+import { json, jsonError, readJson } from "../http-helpers.js";
+import { invalidRequest } from "../api-error.js";
 import type { RouteHandler } from "./context.js";
 
 const COOKIE_NAME = "qa_radar_dashboard";
@@ -29,21 +30,21 @@ function dashboardSession(request: IncomingMessage, response: ServerResponse, tr
 }
 
 function limitedText(value: unknown, name: string, maxLength: number, allowEmpty = false): string {
-  if (typeof value !== "string") throw new Error(`${name} inválido.`);
+  if (typeof value !== "string") throw invalidRequest(`${name} inválido.`);
   const normalized = value.trim();
-  if ((!normalized && !allowEmpty) || normalized.length > maxLength) throw new Error(`${name} inválido.`);
+  if ((!normalized && !allowEmpty) || normalized.length > maxLength) throw invalidRequest(`${name} inválido.`);
   return normalized;
 }
 
 function limitedNumber(value: unknown, name: string, maximum: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > maximum) throw new Error(`${name} inválido.`);
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > maximum) throw invalidRequest(`${name} inválido.`);
   return Math.round(value);
 }
 
 function safeHref(value: unknown): string {
   const href = limitedText(value, "Destino", 200);
   const parsed = new URL(href, "http://localhost");
-  if (parsed.origin !== "http://localhost" || !ALLOWED_PATHS.has(parsed.pathname)) throw new Error("Destino inválido.");
+  if (parsed.origin !== "http://localhost" || !ALLOWED_PATHS.has(parsed.pathname)) throw invalidRequest("Destino inválido.");
   if (parsed.pathname !== "/api-tests") return parsed.pathname;
   const activity = parsed.searchParams.get("activity");
   return activity && /^\d{10,16}$/.test(activity) ? `/api-tests?activity=${activity}` : "/api-tests";
@@ -52,8 +53,8 @@ function safeHref(value: unknown): string {
 function activityFromBody(body: Record<string, unknown>): DashboardActivity {
   const type = body.type;
   const status = body.status;
-  if (typeof type !== "string" || !ALLOWED_TYPES.has(type as DashboardActivityType)) throw new Error("Tipo de atividade inválido.");
-  if (typeof status !== "string" || !ALLOWED_STATUSES.has(status as DashboardActivityStatus)) throw new Error("Status de atividade inválido.");
+  if (typeof type !== "string" || !ALLOWED_TYPES.has(type as DashboardActivityType)) throw invalidRequest("Tipo de atividade inválido.");
+  if (typeof status !== "string" || !ALLOWED_STATUSES.has(status as DashboardActivityStatus)) throw invalidRequest("Status de atividade inválido.");
   const rawScores = body.scores && typeof body.scores === "object" && !Array.isArray(body.scores) ? (body.scores as Record<string, unknown>) : {};
   const scores: DashboardActivity["scores"] = {};
   for (const name of SCORE_NAMES) {
@@ -84,7 +85,7 @@ export const tryHandleDashboardActivity: RouteHandler = async (context, request,
   if (isEventStream) {
     if (request.method !== "GET") {
       response.setHeader("allow", "GET");
-      json(response, 405, { error: "Método não permitido." });
+      jsonError(response, "method_not_allowed", "Método não permitido.");
       return true;
     }
 
@@ -130,6 +131,6 @@ export const tryHandleDashboardActivity: RouteHandler = async (context, request,
   }
 
   response.setHeader("allow", "GET, POST");
-  json(response, 405, { error: "Método não permitido." });
+  jsonError(response, "method_not_allowed", "Método não permitido.");
   return true;
 };

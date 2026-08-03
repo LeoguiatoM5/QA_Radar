@@ -2,7 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { terminateProcessTree } from "../code-execution.js";
-import { ACCESS_HASH_FILE, accessCookie, json, readJson, requireAccess, textField, tokenHash } from "../http-helpers.js";
+import { ACCESS_HASH_FILE, accessCookie, json, jsonError, readJson, requireAccess, textField, tokenHash } from "../http-helpers.js";
+import { invalidRequest } from "../api-error.js";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import type { CodegenSession } from "../codegen-session-store.js";
 import type { RouteHandler } from "./context.js";
@@ -14,14 +15,19 @@ export const tryHandleCodegen: RouteHandler = async (context, request, response,
     if (!context.requireCodeModeCreation(request, response, false)) return true;
     if (!context.consumeRateLimit(request, response)) return true;
     if (codegenSessions.hasActive()) {
-      json(response, 429, { error: "Já existe uma gravação do Playwright Codegen em andamento." });
+      jsonError(response, "resource_in_use", "Já existe uma gravação do Playwright Codegen em andamento.");
       return true;
     }
     const body = await readJson(request, MAX_JSON_BODY_BYTES);
     const target = textField(body, "url");
-    if (!target) throw new Error("Informe a URL para iniciar o Codegen.");
-    const parsed = new URL(target);
-    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("A URL deve usar http ou https.");
+    if (!target) throw invalidRequest("Informe a URL para iniciar o Codegen.");
+    let parsed: URL;
+    try {
+      parsed = new URL(target);
+    } catch {
+      throw invalidRequest("A URL informada é inválida.");
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) throw invalidRequest("A URL deve usar http ou https.");
     const id = randomUUID();
     const dir = join(config.resultsDir, `codegen-${id}`);
     await mkdir(dir, { recursive: true });
@@ -60,7 +66,7 @@ export const tryHandleCodegen: RouteHandler = async (context, request, response,
     if (!context.requireCodeModeEnabled(response)) return true;
     const session = codegenSessions.get(codegenMatch[1] ?? "");
     if (!session) {
-      json(response, 404, { error: "Sessão de Codegen não encontrada." });
+      jsonError(response, "not_found", "Sessão de Codegen não encontrada.");
       return true;
     }
     if (!requireAccess(request, response, session.accessTokenHash)) return true;

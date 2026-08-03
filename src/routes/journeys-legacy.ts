@@ -4,7 +4,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { assertPublicUrl } from "../security.js";
 import { parseJourney } from "../journey.js";
 import { createJourneyEvidenceHtml, parseJourneyEvidenceMetadata } from "../journey-evidence-report.js";
-import { ACCESS_HASH_FILE, accessCookie, json, readJson, requestToken, requireAccess, storedAccessHash, tokenHash } from "../http-helpers.js";
+import { ACCESS_HASH_FILE, accessCookie, json, jsonError, readJson, requestToken, requireAccess, storedAccessHash, tokenHash } from "../http-helpers.js";
+import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import type { JourneyJob } from "../legacy-journey-registry.js";
 import type { RouteHandler } from "./context.js";
@@ -13,15 +14,15 @@ import { scanOptions } from "./scans.js";
 function journeyInputSecrets(body: Record<string, unknown>, definition: ReturnType<typeof parseJourney>): Record<string, string> {
   const raw = body.inputSecrets;
   if (raw === undefined) return {};
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("As credenciais da jornada devem ser um objeto.");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw invalidRequest("As credenciais da jornada devem ser um objeto.");
   const entries = Object.entries(raw as Record<string, unknown>);
-  if (entries.length > 10) throw new Error("A jornada pode receber no máximo 10 credenciais.");
+  if (entries.length > 10) throw invalidRequest("A jornada pode receber no máximo 10 credenciais.");
   const expected = new Set(definition.steps.flatMap((step) => (step.action === "fill" && step.valueFromInput ? [step.valueFromInput] : [])));
   const secrets: Record<string, string> = {};
   for (const [name, value] of entries) {
-    if (!/^QA_RADAR_INPUT_[A-Z0-9_]+$/.test(name)) throw new Error("As credenciais devem usar referências QA_RADAR_INPUT_*.");
-    if (!expected.has(name)) throw new Error(`A credencial ${name} não é usada pela jornada.`);
-    if (typeof value !== "string" || value.length > 2_000) throw new Error(`A credencial ${name} deve ser um texto com até 2000 caracteres.`);
+    if (!/^QA_RADAR_INPUT_[A-Z0-9_]+$/.test(name)) throw invalidRequest("As credenciais devem usar referências QA_RADAR_INPUT_*.");
+    if (!expected.has(name)) throw invalidRequest(`A credencial ${name} não é usada pela jornada.`);
+    if (typeof value !== "string" || value.length > 2_000) throw invalidRequest(`A credencial ${name} deve ser um texto com até 2000 caracteres.`);
     secrets[name] = value;
   }
   return secrets;
@@ -32,26 +33,26 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
 
   if (request.method === "POST" && url.pathname === "/api/journeys") {
     if (!config.allowJourneys) {
-      json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
+      jsonError(response, "feature_disabled", "Jornadas estão desabilitadas neste servidor.");
       return true;
     }
     if (!context.consumeRateLimit(request, response)) return true;
     const stats = context.queueStats();
     if (legacyJourneys.isActive() || stats.active > 0 || stats.queued > 0) {
-      json(response, 429, { error: "Já existe uma execução usando o navegador neste servidor." });
+      jsonError(response, "resource_in_use", "Já existe uma execução usando o navegador neste servidor.");
       return true;
     }
     const body = await readJson(request, MAX_JSON_BODY_BYTES);
     const definition = body.journey;
-    if (!definition) throw new Error("Informe a definição da jornada.");
+    if (!definition) throw invalidRequest("Informe a definição da jornada.");
     const payloadBytes = Buffer.byteLength(JSON.stringify(definition), "utf8");
     if (payloadBytes > config.maxJourneyPayloadBytes) {
-      throw new Error(`A definição da jornada deve ter no máximo ${config.maxJourneyPayloadBytes} bytes.`);
+      throw new ApiError("payload_too_large", `A definição da jornada deve ter no máximo ${config.maxJourneyPayloadBytes} bytes.`);
     }
-    const parsedDefinition = parseJourney(definition);
+    const parsedDefinition = validating(() => parseJourney(definition));
     const inputSecrets = journeyInputSecrets(body, parsedDefinition);
     if (parsedDefinition.steps.length > config.maxJourneySteps) {
-      throw new Error(`A jornada deve ter no máximo ${config.maxJourneySteps} passos neste servidor.`);
+      throw invalidRequest(`A jornada deve ter no máximo ${config.maxJourneySteps} passos neste servidor.`);
     }
     const id = randomUUID();
     const outputDir = join(config.resultsDir, `journey-${id}`);
@@ -112,12 +113,12 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
     const id = journeyCancel[1];
     const job = id ? legacyJourneys.get(id) : undefined;
     if (!job) {
-      json(response, 404, { error: "Jornada não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Jornada não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
     if (job.status !== "running") {
-      json(response, 409, { error: "A jornada já foi finalizada." });
+      jsonError(response, "conflict", "A jornada já foi finalizada.");
       return true;
     }
     job.cancelRequested = true;
@@ -129,13 +130,13 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
   const journeyStatus = /^\/api\/journeys\/([0-9a-f-]+)$/.exec(url.pathname);
   if (request.method === "GET" && journeyStatus) {
     if (!config.allowJourneys) {
-      json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
+      jsonError(response, "feature_disabled", "Jornadas estão desabilitadas neste servidor.");
       return true;
     }
     const id = journeyStatus[1];
     const job = id ? legacyJourneys.get(id) : undefined;
     if (!job) {
-      json(response, 404, { error: "Jornada não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Jornada não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
@@ -152,22 +153,23 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
   const journeyEvidenceReport = /^\/api\/journeys\/([0-9a-f-]+)\/evidence-report$/.exec(url.pathname);
   if (request.method === "POST" && journeyEvidenceReport) {
     if (!config.allowJourneys) {
-      json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
+      jsonError(response, "feature_disabled", "Jornadas estão desabilitadas neste servidor.");
       return true;
     }
     const id = journeyEvidenceReport[1];
     const job = id ? legacyJourneys.get(id) : undefined;
     if (!job) {
-      json(response, 404, { error: "Jornada não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Jornada não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
     const accessToken = requestToken(request);
     if (job.status !== "completed" || !job.report) {
-      json(response, 409, { error: "A jornada precisa estar concluída para gerar evidências." });
+      jsonError(response, "conflict", "A jornada precisa estar concluída para gerar evidências.");
       return true;
     }
-    const metadata = parseJourneyEvidenceMetadata(await readJson(request, MAX_JSON_BODY_BYTES));
+    const body = await readJson(request, MAX_JSON_BODY_BYTES);
+    const metadata = validating(() => parseJourneyEvidenceMetadata(body));
     const html = await createJourneyEvidenceHtml(job.report, metadata, (relative) => readFile(join(job.outputDir, "journey-evidence", relative)));
     await writeFile(join(job.outputDir, "journey-evidence.html"), html, "utf8");
     if (accessToken) {
@@ -180,21 +182,21 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
   const journeyArtifact = /^\/api\/journeys\/([0-9a-f-]+)\/(journey-report\.json|journey-evidence\.html|journey\.webm|[0-9]{3}-[a-zA-Z]+-(?:before|after)\.png)$/.exec(url.pathname);
   if (request.method === "GET" && journeyArtifact) {
     if (!config.allowJourneys) {
-      json(response, 403, { error: "Jornadas estão desabilitadas neste servidor." });
+      jsonError(response, "feature_disabled", "Jornadas estão desabilitadas neste servidor.");
       return true;
     }
     const id = journeyArtifact[1];
     const name = journeyArtifact[2];
-    if (!id || !name) throw new Error("Evidência inválida.");
+    if (!id || !name) throw invalidRequest("Evidência inválida.");
     const job = legacyJourneys.get(id);
     const expectedHash = job?.accessTokenHash ?? (await storedAccessHash(config.resultsDir, `journey-${id}`));
     if (!expectedHash) {
-      json(response, 404, { error: "Jornada não encontrada ou já expirada." });
+      jsonError(response, "not_found", "Jornada não encontrada ou já expirada.");
       return true;
     }
     if (!requireAccess(request, response, expectedHash)) return true;
     if (job?.status === "running") {
-      json(response, 409, { error: "A jornada ainda não foi concluída." });
+      jsonError(response, "conflict", "A jornada ainda não foi concluída.");
       return true;
     }
     const path =

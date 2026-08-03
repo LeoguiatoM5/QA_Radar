@@ -1,4 +1,5 @@
 import { json, readJson, textField } from "../http-helpers.js";
+import { invalidRequest } from "../api-error.js";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import { PublicNetworkGuard, type PublicUrlResolver } from "../security.js";
 import type { RouteHandler } from "./context.js";
@@ -19,10 +20,10 @@ interface HttpRequestResult {
 
 function parseHeaders(value: unknown): Record<string, string> {
   if (value === undefined) return {};
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("headers deve ser um objeto de texto para texto.");
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw invalidRequest("headers deve ser um objeto de texto para texto.");
   const headers: Record<string, string> = {};
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof raw !== "string") throw new Error(`headers.${key} deve ser texto.`);
+    if (typeof raw !== "string") throw invalidRequest(`headers.${key} deve ser texto.`);
     if (/^(host|content-length)$/i.test(key)) continue;
     headers[key] = raw;
   }
@@ -92,7 +93,7 @@ export async function guardedFetch(
       durationMs: Date.now() - startedAt,
     };
   }
-  throw new Error("Excesso de redirecionamentos.");
+  throw invalidRequest("Excesso de redirecionamentos.");
 }
 
 export const tryHandleHttpRequest: RouteHandler = async (context, request, response, url) => {
@@ -102,9 +103,9 @@ export const tryHandleHttpRequest: RouteHandler = async (context, request, respo
     if (!context.consumeRateLimit(request, response)) return true;
     const requestBody = await readJson(request, MAX_JSON_BODY_BYTES);
     const targetUrl = textField(requestBody, "url");
-    if (!targetUrl) throw new Error("Informe a URL da requisição.");
+    if (!targetUrl) throw invalidRequest("Informe a URL da requisição.");
     const method = textField(requestBody, "method")?.toUpperCase() ?? "GET";
-    if (!ALLOWED_METHODS.has(method)) throw new Error(`Método não suportado: ${method}.`);
+    if (!ALLOWED_METHODS.has(method)) throw invalidRequest(`Método não suportado: ${method}.`);
     const headers = parseHeaders(requestBody.headers);
     const body = typeof requestBody.body === "string" ? requestBody.body : undefined;
 

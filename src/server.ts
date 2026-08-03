@@ -13,7 +13,8 @@ import { runJourneyDefinition } from "./journey-cli.js";
 import type { JourneyRunResult } from "./journey-runner.js";
 import { runPlaywrightCodeWorker } from "./code-worker-client.js";
 import type { HostedCodeRunner } from "./sandbox-client.js";
-import { bearerToken, json, storedAccessHash, tokenHash, tokenMatches } from "./http-helpers.js";
+import { bearerToken, jsonError, storedAccessHash, tokenHash, tokenMatches } from "./http-helpers.js";
+import { toApiError } from "./api-error.js";
 import { CodegenSessionStore, type CodegenSession } from "./codegen-session-store.js";
 import { CodeExecutionJobStore, type CodeExecutionJob } from "./code-execution-job-store.js";
 import { LegacyJourneyRegistry, type JourneyJob } from "./legacy-journey-registry.js";
@@ -359,7 +360,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   };
   const requireCodeModeEnabled = (response: ServerResponse): boolean => {
     if (!config.allowCodeMode) {
-      json(response, 403, { error: "Modo Jornada de Playwright está desabilitado neste ambiente." });
+      jsonError(response, "feature_disabled", "Modo Jornada de Playwright está desabilitado neste ambiente.");
       return false;
     }
     return true;
@@ -368,13 +369,14 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     if (!requireCodeModeEnabled(response)) return false;
     if (isLocalRequest(request)) return true;
     if (!allowRemoteAdmin || !codeModeAdminTokenHash) {
-      json(response, 403, { error: "A execução hospedada do Modo Jornada de Playwright ainda não está habilitada neste servidor." });
+      jsonError(response, "feature_disabled", "A execução hospedada do Modo Jornada de Playwright ainda não está habilitada neste servidor.");
       return false;
     }
     const token = bearerToken(request);
     if (token && tokenMatches(token, codeModeAdminTokenHash)) return true;
-    response.setHeader("www-authenticate", 'Bearer realm="QA Radar code mode"');
-    json(response, token ? 403 : 401, { error: "Token administrativo do Modo Jornada ausente ou inválido." });
+    jsonError(response, token ? "forbidden" : "unauthorized", "Token administrativo do Modo Jornada ausente ou inválido.", {
+      "www-authenticate": 'Bearer realm="QA Radar code mode"',
+    });
     return false;
   };
 
@@ -384,8 +386,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     response.setHeader("x-ratelimit-remaining", decision.remaining);
     response.setHeader("x-ratelimit-reset", Math.ceil(decision.resetAt / 1000));
     if (decision.allowed) return true;
-    response.setHeader("retry-after", decision.retryAfterSeconds ?? 1);
-    json(response, 429, { error: "Muitas análises solicitadas. Aguarde antes de tentar novamente." });
+    jsonError(response, "rate_limited", "Muitas análises solicitadas. Aguarde antes de tentar novamente.", {
+      "retry-after": decision.retryAfterSeconds ?? 1,
+    });
     return false;
   };
 
@@ -555,11 +558,33 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       for (const handler of ROUTE_HANDLERS) {
         if (await handler(context, request, response, url)) return;
       }
-      json(response, 404, { error: "Rota não encontrada." });
+      jsonError(response, "not_found", "Rota não encontrada.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const status = (error as NodeJS.ErrnoException).code === "ENOENT" ? 404 : 400;
-      json(response, status, { error: message });
+      const apiError = toApiError(error);
+      if (apiError.code === "internal_error") {
+        // Falha não prevista: o cliente recebe mensagem genérica, mas ela não
+        // pode desaparecer. Vai para o stderr em vez do operationalLogger
+        // porque OperationalEvent descreve o ciclo de vida de uma análise e
+        // exige jobId/targetOrigin, que não existem aqui.
+        console.error(
+          JSON.stringify({
+            source: "qa-radar",
+            event: "request.failed",
+            timestamp: new Date().toISOString(),
+            method: request.method,
+            path: request.url,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          }),
+        );
+      }
+      // Uma resposta já iniciada (ex.: falha ao ler um artefato em streaming)
+      // não pode receber outro writeHead: isso lançaria dentro do catch.
+      if (response.headersSent) {
+        response.end();
+        return;
+      }
+      jsonError(response, apiError);
     }
   });
 }
