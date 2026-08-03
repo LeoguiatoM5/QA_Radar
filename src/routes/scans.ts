@@ -8,6 +8,7 @@ import type { ScanOptions, ScanReport } from "../types.js";
 import type { ScanJob } from "../job-queue.js";
 import { ACCESS_HASH_FILE, accessCookie, json, jsonError, numberField, readJson, requireAccess, storedAccessHash, textField, tokenHash } from "../http-helpers.js";
 import { ApiError, invalidRequest, validating } from "../api-error.js";
+import { isTerminalJobStatus } from "../job-state.js";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import type { ServerOptions } from "../server.js";
 import type { RouteHandler } from "./context.js";
@@ -181,7 +182,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
-    if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
+    if (isTerminalJobStatus(job.status)) {
       jsonError(response, "conflict", "A análise já foi finalizada.");
       return true;
     }

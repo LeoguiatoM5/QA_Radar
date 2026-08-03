@@ -15,6 +15,7 @@ import { runPlaywrightCodeWorker } from "./code-worker-client.js";
 import type { HostedCodeRunner } from "./sandbox-client.js";
 import { bearerToken, jsonError, storedAccessHash, tokenHash, tokenMatches } from "./http-helpers.js";
 import { toApiError } from "./api-error.js";
+import { transitionJob, type TerminalJobStatus } from "./job-state.js";
 import { CodegenSessionStore, type CodegenSession } from "./codegen-session-store.js";
 import { CodeExecutionJobStore, type CodeExecutionJob } from "./code-execution-job-store.js";
 import { LegacyJourneyRegistry, type JourneyJob } from "./legacy-journey-registry.js";
@@ -457,6 +458,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         settleMs: job.options.settleMs,
       });
       void (async () => {
+        let outcome: TerminalJobStatus = "failed";
         try {
           const automaticBaseline = job.options.baselinePath ? undefined : await findHistoryBaseline(job.options);
           const effectiveOptions = automaticBaseline ? { ...job.options, baselinePath: automaticBaseline } : job.options;
@@ -489,18 +491,22 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
             percent: 100,
             stage: "completed",
           };
-          job.status = "completed";
+          outcome = "completed";
         } catch (error) {
           if (job.cancelRequested) {
-            job.status = "cancelled";
+            outcome = "cancelled";
             job.error = undefined;
             job.progress = { ...job.progress, currentUrl: undefined, stage: "cancelled" };
           } else {
-            job.status = "failed";
+            outcome = "failed";
             const failure = job.controller.signal.aborted ? job.controller.signal.reason : error;
             job.error = failure instanceof Error ? failure.message : String(failure);
           }
         } finally {
+          // A transição terminal acontece uma vez só, aqui, e não em dois
+          // ramos separados: assim a máquina de estados vê exatamente uma
+          // saída de "running" por execução.
+          transitionJob(job, outcome);
           clearTimeout(deadline);
           const usage = resourceUsage(startedAt, cpuStart);
           logOperational({
