@@ -130,6 +130,11 @@ const DEFAULT_OPTIONS: ServerOptions = {
 
 const ROUTE_HANDLERS: RouteHandler[] = [tryHandlePages, tryHandleDashboardActivity, tryHandleCodegen, tryHandleCodeExecution, tryHandleLegacyJourneys, tryHandleScans, tryHandleHttpRequest];
 
+/** Prefixo canônico da API. Mudanças que quebram clientes exigem `/api/v2`. */
+export const API_V1_PREFIX = "/api/v1";
+/** Alias pré-1.0 mantido por compatibilidade; ver política no README. */
+export const UNVERSIONED_API_PREFIX = "/api";
+
 export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Server {
   const config = { ...DEFAULT_OPTIONS, ...overrides };
   if (Boolean(config.turnstileSiteKey) !== Boolean(config.turnstileSecretKey)) {
@@ -544,6 +549,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     codeExecutionJobs,
     dashboardActivity,
     idempotencyKeys,
+    apiPrefix: UNVERSIONED_API_PREFIX,
     queueStats,
     schedule,
     consumeRateLimit,
@@ -565,8 +571,19 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://localhost");
+      // O prefixo versionado é retirado antes do despacho, então cada rota
+      // continua casando um caminho só. O que a rota não pode ignorar é qual
+      // prefixo o cliente usou: caminho de cookie e URL devolvida precisam
+      // acompanhá-lo, senão quem chama /api/v1 recebe um cookie preso em /api
+      // e perde o acesso ao próprio resultado.
+      let apiPrefix = UNVERSIONED_API_PREFIX;
+      if (url.pathname === API_V1_PREFIX || url.pathname.startsWith(`${API_V1_PREFIX}/`)) {
+        apiPrefix = API_V1_PREFIX;
+        url.pathname = `${UNVERSIONED_API_PREFIX}${url.pathname.slice(API_V1_PREFIX.length)}`;
+      }
+      const requestContext: RequestContext = apiPrefix === UNVERSIONED_API_PREFIX ? context : { ...context, apiPrefix };
       for (const handler of ROUTE_HANDLERS) {
-        if (await handler(context, request, response, url)) return;
+        if (await handler(requestContext, request, response, url)) return;
       }
       jsonError(response, "not_found", "Rota não encontrada.");
     } catch (error) {

@@ -103,7 +103,7 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
         context.expireJourney(job);
       }
     })();
-    response.setHeader("set-cookie", accessCookie(request, "/api/journeys", accessToken, config.retentionMs, config.trustProxy));
+    response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/journeys`, accessToken, config.retentionMs, config.trustProxy));
     json(response, 202, { id, status: job.status, createdAt: job.createdAt, accessToken });
     return true;
   }
@@ -173,9 +173,9 @@ export const tryHandleLegacyJourneys: RouteHandler = async (context, request, re
     const html = await createJourneyEvidenceHtml(job.report, metadata, (relative) => readFile(join(job.outputDir, "journey-evidence", relative)));
     await writeFile(join(job.outputDir, "journey-evidence.html"), html, "utf8");
     if (accessToken) {
-      response.setHeader("set-cookie", accessCookie(request, "/api/journeys", accessToken, config.retentionMs, config.trustProxy));
+      response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/journeys`, accessToken, config.retentionMs, config.trustProxy));
     }
-    json(response, 201, { url: `/api/journeys/${id}/journey-evidence.html` });
+    json(response, 201, { url: `${context.apiPrefix}/journeys/${id}/journey-evidence.html` });
     return true;
   }
 

@@ -56,7 +56,7 @@ export const tryHandleCodegen: RouteHandler = async (context, request, response,
     };
     child.once("error", finish);
     child.once("exit", finish);
-    response.setHeader("set-cookie", accessCookie(request, `/api/codegen/${id}`, accessToken, config.retentionMs, config.trustProxy));
+    response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/codegen/${id}`, accessToken, config.retentionMs, config.trustProxy));
     json(response, 201, { id, accessToken });
     return true;
   }
