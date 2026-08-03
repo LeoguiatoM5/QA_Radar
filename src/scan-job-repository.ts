@@ -33,7 +33,11 @@ export interface ScanJobRepository {
    * enfileirado" ao mesmo tempo rodariam a mesma análise em paralelo.
    */
   claimNext(): Promise<PersistedScanJob | undefined>;
-  transition(id: string, to: JobStatus): Promise<PersistedScanJob | undefined>;
+  /** `error` acompanha a transição para dar motivo a um desfecho de falha. */
+  transition(id: string, to: JobStatus, error?: string): Promise<PersistedScanJob | undefined>;
+  /** Jobs presos em `running`, usado para fechar órfãos de uma instância morta. */
+  runningJobs(): Promise<PersistedScanJob[]>;
+  delete(id: string): Promise<void>;
   /** Posição na fila, 1 para o próximo. `undefined` se o job não está na fila. */
   position(id: string): Promise<number | undefined>;
   counts(): Promise<{ active: number; queued: number; jobs: number }>;
@@ -108,12 +112,23 @@ export class InMemoryScanJobRepository implements ScanJobRepository {
     return undefined;
   }
 
-  async transition(id: string, to: JobStatus): Promise<PersistedScanJob | undefined> {
+  async transition(id: string, to: JobStatus, error?: string): Promise<PersistedScanJob | undefined> {
     const job = this.#jobs.get(id);
     if (!job || !canTransitionJob(job.status, to)) return undefined;
     job.status = to;
+    if (error !== undefined) job.error = error;
     job.updatedAt = new Date().toISOString();
     return { ...job };
+  }
+
+  async runningJobs(): Promise<PersistedScanJob[]> {
+    return [...this.#jobs.values()].filter((job) => job.status === "running").map((job) => ({ ...job }));
+  }
+
+  async delete(id: string): Promise<void> {
+    this.#jobs.delete(id);
+    const index = this.#order.indexOf(id);
+    if (index >= 0) this.#order.splice(index, 1);
   }
 
   async position(id: string): Promise<number | undefined> {
@@ -232,18 +247,27 @@ export class PostgresScanJobRepository implements ScanJobRepository {
     return rows[0] ? fromRow(rows[0]) : undefined;
   }
 
-  async transition(id: string, to: JobStatus): Promise<PersistedScanJob | undefined> {
+  async transition(id: string, to: JobStatus, error?: string): Promise<PersistedScanJob | undefined> {
     // A máquina de estados é aplicada no próprio UPDATE, com a lista de origens
     // válidas: assim duas instâncias não conseguem concluir o mesmo job duas
     // vezes, coisa que uma leitura seguida de escrita permitiria.
     const allowedFrom = (["queued", "running", "completed", "failed", "cancelled"] as JobStatus[]).filter((from) => canTransitionJob(from, to));
     if (allowedFrom.length === 0) return undefined;
-    const rows = await this.database.query<ScanJobRow>(`update scan_jobs set status = $2, updated_at = now(), queued_at = null where id = $1 and status = any($3::text[]) returning ${COLUMNS}`, [
-      id,
-      to,
-      allowedFrom,
-    ]);
+    const rows = await this.database.query<ScanJobRow>(
+      `update scan_jobs set status = $2, updated_at = now(), queued_at = null, error = coalesce($4, error)
+       where id = $1 and status = any($3::text[]) returning ${COLUMNS}`,
+      [id, to, allowedFrom, error ?? null],
+    );
     return rows[0] ? fromRow(rows[0]) : undefined;
+  }
+
+  async runningJobs(): Promise<PersistedScanJob[]> {
+    const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where status = 'running'`);
+    return rows.map(fromRow);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.database.query("delete from scan_jobs where id = $1", [id]);
   }
 
   async position(id: string): Promise<number | undefined> {

@@ -10,6 +10,7 @@ import { ACCESS_HASH_FILE, accessCookie, json, jsonError, numberField, readJson,
 import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { isTerminalJobStatus } from "../job-state.js";
 import { IdempotencyStore, MAX_IDEMPOTENCY_KEY_LENGTH, requestFingerprint } from "../idempotency-store.js";
+import type { PersistedScanJob } from "../scan-job-repository.js";
 import type { IncomingMessage } from "node:http";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import type { ServerOptions } from "../server.js";
@@ -77,6 +78,19 @@ function publicJob(job: ScanJob, queuePosition?: number): Record<string, unknown
     error: job.error,
     progress: job.progress,
     ...(queuePosition !== undefined ? { queuePosition } : {}),
+    screenshotAvailable: Boolean(job.report?.screenshotPath),
+  };
+}
+
+/** Mesma forma de `publicJob`, a partir do registro gravado no banco. */
+function publicPersistedJob(job: PersistedScanJob): Record<string, unknown> {
+  return {
+    id: job.id,
+    status: job.status,
+    createdAt: job.createdAt,
+    report: job.report ? { ...job.report, screenshotPath: job.report.screenshotPath ? "screenshot.png" : undefined } : undefined,
+    error: job.error,
+    progress: job.progress,
     screenshotAvailable: Boolean(job.report?.screenshotPath),
   };
 }
@@ -214,6 +228,9 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
         cancelRequested: false,
         accessTokenHash,
       };
+      // Gravado antes de responder: se o banco recusar, o cliente não pode
+      // sair daqui com o id de uma análise que só existe nesta memória.
+      await context.scanJobs.created(job);
       jobQueue.enqueue(job);
       if (idempotency) context.idempotencyKeys.complete(idempotency.scope, job.id, accessToken);
       context.schedule();
@@ -252,6 +269,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     job.controller.abort(new Error("Análise cancelada pelo usuário."));
     if (jobQueue.cancelQueued(job.id)) {
       job.progress = { ...job.progress, stage: "cancelled" };
+      void context.scanJobs.updated(job);
       context.expireJob(job);
       context.logOperational({
         event: "scan.cancelled",
@@ -274,7 +292,11 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       return true;
     }
     const job = jobQueue.get(id);
-    const expectedHash = job?.accessTokenHash ?? (await storedAccessHash(config.resultsDir, id));
+    // Fora da memória, o banco é a fonte: ele sabe o desfecho real (falhou,
+    // cancelou, ficou órfã), enquanto o disco só guarda análises que chegaram
+    // a gravar relatório — e ainda por cima num volume efêmero.
+    const persisted = job ? undefined : await context.scanJobs.load(id);
+    const expectedHash = job?.accessTokenHash ?? persisted?.accessTokenHash ?? (await storedAccessHash(config.resultsDir, id));
     if (!expectedHash) {
       jsonError(response, "not_found", "Análise não encontrada ou já expirada.");
       return true;
@@ -283,6 +305,10 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     if (!artifact) {
       if (job) {
         json(response, 200, publicJob(job, jobQueue.position(job.id)));
+        return true;
+      }
+      if (persisted) {
+        json(response, 200, publicPersistedJob(persisted));
         return true;
       }
       const recovered = await recoveredJob(config.resultsDir, id);
