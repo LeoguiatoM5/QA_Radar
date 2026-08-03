@@ -34,10 +34,6 @@ try {
           }),
         ),
     });
-    // Jobs deixados em `running` pertencem a uma instância que não existe mais:
-    // ninguém vai concluí-los, então ficariam "em execução" para sempre.
-    const orphans = await scanJobs.recoverOrphans();
-    if (orphans.length > 0) console.log(`Análises órfãs de uma instância anterior encerradas: ${orphans.length}.`);
   } else {
     console.log("Sem QA_RADAR_DATABASE_URL: estado em memória, perdido a cada reinício.");
   }

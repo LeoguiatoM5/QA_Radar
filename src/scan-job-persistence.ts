@@ -28,6 +28,14 @@ export interface ScanJobPersistence {
    * não existe mais, e ninguém vai concluí-los.
    */
   recoverOrphans(): Promise<string[]>;
+  /**
+   * Análises que ficaram na fila e nunca chegaram a executar.
+   *
+   * Sem reenfileirá-las, o registro sobrevive ao reinício mas o trabalho não:
+   * elas ficam `queued` no banco para sempre e quem consulta vê "na fila"
+   * indefinidamente, o que é pior do que falhar.
+   */
+  pending(): Promise<PersistedScanJob[]>;
 }
 
 export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
@@ -36,6 +44,7 @@ export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
   removed: async () => {},
   load: async () => undefined,
   recoverOrphans: async () => [],
+  pending: async () => [],
 };
 
 export function toPersistedScanJob(job: ScanJob, retentionMs: number): PersistedScanJob {
@@ -103,5 +112,31 @@ export function createScanJobPersistence({ repository, retentionMs, onError }: S
       }
       return recovered;
     },
+    async pending() {
+      try {
+        return await repository.queuedJobs();
+      } catch (error) {
+        onError("pending", error);
+        return [];
+      }
+    },
+  };
+}
+
+/** Reconstrói o job em memória a partir do registro, com controle novo. */
+export function toRuntimeScanJob(stored: PersistedScanJob): ScanJob {
+  return {
+    id: stored.id,
+    status: stored.status,
+    createdAt: stored.createdAt,
+    options: stored.options,
+    report: stored.report,
+    error: stored.error,
+    progress: stored.progress,
+    // O AbortController do processo anterior morreu com ele; esta execução
+    // precisa do seu próprio para poder ser cancelada.
+    controller: new AbortController(),
+    cancelRequested: false,
+    accessTokenHash: stored.accessTokenHash,
   };
 }

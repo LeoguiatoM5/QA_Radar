@@ -31,7 +31,7 @@ import type { SpawnProcess } from "./code-execution.js";
 import { SERVER_OPTION_DEFAULTS } from "./env.js";
 import { DashboardActivityStore } from "./dashboard-activity-store.js";
 import { IdempotencyStore } from "./idempotency-store.js";
-import { NO_SCAN_JOB_PERSISTENCE, type ScanJobPersistence } from "./scan-job-persistence.js";
+import { NO_SCAN_JOB_PERSISTENCE, toRuntimeScanJob, type ScanJobPersistence } from "./scan-job-persistence.js";
 import { NO_ARTIFACT_STORAGE, type ArtifactStorage } from "./artifact-storage.js";
 
 export interface OperationalEvent {
@@ -598,6 +598,42 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     codeReportAsJourney,
     publicJourney,
   };
+
+  /**
+   * Retoma o que a instância anterior deixou para trás.
+   *
+   * Fica aqui, e não no boot do `web.ts`, para que qualquer um que use
+   * `createQaRadarServer` receba o comportamento correto. Sem persistência as
+   * duas chamadas devolvem vazio e isto não faz nada.
+   */
+  void (async () => {
+    try {
+      const orphans = await config.scanJobs.recoverOrphans();
+      const pending = await config.scanJobs.pending();
+      for (const stored of pending) jobQueue.enqueue(toRuntimeScanJob(stored));
+      if (pending.length > 0) schedule();
+      if (orphans.length > 0 || pending.length > 0) {
+        console.log(
+          JSON.stringify({
+            source: "qa-radar",
+            event: "scan.restored",
+            timestamp: new Date().toISOString(),
+            abandoned: orphans.length,
+            requeued: pending.length,
+          }),
+        );
+      }
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          source: "qa-radar",
+          event: "scan.restore_failed",
+          timestamp: new Date().toISOString(),
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  })();
 
   return createServer(async (request, response) => {
     try {
