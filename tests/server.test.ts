@@ -929,21 +929,62 @@ describe("web server", () => {
     assert.deepEqual(body, { status: "ok", active: 0, queued: 0, jobs: 0 });
   });
 
-  it("reporta o estado de saúde como erro quando resultsDir não pode ser criado", async () => {
+  it("reporta prontidão com o detalhe de cada dependência", async () => {
+    const response = await fetch(`${baseUrl}/ready`);
+    const body = (await response.json()) as { status: string; checks: Record<string, unknown> };
+    assert.equal(response.status, 200);
+    assert.equal(body.status, "ready");
+    assert.equal(body.checks.resultsDir, "ok");
+    assert.equal(body.checks.queue, "ok");
+    assert.equal(body.checks.codeMode, "disabled");
+  });
+
+  it("reprova a prontidão quando resultsDir não pode ser criado, sem derrubar a vivacidade", async () => {
     const tempParent = await mkdtemp(join(tmpdir(), "qa-radar-health-"));
     const resultsDir = join(tempParent, "blocked-by-a-file", "results");
     await writeFile(join(tempParent, "blocked-by-a-file"), "");
     const unhealthyServer = createQaRadarServer({ resultsDir });
     await new Promise<void>((resolve) => unhealthyServer.listen(0, "127.0.0.1", resolve));
     const address = unhealthyServer.address() as AddressInfo;
+    const unhealthyUrl = `http://127.0.0.1:${address.port}`;
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/health`);
-      const body = (await response.json()) as { status: string; reason: string };
-      assert.equal(response.status, 503);
-      assert.deepEqual(body, { status: "error", reason: "results-dir-unwritable" });
+      const ready = await fetch(`${unhealthyUrl}/ready`);
+      const body = (await ready.json()) as { status: string; checks: { resultsDir: string } };
+      assert.equal(ready.status, 503);
+      assert.equal(body.status, "not_ready");
+      assert.equal(body.checks.resultsDir, "unwritable");
+
+      // O processo continua vivo: reiniciar o contêiner não conserta o disco,
+      // então a vivacidade não pode cair junto com a prontidão.
+      const health = await fetch(`${unhealthyUrl}/health`);
+      assert.equal(health.status, 200);
+      assert.equal(((await health.json()) as { status: string }).status, "ok");
     } finally {
       await new Promise<void>((resolve, reject) => unhealthyServer.close((error) => (error ? reject(error) : resolve())));
       await rm(tempParent, { recursive: true, force: true });
+    }
+  });
+
+  it("marca a fila saturada sem reprovar a prontidão", async () => {
+    // Reprovar por fila cheia faria a hospedagem reiniciar a instância
+    // exatamente quando ela está ocupada trabalhando.
+    const busyServer = createQaRadarServer({ concurrency: 0, maxQueueSize: 1, allowPrivateTargets: true });
+    await new Promise<void>((resolve) => busyServer.listen(0, "127.0.0.1", resolve));
+    const address = busyServer.address() as AddressInfo;
+    const busyUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      await fetch(`${busyUrl}/api/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: busyUrl }),
+      });
+      const ready = await fetch(`${busyUrl}/ready`);
+      const body = (await ready.json()) as { status: string; checks: { queue: string } };
+      assert.equal(ready.status, 200);
+      assert.equal(body.status, "ready");
+      assert.equal(body.checks.queue, "saturated");
+    } finally {
+      await new Promise<void>((resolve) => busyServer.close(() => resolve()));
     }
   });
 
