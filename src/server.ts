@@ -30,9 +30,10 @@ import { tryHandleDashboardActivity } from "./routes/dashboard-activity.js";
 import type { SpawnProcess } from "./code-execution.js";
 import { SERVER_OPTION_DEFAULTS } from "./env.js";
 import { DashboardActivityStore } from "./dashboard-activity-store.js";
-import { IdempotencyStore } from "./idempotency-store.js";
+import { InMemoryIdempotencyKeys, type IdempotencyKeys } from "./idempotency-store.js";
 import { NO_SCAN_JOB_PERSISTENCE, toRuntimeScanJob, type ScanJobPersistence } from "./scan-job-persistence.js";
 import { NO_ARTIFACT_STORAGE, type ArtifactStorage } from "./artifact-storage.js";
+import { createRandomAccessTokenIssuer, type AccessTokenIssuer } from "./access-token.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -102,6 +103,10 @@ export interface ServerOptions {
   scanJobs: ScanJobPersistence;
   /** Armazenamento durável dos artefatos. O padrão inerte deixa só o disco. */
   artifacts: ArtifactStorage;
+  /** Emissor do token de acesso. O padrão aleatório não sobrevive ao reinício. */
+  accessTokens: AccessTokenIssuer;
+  /** Chaves de idempotência. Ausente usa memória, perdida no reinício. */
+  idempotencyKeys: IdempotencyKeys | undefined;
   operationalLogger: (event: OperationalEvent) => void;
 }
 
@@ -133,6 +138,8 @@ const DEFAULT_OPTIONS: ServerOptions = {
   hostedCodeRunner: undefined,
   scanJobs: NO_SCAN_JOB_PERSISTENCE,
   artifacts: NO_ARTIFACT_STORAGE,
+  accessTokens: createRandomAccessTokenIssuer(),
+  idempotencyKeys: undefined,
   operationalLogger: defaultOperationalLogger,
 };
 
@@ -183,7 +190,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const codeExecutionJobs = new CodeExecutionJobStore();
   const dashboardActivity = new DashboardActivityStore(config.resultsDir);
   // Chaves de idempotência vivem tanto quanto os jobs que representam.
-  const idempotencyKeys = new IdempotencyStore(config.retentionMs);
+  const idempotencyKeys = config.idempotencyKeys ?? new InMemoryIdempotencyKeys(config.retentionMs);
 
   const loadCodeExecutionJob = async (id: string): Promise<CodeExecutionJob | undefined> => {
     const memoryJob = codeExecutionJobs.get(id);
@@ -580,6 +587,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     idempotencyKeys,
     scanJobs: config.scanJobs,
     artifacts: config.artifacts,
+    accessTokens: config.accessTokens,
     apiPrefix: UNVERSIONED_API_PREFIX,
     queueStats,
     schedule,

@@ -38,10 +38,16 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
   // healthCheckPath do Render, que decide se a instância recebe tráfego.
   if (request.method === "GET" && url.pathname === "/ready") {
     const stats = context.queueStats();
-    const resultsDir = await resultsDirWritable(config.resultsDir);
+    const [resultsDir, database, artifacts] = await Promise.all([resultsDirWritable(config.resultsDir), context.scanJobs.status(), context.artifacts.status()]);
+    // Banco configurado e fora do ar reprova: a criação de uma análise aguarda
+    // a gravação e falha sem ele, então a instância realmente não atende.
+    // Storage fora do ar não reprova: o envio é best-effort e a análise inteira
+    // continua funcionando, servindo do disco local.
+    const ready = resultsDir && database !== "unreachable";
     const checks = {
-      // Sem diretório gravável nenhuma análise produz relatório: é o único
-      // problema aqui que a instância não tem como contornar.
+      database,
+      artifacts,
+      // Sem diretório gravável nenhuma análise produz relatório.
       resultsDir: resultsDir ? "ok" : "unwritable",
       // Informativo, nunca reprova. Fila cheia é carga normal e passa sozinha;
       // reprovar por isso faria a hospedagem reiniciar a instância justamente
@@ -53,7 +59,7 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       codeMode: !config.allowCodeMode ? "disabled" : config.hostedCodeRunner ? "hosted" : "local",
       ...stats,
     };
-    json(response, resultsDir ? 200 : 503, { status: resultsDir ? "ready" : "not_ready", checks });
+    json(response, ready ? 200 : 503, { status: ready ? "ready" : "not_ready", checks });
     return true;
   }
 

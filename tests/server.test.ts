@@ -937,6 +937,10 @@ describe("web server", () => {
     assert.equal(body.checks.resultsDir, "ok");
     assert.equal(body.checks.queue, "ok");
     assert.equal(body.checks.codeMode, "disabled");
+    // Sem banco nem storage configurados, os dois se declaram desligados em
+    // vez de fingir que estão bem — é assim que se confere a provisionagem.
+    assert.equal(body.checks.database, "disabled");
+    assert.equal(body.checks.artifacts, "disabled");
   });
 
   it("reprova a prontidão quando resultsDir não pode ser criado, sem derrubar a vivacidade", async () => {

@@ -20,12 +20,15 @@ export interface ArtifactStorage {
   read(prefix: string, name: string): Promise<Buffer | undefined>;
   /** Apaga tudo do prefixo, quando a retenção expira. */
   remove(prefix: string): Promise<void>;
+  /** Sondagem barata para o readiness. Nunca lança. */
+  status(): Promise<"disabled" | "ok" | "unreachable">;
 }
 
 export const NO_ARTIFACT_STORAGE: ArtifactStorage = {
   upload: async () => 0,
   read: async () => undefined,
   remove: async () => {},
+  status: async () => "disabled",
 };
 
 export interface ArtifactStorageConfig {
@@ -70,7 +73,7 @@ export async function createS3ArtifactStorage(config: ArtifactStorageConfig): Pr
   } catch {
     throw new Error("Armazenamento de artefatos configurado, mas @aws-sdk/client-s3 não está instalado. Rode `npm install @aws-sdk/client-s3`.");
   }
-  const { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } = module;
+  const { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, HeadBucketCommand } = module;
   const client = new S3Client({
     region: config.region,
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
@@ -126,6 +129,16 @@ export async function createS3ArtifactStorage(config: ArtifactStorageConfig): Pr
         }
         continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
       } while (continuationToken);
+    },
+
+    async status() {
+      // HeadBucket prova credencial e existência do bucket sem ler nada.
+      try {
+        await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
+        return "ok";
+      } catch {
+        return "unreachable";
+      }
     },
   };
 }

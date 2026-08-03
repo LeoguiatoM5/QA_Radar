@@ -36,6 +36,10 @@ class MemoryArtifactStorage implements ArtifactStorage {
       if (key.startsWith(`${prefix}/`)) this.objects.delete(key);
     }
   }
+
+  async status(): Promise<"disabled" | "ok" | "unreachable"> {
+    return "ok";
+  }
 }
 
 async function sampleDirectory(): Promise<string> {
@@ -93,6 +97,11 @@ function contractFor(name: string, create: () => Promise<ArtifactStorage>, hooks
       }
     });
 
+    it("se declara alcançável para o readiness", async () => {
+      const storage = await create();
+      assert.equal(await storage.status(), "ok");
+    });
+
     it("apaga só o prefixo pedido", async () => {
       const storage = await create();
       const directory = await sampleDirectory();
@@ -146,6 +155,7 @@ describe("artefatos no servidor", () => {
     assert.equal(await NO_ARTIFACT_STORAGE.upload("x", "."), 0);
     assert.equal(await NO_ARTIFACT_STORAGE.read("x", "report.json"), undefined);
     await NO_ARTIFACT_STORAGE.remove("x");
+    assert.equal(await NO_ARTIFACT_STORAGE.status(), "disabled");
   });
 
   it("serve o relatório pelo armazenamento quando o disco não tem mais", async () => {

@@ -839,9 +839,28 @@ Com o banco ligado:
 - o token de acesso continua sendo exigido: persistir não afrouxa o acesso, e o
   banco guarda apenas o hash dele.
 
-**Ainda não persistido:** as chaves de idempotência, que seguem em memória. O
-agendamento também continua em processo — o repositório já suporta claim atômico
-entre instâncias (`FOR UPDATE SKIP LOCKED`), mas a fila em si ainda não usa isso.
+Com o banco, as chaves de idempotência também passam a durar: repetir um
+`POST /api/scans` depois de um reinício continua devolvendo a mesma análise em
+vez de enfileirar outra. Para que a repetição também devolva um **token de
+acesso utilizável**, configure um segredo:
+
+```bash
+QA_RADAR_ACCESS_TOKEN_SECRET="pelo-menos-32-bytes-de-segredo-aqui"
+```
+
+Com ele, o token de acesso passa a ser derivado do id da análise por HMAC, em
+vez de sorteado. Isso é o que permite recomputá-lo depois de o processo morrer
+**sem nunca gravá-lo**: o que fica em repouso continua sendo apenas o SHA-256
+dele, e a tabela de idempotência não tem coluna de token. Sem o segredo, o token
+volta a ser aleatório e a repetição após reinício devolve a análise sem token —
+degradação consciente, e o comportamento anterior.
+
+Trocar o segredo invalida os tokens em circulação, que é o efeito esperado de
+uma rotação. Ele precisa ter ao menos 32 bytes; menos que isso falha no boot.
+
+**Ainda não persistido:** o agendamento continua em processo — o repositório já
+suporta claim atômico entre instâncias (`FOR UPDATE SKIP LOCKED`), mas a fila em
+si ainda não usa isso.
 
 ### Artefatos duráveis (opcional)
 

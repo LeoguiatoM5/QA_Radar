@@ -63,6 +63,12 @@ export interface EnvironmentConfig {
    * isto todo relatório morre no próximo deploy.
    */
   artifactStorage: ArtifactStorageConfig | undefined;
+  /**
+   * Ausente = token de acesso aleatório, como sempre foi. Presente, o token é
+   * derivado do id da análise e a repetição de uma criação consegue reemiti-lo
+   * depois de um reinício, sem guardar nada em texto claro.
+   */
+  accessTokenSecret: string | undefined;
 }
 
 /**
@@ -105,6 +111,7 @@ export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): 
     sandbox: sandboxUrl && sandboxSigningSecret ? { url: sandboxUrl, signingSecret: sandboxSigningSecret } : undefined,
     databaseUrl: source.QA_RADAR_DATABASE_URL?.trim() || undefined,
     artifactStorage: artifactStorageFromEnvironment(source),
+    accessTokenSecret: source.QA_RADAR_ACCESS_TOKEN_SECRET?.trim() || undefined,
     serverOptions: {
       allowPrivateTargets: booleanFromEnvironment(source, "QA_RADAR_ALLOW_PRIVATE_TARGETS"),
       trustProxy: booleanFromEnvironment(source, "QA_RADAR_TRUST_PROXY"),

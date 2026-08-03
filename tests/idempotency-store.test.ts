@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { IdempotencyStore, requestFingerprint } from "../src/idempotency-store.js";
+import { InMemoryIdempotencyKeys, idempotencyScope, requestFingerprint } from "../src/idempotency-store.js";
 
 describe("idempotency store", () => {
   it("ignora a ordem das chaves ao comparar corpos iguais", () => {
@@ -14,41 +14,41 @@ describe("idempotency store", () => {
   });
 
   it("separa clientes que escolheram a mesma chave", () => {
-    assert.notEqual(IdempotencyStore.scope("10.0.0.1", "abc"), IdempotencyStore.scope("10.0.0.2", "abc"));
+    assert.notEqual(idempotencyScope("10.0.0.1", "abc"), idempotencyScope("10.0.0.2", "abc"));
   });
 
-  it("marca a reserva como em andamento até a criação terminar", () => {
-    const store = new IdempotencyStore(60_000);
-    store.reserve("cliente abc", "impressao");
-    assert.equal(store.get("cliente abc")?.jobId, undefined);
-    store.complete("cliente abc", "job-1", "token-1");
-    assert.equal(store.get("cliente abc")?.jobId, "job-1");
-    assert.equal(store.get("cliente abc")?.accessToken, "token-1");
+  it("marca a reserva como em andamento até a criação terminar", async () => {
+    const store = new InMemoryIdempotencyKeys(60_000);
+    await store.reserve("cliente abc", "impressao");
+    assert.equal((await store.get("cliente abc"))?.jobId, undefined);
+    await store.complete("cliente abc", "job-1", "token-1");
+    assert.equal((await store.get("cliente abc"))?.jobId, "job-1");
+    assert.equal((await store.get("cliente abc"))?.accessToken, "token-1");
   });
 
-  it("libera a chave quando a criação falha, para o cliente poder tentar de novo", () => {
-    const store = new IdempotencyStore(60_000);
-    store.reserve("cliente abc", "impressao");
-    store.release("cliente abc");
-    assert.equal(store.get("cliente abc"), undefined);
+  it("libera a chave quando a criação falha, para o cliente poder tentar de novo", async () => {
+    const store = new InMemoryIdempotencyKeys(60_000);
+    await store.reserve("cliente abc", "impressao");
+    await store.release("cliente abc");
+    assert.equal(await store.get("cliente abc"), undefined);
   });
 
-  it("descarta registros vencidos em vez de prender a chave para sempre", () => {
-    const store = new IdempotencyStore(60_000);
+  it("descarta registros vencidos em vez de prender a chave para sempre", async () => {
+    const store = new InMemoryIdempotencyKeys(60_000);
     const start = 1_000_000;
-    store.reserve("cliente abc", "impressao", start);
-    store.complete("cliente abc", "job-1", "token-1");
-    assert.ok(store.get("cliente abc", start + 59_999));
-    assert.equal(store.get("cliente abc", start + 60_000), undefined);
-    assert.equal(store.size(start + 60_000), 0);
+    await store.reserve("cliente abc", "impressao", start);
+    await store.complete("cliente abc", "job-1", "token-1");
+    assert.ok(await store.get("cliente abc", start + 59_999));
+    assert.equal(await store.get("cliente abc", start + 60_000), undefined);
+    assert.equal(await store.size(start + 60_000), 0);
   });
 
-  it("não completa um registro que já foi liberado", () => {
+  it("não completa um registro que já foi liberado", async () => {
     // Evita ressuscitar uma chave cuja criação falhou.
-    const store = new IdempotencyStore(60_000);
-    store.reserve("cliente abc", "impressao");
-    store.release("cliente abc");
-    store.complete("cliente abc", "job-1", "token-1");
-    assert.equal(store.get("cliente abc"), undefined);
+    const store = new InMemoryIdempotencyKeys(60_000);
+    await store.reserve("cliente abc", "impressao");
+    await store.release("cliente abc");
+    await store.complete("cliente abc", "job-1", "token-1");
+    assert.equal(await store.get("cliente abc"), undefined);
   });
 });

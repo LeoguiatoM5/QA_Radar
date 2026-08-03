@@ -49,3 +49,26 @@ services:
         generateValue: true
       - key: QA_RADAR_TRUST_PROXY
         value: true
+      # Persistência, também gerenciada no painel pelo mesmo motivo das três
+      # acima: são segredos e não podem viver neste arquivo. Todas vazias, o
+      # produto roda em memória e em disco — que é o comportamento atual, com
+      # a ressalva de que o disco do Render é efêmero e leva os relatórios
+      # embora a cada deploy. Ver README, "Persistência" e "Artefatos duráveis".
+      - key: QA_RADAR_DATABASE_URL
+        sync: false
+      # As três de storage andam juntas: preencher só parte delas faz o boot
+      # falhar de propósito, em vez de mandar artefato para lugar nenhum.
+      - key: QA_RADAR_STORAGE_BUCKET
+        sync: false
+      - key: QA_RADAR_STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: QA_RADAR_STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: QA_RADAR_STORAGE_ENDPOINT
+        sync: false
+      # Gerado pelo próprio Render: com ele o token de acesso passa a ser
+      # derivado do id da análise, e a repetição de uma criação consegue
+      # reemiti-lo depois de um reinício sem nada em texto claro no banco.
+      # Trocar este valor invalida os tokens em circulação.
+      - key: QA_RADAR_ACCESS_TOKEN_SECRET
+        generateValue: true

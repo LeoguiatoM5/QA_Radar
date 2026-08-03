@@ -36,6 +36,8 @@ export interface ScanJobPersistence {
    * indefinidamente, o que é pior do que falhar.
    */
   pending(): Promise<PersistedScanJob[]>;
+  /** Sondagem barata para o readiness. Nunca lança. */
+  status(): Promise<"disabled" | "ok" | "unreachable">;
 }
 
 export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
@@ -45,6 +47,7 @@ export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
   load: async () => undefined,
   recoverOrphans: async () => [],
   pending: async () => [],
+  status: async () => "disabled",
 };
 
 export function toPersistedScanJob(job: ScanJob, retentionMs: number): PersistedScanJob {
@@ -118,6 +121,15 @@ export function createScanJobPersistence({ repository, retentionMs, onError }: S
       } catch (error) {
         onError("pending", error);
         return [];
+      }
+    },
+    async status() {
+      // `counts` é a consulta mais barata que ainda prova que o banco responde.
+      try {
+        await repository.counts();
+        return "ok";
+      } catch {
+        return "unreachable";
       }
     },
   };

@@ -7,6 +7,8 @@ import { runMigrations } from "./migrations.js";
 import { PostgresScanJobRepository } from "./scan-job-repository.js";
 import { NO_SCAN_JOB_PERSISTENCE, createScanJobPersistence } from "./scan-job-persistence.js";
 import { NO_ARTIFACT_STORAGE, createS3ArtifactStorage } from "./artifact-storage.js";
+import { PostgresIdempotencyKeys, type IdempotencyKeys } from "./idempotency-store.js";
+import { createDerivedAccessTokenIssuer, createRandomAccessTokenIssuer } from "./access-token.js";
 
 try {
   const env = loadEnvironmentConfig();
@@ -17,6 +19,7 @@ try {
   // de diagnosticar do que uma falha clara no boot.
   const database = env.databaseUrl ? createDatabase(env.databaseUrl) : undefined;
   let scanJobs = NO_SCAN_JOB_PERSISTENCE;
+  let idempotencyKeys: IdempotencyKeys | undefined;
   if (database) {
     const result = await runMigrations(database);
     console.log(`Banco conectado. Migrations aplicadas agora: ${result.applied.length > 0 ? result.applied.join(", ") : "nenhuma"}.`);
@@ -34,6 +37,7 @@ try {
           }),
         ),
     });
+    idempotencyKeys = new PostgresIdempotencyKeys(database, env.serverOptions.retentionMs ?? SERVER_OPTION_DEFAULTS.retentionMs);
   } else {
     console.log("Sem QA_RADAR_DATABASE_URL: estado em memória, perdido a cada reinício.");
   }
@@ -47,7 +51,15 @@ try {
       : "Artefatos só em disco: um contêiner recriado leva os relatórios junto.",
   );
 
-  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts });
+  // Sem segredo, o token volta a ser aleatório: a repetição de uma criação
+  // deixa de reemitir token depois de um reinício, que é o comportamento
+  // anterior. Degradação consciente, não falha.
+  const accessTokens = env.accessTokenSecret ? createDerivedAccessTokenIssuer(env.accessTokenSecret) : createRandomAccessTokenIssuer();
+  if (!env.accessTokenSecret && env.databaseUrl) {
+    console.log("Sem QA_RADAR_ACCESS_TOKEN_SECRET: a repetição de uma criação não reemite token após reinício.");
+  }
+
+  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts, accessTokens, idempotencyKeys });
   server.listen(env.port, env.host, () => {
     console.log(`\nQA Radar Web disponível em http://${env.host}:${env.port}`);
     console.log("Pressione Ctrl+C para encerrar.\n");

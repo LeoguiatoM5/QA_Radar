@@ -1,6 +1,6 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { parseCli } from "../cli.js";
 import { assertPublicUrl } from "../security.js";
 import { listProjectHistory } from "../history.js";
@@ -9,7 +9,7 @@ import type { ScanJob } from "../job-queue.js";
 import { ACCESS_HASH_FILE, accessCookie, json, jsonError, numberField, readJson, requireAccess, storedAccessHash, textField, tokenHash } from "../http-helpers.js";
 import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { isTerminalJobStatus } from "../job-state.js";
-import { IdempotencyStore, MAX_IDEMPOTENCY_KEY_LENGTH, requestFingerprint } from "../idempotency-store.js";
+import { MAX_IDEMPOTENCY_KEY_LENGTH, idempotencyScope, requestFingerprint } from "../idempotency-store.js";
 import type { PersistedScanJob } from "../scan-job-repository.js";
 import type { IncomingMessage } from "node:http";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
@@ -65,7 +65,7 @@ function idempotencyRequest(request: IncomingMessage, clientAddress: string, bod
   if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH || !/^[\w.:-]+$/.test(key)) {
     throw invalidRequest(`Idempotency-Key deve ter até ${MAX_IDEMPOTENCY_KEY_LENGTH} caracteres entre letras, números, ponto, dois-pontos, hífen e underscore.`);
   }
-  return { scope: IdempotencyStore.scope(clientAddress, key), fingerprint: requestFingerprint(body) };
+  return { scope: idempotencyScope(clientAddress, key), fingerprint: requestFingerprint(body) };
 }
 
 function publicJob(job: ScanJob, queuePosition?: number): Record<string, unknown> {
@@ -149,18 +149,31 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     const body = await readJson(request, MAX_JSON_BODY_BYTES);
     const idempotency = idempotencyRequest(request, context.clientAddress(request), body);
     if (idempotency) {
-      const existing = context.idempotencyKeys.get(idempotency.scope);
+      const existing = await context.idempotencyKeys.get(idempotency.scope);
       if (existing) {
         if (existing.fingerprint !== idempotency.fingerprint) {
           jsonError(response, "conflict", "Esta Idempotency-Key já foi usada com outro corpo de requisição.");
           return true;
         }
-        const previous = existing.jobId ? jobQueue.get(existing.jobId) : undefined;
-        if (previous && existing.accessToken) {
-          // Devolve o estado atual do job, não uma cópia congelada da resposta
-          // original: quem repete quer saber em que pé a análise está.
-          response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/scans/${previous.id}`, existing.accessToken, config.retentionMs, config.trustProxy));
-          json(response, 200, { ...publicJob(previous, jobQueue.position(previous.id)), accessToken: existing.accessToken });
+        // O job pode não estar mais em memória: depois de um reinício, ele
+        // vive só no banco. Devolve o estado atual, e não uma cópia congelada
+        // da resposta original — quem repete quer saber em que pé a análise
+        // está.
+        const previousId = existing.jobId;
+        const inMemory = previousId ? jobQueue.get(previousId) : undefined;
+        const stored = previousId && !inMemory ? await context.scanJobs.load(previousId) : undefined;
+        if (previousId && (inMemory || stored)) {
+          // O token só é reemitido quando derivado do id; com token aleatório
+          // ele existiu uma vez só e não há como recriá-lo sem guardá-lo em
+          // texto claro, o que seria pior do que não devolver.
+          const reissued = context.accessTokens.reissuable ? context.accessTokens.issue(previousId) : existing.accessToken;
+          if (reissued) {
+            response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/scans/${previousId}`, reissued, config.retentionMs, config.trustProxy));
+          }
+          json(response, 200, {
+            ...(inMemory ? publicJob(inMemory, jobQueue.position(previousId)) : publicPersistedJob(stored as PersistedScanJob)),
+            ...(reissued ? { accessToken: reissued } : {}),
+          });
           return true;
         }
         if (!existing.jobId) {
@@ -168,7 +181,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
           return true;
         }
         // O job original já expirou: a chave é liberada para uma análise nova.
-        context.idempotencyKeys.release(idempotency.scope);
+        await context.idempotencyKeys.release(idempotency.scope);
       }
     }
     const stats = context.queueStats();
@@ -199,14 +212,14 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     // A reserva é feita antes de qualquer await seguinte: sem ela, duas
     // requisições simultâneas com a mesma chave passariam ambas pela consulta
     // acima e enfileirariam dois jobs.
-    if (idempotency) context.idempotencyKeys.reserve(idempotency.scope, idempotency.fingerprint);
+    if (idempotency) await context.idempotencyKeys.reserve(idempotency.scope, idempotency.fingerprint);
     try {
       const options = scanOptions(body, join(config.resultsDir, id), config);
       if (!config.allowPrivateTargets) {
         await assertPublicUrl(options.url);
         options.publicNetworkOnly = true;
       }
-      const accessToken = randomBytes(32).toString("base64url");
+      const accessToken = context.accessTokens.issue(id);
       const accessTokenHash = tokenHash(accessToken);
       await mkdir(options.outputDir, { recursive: true });
       await writeFile(join(options.outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
@@ -232,14 +245,14 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       // sair daqui com o id de uma análise que só existe nesta memória.
       await context.scanJobs.created(job);
       jobQueue.enqueue(job);
-      if (idempotency) context.idempotencyKeys.complete(idempotency.scope, job.id, accessToken);
+      if (idempotency) await context.idempotencyKeys.complete(idempotency.scope, job.id, accessToken);
       context.schedule();
       response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/scans/${id}`, accessToken, config.retentionMs, config.trustProxy));
       json(response, 202, { ...publicJob(job, jobQueue.position(job.id)), accessToken });
     } catch (error) {
       // Uma criação que falhou não pode deixar a chave presa numa reserva que
       // nunca vira job: o cliente ficaria em 409 até a retenção expirar.
-      if (idempotency) context.idempotencyKeys.release(idempotency.scope);
+      if (idempotency) await context.idempotencyKeys.release(idempotency.scope);
       throw error;
     }
     return true;
