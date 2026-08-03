@@ -9,6 +9,9 @@ import { NO_SCAN_JOB_PERSISTENCE, createScanJobPersistence } from "./scan-job-pe
 import { NO_ARTIFACT_STORAGE, createS3ArtifactStorage } from "./artifact-storage.js";
 import { PostgresIdempotencyKeys, type IdempotencyKeys } from "./idempotency-store.js";
 import { createDerivedAccessTokenIssuer, createRandomAccessTokenIssuer } from "./access-token.js";
+import { PostgresIdentityStore, type IdentityStore } from "./identity.js";
+import { createGitHubOAuthProvider } from "./oauth.js";
+import { randomBytes } from "node:crypto";
 
 try {
   const env = loadEnvironmentConfig();
@@ -20,6 +23,7 @@ try {
   const database = env.databaseUrl ? createDatabase(env.databaseUrl) : undefined;
   let scanJobs = NO_SCAN_JOB_PERSISTENCE;
   let idempotencyKeys: IdempotencyKeys | undefined;
+  let identity: IdentityStore | undefined;
   if (database) {
     const result = await runMigrations(database);
     console.log(`Banco conectado. Migrations aplicadas agora: ${result.applied.length > 0 ? result.applied.join(", ") : "nenhuma"}.`);
@@ -38,6 +42,7 @@ try {
         ),
     });
     idempotencyKeys = new PostgresIdempotencyKeys(database, env.serverOptions.retentionMs ?? SERVER_OPTION_DEFAULTS.retentionMs);
+    identity = new PostgresIdentityStore(database);
   } else {
     console.log("Sem QA_RADAR_DATABASE_URL: estado em memória, perdido a cada reinício.");
   }
@@ -59,7 +64,17 @@ try {
     console.log("Sem QA_RADAR_ACCESS_TOKEN_SECRET: a repetição de uma criação não reemite token após reinício.");
   }
 
-  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts, accessTokens, idempotencyKeys });
+  // Login exige banco: sem onde guardar usuário e sessão não há como entrar.
+  const oauthProvider = env.githubOAuth && identity ? createGitHubOAuthProvider(env.githubOAuth) : undefined;
+  if (env.githubOAuth && !identity) {
+    console.log("Login por GitHub configurado, mas sem QA_RADAR_DATABASE_URL: entrada indisponível até o banco existir.");
+  }
+  console.log(oauthProvider ? "Login por GitHub disponível." : "Sem login: o produto roda anônimo, com acesso por token da análise.");
+  // Assina só o estado do OAuth. Aleatório por processo é suficiente: o estado
+  // vive 10 minutos e um reinício no meio do login apenas pede para repetir.
+  const sessionSecret = env.accessTokenSecret ?? randomBytes(32).toString("base64url");
+
+  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts, accessTokens, idempotencyKeys, identity, oauthProvider, sessionSecret });
   server.listen(env.port, env.host, () => {
     console.log(`\nQA Radar Web disponível em http://${env.host}:${env.port}`);
     console.log("Pressione Ctrl+C para encerrar.\n");

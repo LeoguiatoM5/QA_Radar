@@ -12,7 +12,7 @@ export const tryHandleCodegen: RouteHandler = async (context, request, response,
   const { config, codegenSessions } = context;
 
   if (request.method === "POST" && url.pathname === "/api/codegen") {
-    if (!context.requireCodeModeCreation(request, response, false)) return true;
+    if (!(await context.requireCodeModeCreation(request, response, false))) return true;
     if (!context.consumeRateLimit(request, response)) return true;
     if (codegenSessions.hasActive()) {
       jsonError(response, "resource_in_use", "Já existe uma gravação do Playwright Codegen em andamento.");

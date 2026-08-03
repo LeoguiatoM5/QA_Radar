@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { randomBytes } from "node:crypto";
 import { readFile, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { spawn } from "node:child_process";
@@ -34,6 +35,9 @@ import { InMemoryIdempotencyKeys, type IdempotencyKeys } from "./idempotency-sto
 import { NO_SCAN_JOB_PERSISTENCE, toRuntimeScanJob, type ScanJobPersistence } from "./scan-job-persistence.js";
 import { NO_ARTIFACT_STORAGE, type ArtifactStorage } from "./artifact-storage.js";
 import { createRandomAccessTokenIssuer, type AccessTokenIssuer } from "./access-token.js";
+import type { IdentityStore, User } from "./identity.js";
+import type { OAuthProvider } from "./oauth.js";
+import { tryHandleAuth, sessionTokenFrom } from "./routes/auth.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -107,6 +111,11 @@ export interface ServerOptions {
   accessTokens: AccessTokenIssuer;
   /** Chaves de idempotência. Ausente usa memória, perdida no reinício. */
   idempotencyKeys: IdempotencyKeys | undefined;
+  /** Ausentes = login indisponível e produto 100% anônimo, como antes. */
+  identity: IdentityStore | undefined;
+  oauthProvider: OAuthProvider | undefined;
+  /** Assina o estado do OAuth e nada mais. */
+  sessionSecret: string;
   operationalLogger: (event: OperationalEvent) => void;
 }
 
@@ -140,10 +149,22 @@ const DEFAULT_OPTIONS: ServerOptions = {
   artifacts: NO_ARTIFACT_STORAGE,
   accessTokens: createRandomAccessTokenIssuer(),
   idempotencyKeys: undefined,
+  identity: undefined,
+  oauthProvider: undefined,
+  sessionSecret: randomBytes(32).toString("base64url"),
   operationalLogger: defaultOperationalLogger,
 };
 
-const ROUTE_HANDLERS: RouteHandler[] = [tryHandlePages, tryHandleDashboardActivity, tryHandleCodegen, tryHandleCodeExecution, tryHandleLegacyJourneys, tryHandleScans, tryHandleHttpRequest];
+const ROUTE_HANDLERS: RouteHandler[] = [
+  tryHandlePages,
+  tryHandleAuth,
+  tryHandleDashboardActivity,
+  tryHandleCodegen,
+  tryHandleCodeExecution,
+  tryHandleLegacyJourneys,
+  tryHandleScans,
+  tryHandleHttpRequest,
+];
 
 /** Prefixo canônico da API. Mudanças que quebram clientes exigem `/api/v2`. */
 export const API_V1_PREFIX = "/api/v1";
@@ -389,19 +410,44 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     }
     return true;
   };
-  const requireCodeModeCreation = (request: IncomingMessage, response: ServerResponse, allowRemoteAdmin: boolean): boolean => {
+  const requireCodeModeCreation = async (request: IncomingMessage, response: ServerResponse, allowRemoteAdmin: boolean): Promise<boolean> => {
     if (!requireCodeModeEnabled(response)) return false;
     if (isLocalRequest(request)) return true;
+    // Estar logado é o caminho normal para rodar a Jornada hospedada. O token
+    // administrativo continua valendo, mas para automação — não é mais o que se
+    // pede a uma pessoa.
+    if (await currentUser(request)) return true;
     if (!allowRemoteAdmin || !codeModeAdminTokenHash) {
       jsonError(response, "feature_disabled", "A execução hospedada do Modo Jornada de Playwright ainda não está habilitada neste servidor.");
       return false;
     }
     const token = bearerToken(request);
     if (token && tokenMatches(token, codeModeAdminTokenHash)) return true;
-    jsonError(response, token ? "forbidden" : "unauthorized", "Token administrativo do Modo Jornada ausente ou inválido.", {
+    jsonError(response, token ? "forbidden" : "unauthorized", "Entre com sua conta para executar a Jornada neste servidor.", {
       "www-authenticate": 'Bearer realm="QA Radar code mode"',
     });
     return false;
+  };
+
+  // Uma requisição pode consultar o usuário mais de uma vez (gate da Jornada,
+  // dono da análise, /auth/me). O cache evita repetir a consulta ao banco.
+  const userByRequest = new WeakMap<IncomingMessage, Promise<User | undefined>>();
+  const currentUser = (request: IncomingMessage): Promise<User | undefined> => {
+    const cached = userByRequest.get(request);
+    if (cached) return cached;
+    const resolved = (async () => {
+      if (!config.identity) return undefined;
+      const token = sessionTokenFrom(request);
+      if (!token) return undefined;
+      try {
+        return await config.identity.userForSession(token);
+      } catch {
+        // Banco fora não pode derrubar a requisição inteira: trata como anônimo.
+        return undefined;
+      }
+    })();
+    userByRequest.set(request, resolved);
+    return resolved;
   };
 
   const consumeRateLimit = (request: IncomingMessage, response: ServerResponse): boolean => {
@@ -587,6 +633,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     idempotencyKeys,
     scanJobs: config.scanJobs,
     artifacts: config.artifacts,
+    identity: config.identity,
+    oauthProvider: config.oauthProvider,
+    currentUser,
     accessTokens: config.accessTokens,
     apiPrefix: UNVERSIONED_API_PREFIX,
     queueStats,

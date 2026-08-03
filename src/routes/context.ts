@@ -10,6 +10,8 @@ import type { IdempotencyKeys } from "../idempotency-store.js";
 import type { ScanJobPersistence } from "../scan-job-persistence.js";
 import type { ArtifactStorage } from "../artifact-storage.js";
 import type { AccessTokenIssuer } from "../access-token.js";
+import type { IdentityStore, User } from "../identity.js";
+import type { OAuthProvider } from "../oauth.js";
 
 /**
  * Shared state and helpers threaded into every route module's tryHandle().
@@ -31,6 +33,11 @@ export interface RequestContext {
   artifacts: ArtifactStorage;
   /** Emite o token de acesso de uma análise. */
   accessTokens: AccessTokenIssuer;
+  /** Ausente = login indisponível; o produto segue anônimo. */
+  identity: IdentityStore | undefined;
+  oauthProvider: OAuthProvider | undefined;
+  /** Usuário da sessão desta requisição, se houver. */
+  currentUser: (request: IncomingMessage) => Promise<User | undefined>;
   /**
    * Prefixo com que o cliente chamou a API nesta requisição: `/api/v1` ou o
    * `/api` legado. Toda rota que devolve um caminho da própria API (cookie de
@@ -43,7 +50,7 @@ export interface RequestContext {
   clientAddress: (request: IncomingMessage) => string;
   isLocalRequest: (request: IncomingMessage) => boolean;
   requireCodeModeEnabled: (response: ServerResponse) => boolean;
-  requireCodeModeCreation: (request: IncomingMessage, response: ServerResponse, allowRemoteAdmin: boolean) => boolean;
+  requireCodeModeCreation: (request: IncomingMessage, response: ServerResponse, allowRemoteAdmin: boolean) => Promise<boolean>;
   logOperational: (event: OperationalEvent) => void;
   targetOrigin: (job: ScanJob) => string;
   expireJob: (job: ScanJob) => void;

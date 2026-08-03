@@ -124,27 +124,16 @@ if(codeStop)codeStop.addEventListener('click',async()=>{if(!codegenId)return;cod
 document.querySelector('#code-save')?.addEventListener('click',()=>{const blob=new Blob([codeEditor.value],{type:'text/typescript'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='qa-radar.spec.ts';link.click();URL.revokeObjectURL(link.href)});
 // Execução hospedada exige o token administrativo do servidor; ele fica só nesta
 // aba e é enviado como Bearer. Em localhost o servidor não pede nada disso.
-const journeyAdmin=document.querySelector('#journey-admin'),journeyAdminToken=document.querySelector('#journey-admin-token');
-const adminTokenKey='qa-radar-code-admin-token';
-function storedAdminToken(){try{return sessionStorage.getItem(adminTokenKey)||''}catch{return ''}}
-function codeExecutionHeaders(){const token=storedAdminToken();return token?{'content-type':'application/json',authorization:'Bearer '+token}:{'content-type':'application/json'}}
-function askForAdminToken(message){
-  if(!journeyAdmin)return;
-  journeyAdmin.hidden=false;
-  if(journeyAdminToken&&!journeyAdminToken.value)journeyAdminToken.value=storedAdminToken();
-  const box=document.querySelector('#journey-admin-error');
-  if(box){box.textContent=message;box.style.display='block'}
-  journeyAdminToken?.focus();
+const journeySignin=document.querySelector('#journey-signin'),journeySigninError=document.querySelector('#journey-signin-error');
+// O token administrativo continua valendo na API, para automação, mas não é
+// mais pedido a uma pessoa: no navegador o caminho é entrar com a conta.
+function codeExecutionHeaders(){return {'content-type':'application/json'}}
+function askToSignIn(message){
+  if(!journeySignin)return;
+  journeySignin.hidden=false;
+  if(journeySigninError){journeySigninError.textContent=message;journeySigninError.style.display='block'}
 }
-const codeExecute=document.querySelector('#code-execute');codeExecute?.addEventListener('click',async()=>{codeExecute.disabled=true;codeExecute.innerHTML='<i class="loader"></i>Executando';codeError.style.display='none';codeResult.hidden=true;try{const response=await fetch('/api/code-execution',{method:'POST',headers:codeExecutionHeaders(),body:JSON.stringify({code:codeEditor.value})}),data=await response.json();if(response.status===401||response.status===403){askForAdminToken(data.error||'Este servidor exige o token administrativo para executar a jornada.');return}if(!response.ok&&data.status!=='failed')throw new Error(data.error||'Não foi possível executar a jornada.');if(journeyAdmin)journeyAdmin.hidden=true;const report=data.report||{},passed=data.status==='passed',stats=report.stats||{},errors=report.errors||[],details=data.failureDetails||errors.map(error=>error.message).join('\n\n'),duration=Number(stats.duration||0);codeResult.className='code-result '+(passed?'pass':'fail');codeResult.innerHTML='<div class="code-result-head"><div><span>'+(passed?'✓ Jornada aprovada':'✕ Jornada reprovada')+'</span><small>Execução '+esc(data.id)+'</small></div><strong>'+((duration/1000).toFixed(1))+'s</strong></div><div class="code-result-metrics"><span><b>'+(stats.expected||0)+'</b> aprovados</span><span><b>'+(stats.unexpected||0)+'</b> falhas</span><span><b>'+(stats.skipped||0)+'</b> ignorados</span></div>'+(details?'<pre>'+esc(details)+'</pre>':'');recordActivity({id:'journey-'+data.id,type:'journey',title:'Jornada Playwright',detail:(stats.expected||0)+' aprovado(s) · '+(stats.unexpected||0)+' falha(s)',status:passed?'success':'error',errors:Number(stats.unexpected||0),warnings:Number(stats.skipped||0),durationMs:duration,href:'/journeys',scores:{javascript:passed?100:Math.max(10,100-Number(stats.unexpected||0)*25),dom:passed?100:55}});codeResult.hidden=false;}catch(reason){codeError.textContent=reason.message;codeError.style.display='block'}finally{codeExecute.disabled=false;codeExecute.textContent='Executar'}});
-document.querySelector('#journey-admin-save')?.addEventListener('click',()=>{
-  const token=journeyAdminToken?.value.trim();
-  if(!token){askForAdminToken('Informe o token administrativo do servidor.');return}
-  try{sessionStorage.setItem(adminTokenKey,token)}catch{}
-  const box=document.querySelector('#journey-admin-error');
-  if(box)box.style.display='none';
-  codeExecute?.click();
-});
+const codeExecute=document.querySelector('#code-execute');codeExecute?.addEventListener('click',async()=>{codeExecute.disabled=true;codeExecute.innerHTML='<i class="loader"></i>Executando';codeError.style.display='none';codeResult.hidden=true;try{const response=await fetch('/api/code-execution',{method:'POST',headers:codeExecutionHeaders(),body:JSON.stringify({code:codeEditor.value})}),data=await response.json();if(response.status===401||response.status===403){askToSignIn(data.error||'Entre com sua conta para executar a jornada.');return}if(!response.ok&&data.status!=='failed')throw new Error(data.error||'Não foi possível executar a jornada.');if(journeySignin)journeySignin.hidden=true;const report=data.report||{},passed=data.status==='passed',stats=report.stats||{},errors=report.errors||[],details=data.failureDetails||errors.map(error=>error.message).join('\n\n'),duration=Number(stats.duration||0);codeResult.className='code-result '+(passed?'pass':'fail');codeResult.innerHTML='<div class="code-result-head"><div><span>'+(passed?'✓ Jornada aprovada':'✕ Jornada reprovada')+'</span><small>Execução '+esc(data.id)+'</small></div><strong>'+((duration/1000).toFixed(1))+'s</strong></div><div class="code-result-metrics"><span><b>'+(stats.expected||0)+'</b> aprovados</span><span><b>'+(stats.unexpected||0)+'</b> falhas</span><span><b>'+(stats.skipped||0)+'</b> ignorados</span></div>'+(details?'<pre>'+esc(details)+'</pre>':'');recordActivity({id:'journey-'+data.id,type:'journey',title:'Jornada Playwright',detail:(stats.expected||0)+' aprovado(s) · '+(stats.unexpected||0)+' falha(s)',status:passed?'success':'error',errors:Number(stats.unexpected||0),warnings:Number(stats.skipped||0),durationMs:duration,href:'/journeys',scores:{javascript:passed?100:Math.max(10,100-Number(stats.unexpected||0)*25),dom:passed?100:55}});codeResult.hidden=false;}catch(reason){codeError.textContent=reason.message;codeError.style.display='block'}finally{codeExecute.disabled=false;codeExecute.textContent='Executar'}});
 document.querySelector('#code-import')?.addEventListener('change',async event=>{const file=event.target.files?.[0];if(file)codeEditor.value=await file.text()});
 
 // Cliente HTTP interativo de /api-tests (estilo Postman) — independente do

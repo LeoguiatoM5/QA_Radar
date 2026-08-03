@@ -40,7 +40,7 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
   const { config, codeExecutionJobs } = context;
 
   if (request.method === "POST" && url.pathname === "/api/code-execution") {
-    if (!context.requireCodeModeCreation(request, response, true)) return true;
+    if (!(await context.requireCodeModeCreation(request, response, true))) return true;
     if (!context.consumeRateLimit(request, response)) return true;
     if (codeExecutionJobs.isActive()) {
       jsonError(response, "resource_in_use", "Já existe uma execução do Modo Jornada de Playwright em andamento.");
