@@ -1,4 +1,5 @@
 import type { ServerOptions } from "./server.js";
+import type { ArtifactStorageConfig } from "./artifact-storage.js";
 
 export function codeModeEnabledForHost(host: string, setting?: string): boolean {
   // Um painel de hospedagem pode criar a chave sem valor (Render faz isso com
@@ -57,6 +58,35 @@ export interface EnvironmentConfig {
    * a CLI e o dashboard local não passem a exigir um banco para rodar.
    */
   databaseUrl: string | undefined;
+  /**
+   * Ausente = artefatos só em disco. No Render o disco é efêmero, então sem
+   * isto todo relatório morre no próximo deploy.
+   */
+  artifactStorage: ArtifactStorageConfig | undefined;
+}
+
+/**
+ * Bucket, chave e segredo andam juntos: configurar só parte deles é engano de
+ * quem configurou, e falhar no boot é melhor do que descobrir que nada subiu
+ * quando o primeiro relatório sumir.
+ */
+function artifactStorageFromEnvironment(source: NodeJS.ProcessEnv): ArtifactStorageConfig | undefined {
+  const bucket = source.QA_RADAR_STORAGE_BUCKET?.trim();
+  const accessKeyId = source.QA_RADAR_STORAGE_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = source.QA_RADAR_STORAGE_SECRET_ACCESS_KEY?.trim();
+  const provided = [bucket, accessKeyId, secretAccessKey].filter(Boolean).length;
+  if (provided === 0) return undefined;
+  if (provided < 3) {
+    throw new Error("Configure QA_RADAR_STORAGE_BUCKET, QA_RADAR_STORAGE_ACCESS_KEY_ID e QA_RADAR_STORAGE_SECRET_ACCESS_KEY em conjunto.");
+  }
+  return {
+    bucket: bucket ?? "",
+    accessKeyId: accessKeyId ?? "",
+    secretAccessKey: secretAccessKey ?? "",
+    // O R2 da Cloudflare exige a região "auto"; a AWS usa a região do bucket.
+    region: source.QA_RADAR_STORAGE_REGION?.trim() || "auto",
+    endpoint: source.QA_RADAR_STORAGE_ENDPOINT?.trim() || undefined,
+  };
 }
 
 export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): EnvironmentConfig {
@@ -74,6 +104,7 @@ export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): 
     port: portFromEnvironment(source),
     sandbox: sandboxUrl && sandboxSigningSecret ? { url: sandboxUrl, signingSecret: sandboxSigningSecret } : undefined,
     databaseUrl: source.QA_RADAR_DATABASE_URL?.trim() || undefined,
+    artifactStorage: artifactStorageFromEnvironment(source),
     serverOptions: {
       allowPrivateTargets: booleanFromEnvironment(source, "QA_RADAR_ALLOW_PRIVATE_TARGETS"),
       trustProxy: booleanFromEnvironment(source, "QA_RADAR_TRUST_PROXY"),

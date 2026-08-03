@@ -32,6 +32,7 @@ import { SERVER_OPTION_DEFAULTS } from "./env.js";
 import { DashboardActivityStore } from "./dashboard-activity-store.js";
 import { IdempotencyStore } from "./idempotency-store.js";
 import { NO_SCAN_JOB_PERSISTENCE, type ScanJobPersistence } from "./scan-job-persistence.js";
+import { NO_ARTIFACT_STORAGE, type ArtifactStorage } from "./artifact-storage.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -99,6 +100,8 @@ export interface ServerOptions {
   hostedCodeRunner: HostedCodeRunner | undefined;
   /** Persistência dos jobs. O padrão inerte mantém o produto funcionando sem banco. */
   scanJobs: ScanJobPersistence;
+  /** Armazenamento durável dos artefatos. O padrão inerte deixa só o disco. */
+  artifacts: ArtifactStorage;
   operationalLogger: (event: OperationalEvent) => void;
 }
 
@@ -129,6 +132,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   codeRunner: runPlaywrightCodeWorker,
   hostedCodeRunner: undefined,
   scanJobs: NO_SCAN_JOB_PERSISTENCE,
+  artifacts: NO_ARTIFACT_STORAGE,
   operationalLogger: defaultOperationalLogger,
 };
 
@@ -409,6 +413,9 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     const timer = setTimeout(() => {
       jobQueue.delete(job.id);
       void config.scanJobs.removed(job.id);
+      void config.artifacts.remove(job.id).catch(() => {
+        /* A limpeza do disco abaixo é o que importa; o objeto vence sozinho. */
+      });
       void rm(job.options.outputDir, { recursive: true, force: true }).finally(() => {
         logOperational({
           event: "scan.expired",
@@ -522,6 +529,21 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           // saída de "running" por execução.
           transitionJob(job, outcome);
           void config.scanJobs.updated(job);
+          // Os artefatos sobem depois do desfecho, quando os relatórios já
+          // foram gravados. Falhar aqui não pode alterar o resultado da
+          // análise, que já está pronto: o disco local segue servindo enquanto
+          // este processo viver.
+          void config.artifacts.upload(job.id, job.options.outputDir).catch((error: unknown) => {
+            console.error(
+              JSON.stringify({
+                source: "qa-radar",
+                event: "artifact.upload_failed",
+                timestamp: new Date().toISOString(),
+                jobId: job.id,
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            );
+          });
           clearTimeout(deadline);
           const usage = resourceUsage(startedAt, cpuStart);
           logOperational({
@@ -557,6 +579,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     dashboardActivity,
     idempotencyKeys,
     scanJobs: config.scanJobs,
+    artifacts: config.artifacts,
     apiPrefix: UNVERSIONED_API_PREFIX,
     queueStats,
     schedule,
