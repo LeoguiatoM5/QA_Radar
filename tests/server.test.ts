@@ -1059,6 +1059,84 @@ describe("web server", () => {
     }
   });
 
+  it("repete a criação com Idempotency-Key sem enfileirar uma segunda análise", async () => {
+    // concurrency 0 mantém o job na fila, que é onde a repetição importa.
+    const idempotentServer = createQaRadarServer({ concurrency: 0, allowPrivateTargets: true });
+    await new Promise<void>((resolve) => idempotentServer.listen(0, "127.0.0.1", resolve));
+    const address = idempotentServer.address() as AddressInfo;
+    const idempotentUrl = `http://127.0.0.1:${address.port}`;
+    const send = (key: string, body: Record<string, unknown>) =>
+      fetch(`${idempotentUrl}/api/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify(body),
+      });
+    try {
+      const first = await send("chave-a", { url: idempotentUrl });
+      assert.equal(first.status, 202);
+      const created = (await first.json()) as { id: string; accessToken: string };
+
+      // A repetição devolve o MESMO job e o mesmo token: sem o token o cliente
+      // que perdeu a primeira resposta não conseguiria acompanhar a análise.
+      const replay = await send("chave-a", { url: idempotentUrl });
+      assert.equal(replay.status, 200);
+      const replayed = (await replay.json()) as { id: string; accessToken: string; status: string };
+      assert.equal(replayed.id, created.id);
+      assert.equal(replayed.accessToken, created.accessToken);
+      assert.equal(replayed.status, "queued");
+
+      // Reusar a chave com outro corpo é erro do cliente, não uma repetição:
+      // devolver o job antigo esconderia que a segunda análise nunca rodou.
+      const divergent = await send("chave-a", { url: idempotentUrl, sitemap: false });
+      assert.equal(divergent.status, 409);
+      assert.equal(((await divergent.json()) as { code: string }).code, "conflict");
+
+      const health = (await (await fetch(`${idempotentUrl}/health`)).json()) as { jobs: number };
+      assert.equal(health.jobs, 1, "a repetição não pode ter criado um segundo job");
+
+      // Chave diferente continua criando uma análise nova.
+      const other = await send("chave-b", { url: idempotentUrl });
+      assert.equal(other.status, 202);
+      assert.notEqual(((await other.json()) as { id: string }).id, created.id);
+
+      const invalidKey = await fetch(`${idempotentUrl}/api/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": "chave inválida com espaços" },
+        body: JSON.stringify({ url: idempotentUrl }),
+      });
+      assert.equal(invalidKey.status, 400);
+      assert.equal(((await invalidKey.json()) as { code: string }).code, "invalid_request");
+    } finally {
+      await new Promise<void>((resolve) => idempotentServer.close(() => resolve()));
+    }
+  });
+
+  it("converge ao repetir o cancelamento, mas recusa cancelar o que já concluiu", async () => {
+    const cancelServer = createQaRadarServer({ concurrency: 0, allowPrivateTargets: true });
+    await new Promise<void>((resolve) => cancelServer.listen(0, "127.0.0.1", resolve));
+    const address = cancelServer.address() as AddressInfo;
+    const cancelUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const created = (await (
+        await fetch(`${cancelUrl}/api/scans`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: cancelUrl }),
+        })
+      ).json()) as { id: string; accessToken: string };
+      const authorization = { authorization: `Bearer ${created.accessToken}` };
+      const cancel = () => fetch(`${cancelUrl}/api/scans/${created.id}/cancel`, { method: "POST", headers: authorization });
+
+      assert.equal((await cancel()).status, 202);
+      // Repetir o cancelamento pede o mesmo estado a que o job já chegou.
+      const second = await cancel();
+      assert.equal(second.status, 202);
+      assert.equal(((await second.json()) as { status: string }).status, "cancelled");
+    } finally {
+      await new Promise<void>((resolve) => cancelServer.close(() => resolve()));
+    }
+  });
+
   it("interrompe a análise ao atingir o timeout global do servidor", async () => {
     const timeoutServer = createQaRadarServer({
       allowPrivateTargets: true,

@@ -511,6 +511,45 @@ pipelines de CI e integrações existentes.
   `inputs`/`outputs` documentados não mudam de formato dentro da mesma
   major version.
 
+#### Erros
+
+Toda resposta de erro da API tem o mesmo formato:
+
+```json
+{ "error": "Informe a URL da aplicação.", "code": "invalid_request" }
+```
+
+`error` é texto de interface em português e pode mudar sem aviso — não use
+para decidir comportamento. `code` é a parte estável do contrato e determina o
+status HTTP: `invalid_request` e `invalid_target` (400), `unauthorized` (401),
+`forbidden` e `feature_disabled` (403), `not_found` (404),
+`method_not_allowed` (405), `conflict` (409), `payload_too_large` (413),
+`rate_limited`, `server_busy` e `resource_in_use` (429), `internal_error`
+(500), `service_unavailable` (503).
+
+`internal_error` nunca traz detalhe da falha: a mensagem real fica no log do
+servidor, numa linha `request.failed`.
+
+#### Repetir a criação de uma análise com segurança
+
+`POST /api/scans` aceita o cabeçalho opcional `Idempotency-Key` (até 255
+caracteres entre letras, números, `.`, `:`, `-` e `_`). Repetir a requisição
+com a mesma chave e o mesmo corpo devolve `200` com a análise já criada e o
+mesmo `accessToken`, em vez de enfileirar uma segunda. Útil quando o cliente
+sofre timeout e não sabe se a primeira chamada chegou.
+
+- Mesma chave com corpo diferente responde `409 conflict`.
+- Repetir enquanto a criação original ainda está em andamento também responde
+  `409` — tente de novo em seguida.
+- A chave vale pelo tempo de retenção da análise e é escopada por cliente.
+- As chaves ficam em memória e se perdem no reinício do processo, como os
+  próprios jobs hoje.
+
+`POST /api/scans/{id}/cancel` é idempotente: cancelar de novo uma análise já
+cancelada responde `202` com o mesmo estado. Cancelar uma análise que já
+concluiu ou falhou continua respondendo `409`, porque o desfecho pedido não é
+o que aconteceu.
+
 ## Roadmap da versão Beta
 
 As funcionalidades abaixo são direções planejadas, sem prazo fechado e sujeitas a mudanças conforme o uso e o feedback recebido.

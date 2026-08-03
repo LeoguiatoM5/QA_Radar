@@ -30,6 +30,7 @@ import { tryHandleDashboardActivity } from "./routes/dashboard-activity.js";
 import type { SpawnProcess } from "./code-execution.js";
 import { SERVER_OPTION_DEFAULTS } from "./env.js";
 import { DashboardActivityStore } from "./dashboard-activity-store.js";
+import { IdempotencyStore } from "./idempotency-store.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -168,6 +169,8 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const codegenSessions = new CodegenSessionStore();
   const codeExecutionJobs = new CodeExecutionJobStore();
   const dashboardActivity = new DashboardActivityStore(config.resultsDir);
+  // Chaves de idempotência vivem tanto quanto os jobs que representam.
+  const idempotencyKeys = new IdempotencyStore(config.retentionMs);
 
   const loadCodeExecutionJob = async (id: string): Promise<CodeExecutionJob | undefined> => {
     const memoryJob = codeExecutionJobs.get(id);
@@ -540,6 +543,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     codegenSessions,
     codeExecutionJobs,
     dashboardActivity,
+    idempotencyKeys,
     queueStats,
     schedule,
     consumeRateLimit,

@@ -6,6 +6,7 @@ import type { CodegenSessionStore, CodegenSession } from "../codegen-session-sto
 import type { CodeExecutionJobStore, CodeExecutionJob } from "../code-execution-job-store.js";
 import type { JourneyRunResult } from "../journey-runner.js";
 import type { DashboardActivityStore } from "../dashboard-activity-store.js";
+import type { IdempotencyStore } from "../idempotency-store.js";
 
 /**
  * Shared state and helpers threaded into every route module's tryHandle().
@@ -20,6 +21,7 @@ export interface RequestContext {
   codegenSessions: CodegenSessionStore;
   codeExecutionJobs: CodeExecutionJobStore;
   dashboardActivity: DashboardActivityStore;
+  idempotencyKeys: IdempotencyStore;
   queueStats: () => { active: number; queued: number; jobs: number };
   schedule: () => void;
   consumeRateLimit: (request: IncomingMessage, response: ServerResponse) => boolean;

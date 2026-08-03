@@ -9,6 +9,8 @@ import type { ScanJob } from "../job-queue.js";
 import { ACCESS_HASH_FILE, accessCookie, json, jsonError, numberField, readJson, requireAccess, storedAccessHash, textField, tokenHash } from "../http-helpers.js";
 import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { isTerminalJobStatus } from "../job-state.js";
+import { IdempotencyStore, MAX_IDEMPOTENCY_KEY_LENGTH, requestFingerprint } from "../idempotency-store.js";
+import type { IncomingMessage } from "node:http";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import type { ServerOptions } from "../server.js";
 import type { RouteHandler } from "./context.js";
@@ -49,6 +51,20 @@ export function scanOptions(body: Record<string, unknown>, outputDir: string, co
     throw new ApiError("feature_disabled", "Histórico por projeto está desabilitado neste servidor.");
   }
   return options;
+}
+
+/**
+ * Lê e valida o cabeçalho `Idempotency-Key`. Ausente, a criação segue o
+ * comportamento anterior: cada POST cria uma análise.
+ */
+function idempotencyRequest(request: IncomingMessage, clientAddress: string, body: Record<string, unknown>): { scope: string; fingerprint: string } | undefined {
+  const raw = request.headers["idempotency-key"];
+  const key = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  if (!key) return undefined;
+  if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH || !/^[\w.:-]+$/.test(key)) {
+    throw invalidRequest(`Idempotency-Key deve ter até ${MAX_IDEMPOTENCY_KEY_LENGTH} caracteres entre letras, números, ponto, dois-pontos, hífen e underscore.`);
+  }
+  return { scope: IdempotencyStore.scope(clientAddress, key), fingerprint: requestFingerprint(body) };
 }
 
 function publicJob(job: ScanJob, queuePosition?: number): Record<string, unknown> {
@@ -113,12 +129,39 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       return true;
     }
     if (!context.consumeRateLimit(request, response)) return true;
+    // O corpo é lido antes da checagem de fila cheia porque a repetição de uma
+    // requisição precisa da impressão digital dele, e é justamente sob carga —
+    // quando a fila enche e o cliente sofre timeout — que a repetição acontece.
+    const body = await readJson(request, MAX_JSON_BODY_BYTES);
+    const idempotency = idempotencyRequest(request, context.clientAddress(request), body);
+    if (idempotency) {
+      const existing = context.idempotencyKeys.get(idempotency.scope);
+      if (existing) {
+        if (existing.fingerprint !== idempotency.fingerprint) {
+          jsonError(response, "conflict", "Esta Idempotency-Key já foi usada com outro corpo de requisição.");
+          return true;
+        }
+        const previous = existing.jobId ? jobQueue.get(existing.jobId) : undefined;
+        if (previous && existing.accessToken) {
+          // Devolve o estado atual do job, não uma cópia congelada da resposta
+          // original: quem repete quer saber em que pé a análise está.
+          response.setHeader("set-cookie", accessCookie(request, `/api/scans/${previous.id}`, existing.accessToken, config.retentionMs, config.trustProxy));
+          json(response, 200, { ...publicJob(previous, jobQueue.position(previous.id)), accessToken: existing.accessToken });
+          return true;
+        }
+        if (!existing.jobId) {
+          jsonError(response, "conflict", "A requisição original com esta Idempotency-Key ainda está em processamento.");
+          return true;
+        }
+        // O job original já expirou: a chave é liberada para uma análise nova.
+        context.idempotencyKeys.release(idempotency.scope);
+      }
+    }
     const stats = context.queueStats();
     if (stats.queued + stats.active >= config.maxQueueSize) {
       jsonError(response, "server_busy", "O serviço está ocupado. Tente novamente em alguns instantes.");
       return true;
     }
-    const body = await readJson(request, MAX_JSON_BODY_BYTES);
     if (config.turnstileSecretKey) {
       const token = textField(body, "cf-turnstile-response");
       if (!token || token.length > 2048) throw invalidRequest("Conclua a verificação de segurança.");
@@ -139,37 +182,49 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       throw new ApiError("feature_disabled", "Filtros regex personalizados estão desabilitados neste servidor.");
     }
     const id = randomUUID();
-    const options = scanOptions(body, join(config.resultsDir, id), config);
-    if (!config.allowPrivateTargets) {
-      await assertPublicUrl(options.url);
-      options.publicNetworkOnly = true;
+    // A reserva é feita antes de qualquer await seguinte: sem ela, duas
+    // requisições simultâneas com a mesma chave passariam ambas pela consulta
+    // acima e enfileirariam dois jobs.
+    if (idempotency) context.idempotencyKeys.reserve(idempotency.scope, idempotency.fingerprint);
+    try {
+      const options = scanOptions(body, join(config.resultsDir, id), config);
+      if (!config.allowPrivateTargets) {
+        await assertPublicUrl(options.url);
+        options.publicNetworkOnly = true;
+      }
+      const accessToken = randomBytes(32).toString("base64url");
+      const accessTokenHash = tokenHash(accessToken);
+      await mkdir(options.outputDir, { recursive: true });
+      await writeFile(join(options.outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
+      const job: ScanJob = {
+        id,
+        status: "queued",
+        createdAt: new Date().toISOString(),
+        options,
+        report: undefined,
+        error: undefined,
+        progress: {
+          discoveredPages: 0,
+          completedPages: 0,
+          currentUrl: undefined,
+          percent: 0,
+          stage: "queued",
+        },
+        controller: new AbortController(),
+        cancelRequested: false,
+        accessTokenHash,
+      };
+      jobQueue.enqueue(job);
+      if (idempotency) context.idempotencyKeys.complete(idempotency.scope, job.id, accessToken);
+      context.schedule();
+      response.setHeader("set-cookie", accessCookie(request, `/api/scans/${id}`, accessToken, config.retentionMs, config.trustProxy));
+      json(response, 202, { ...publicJob(job, jobQueue.position(job.id)), accessToken });
+    } catch (error) {
+      // Uma criação que falhou não pode deixar a chave presa numa reserva que
+      // nunca vira job: o cliente ficaria em 409 até a retenção expirar.
+      if (idempotency) context.idempotencyKeys.release(idempotency.scope);
+      throw error;
     }
-    const accessToken = randomBytes(32).toString("base64url");
-    const accessTokenHash = tokenHash(accessToken);
-    await mkdir(options.outputDir, { recursive: true });
-    await writeFile(join(options.outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
-    const job: ScanJob = {
-      id,
-      status: "queued",
-      createdAt: new Date().toISOString(),
-      options,
-      report: undefined,
-      error: undefined,
-      progress: {
-        discoveredPages: 0,
-        completedPages: 0,
-        currentUrl: undefined,
-        percent: 0,
-        stage: "queued",
-      },
-      controller: new AbortController(),
-      cancelRequested: false,
-      accessTokenHash,
-    };
-    jobQueue.enqueue(job);
-    context.schedule();
-    response.setHeader("set-cookie", accessCookie(request, `/api/scans/${id}`, accessToken, config.retentionMs, config.trustProxy));
-    json(response, 202, { ...publicJob(job, jobQueue.position(job.id)), accessToken });
     return true;
   }
 
@@ -182,6 +237,13 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       return true;
     }
     if (!requireAccess(request, response, job.accessTokenHash)) return true;
+    // Cancelar o que já está cancelado é a mesma operação repetida e converge
+    // para o mesmo estado, então responde sucesso. Cancelar algo que concluiu
+    // ou falhou pede um desfecho diferente do que aconteceu: continua conflito.
+    if (job.status === "cancelled") {
+      json(response, 202, publicJob(job));
+      return true;
+    }
     if (isTerminalJobStatus(job.status)) {
       jsonError(response, "conflict", "A análise já foi finalizada.");
       return true;
