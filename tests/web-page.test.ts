@@ -148,10 +148,13 @@ describe("dashboard components", () => {
     assert.match(html, /id="code-mode-panel"/);
     assert.match(html, /id="playwright-code"/);
     assert.match(html, /id="code-execute"/);
-    // A execução hospedada exige o token administrativo; a interface precisa saber pedi-lo.
-    assert.match(html, /id="journey-admin-token"/);
-    assert.match(html, /qa-radar-code-admin-token/);
-    assert.match(html, /authorization:'Bearer '\+token/);
+    // O painel de token administrativo virou aviso para entrar. O token segue
+    // valendo na API para automação, mas deixou de ser o que se pede a uma
+    // pessoa — e por isso não é mais guardado no navegador.
+    assert.match(html, /id="journey-signin"/);
+    assert.match(html, /Entrar com GitHub/);
+    assert.doesNotMatch(html, /journey-admin-token/);
+    assert.doesNotMatch(html, /qa-radar-code-admin-token/);
     assert.match(html, /\.app-sidebar \.nav-link\{/);
     assert.match(html, />Executar<\/button>/);
     assert.doesNotMatch(html, /somente local|Executar localmente/);

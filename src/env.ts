@@ -69,6 +69,8 @@ export interface EnvironmentConfig {
    * depois de um reinício, sem guardar nada em texto claro.
    */
   accessTokenSecret: string | undefined;
+  /** Ausente = login indisponível; a interface nem oferece entrada. */
+  githubOAuth: { clientId: string; clientSecret: string } | undefined;
 }
 
 /**
@@ -95,6 +97,17 @@ function artifactStorageFromEnvironment(source: NodeJS.ProcessEnv): ArtifactStor
   };
 }
 
+/** Id e segredo andam juntos: metade configurada é engano de quem configurou. */
+function githubOAuthFromEnvironment(source: NodeJS.ProcessEnv): { clientId: string; clientSecret: string } | undefined {
+  const clientId = source.QA_RADAR_GITHUB_CLIENT_ID?.trim();
+  const clientSecret = source.QA_RADAR_GITHUB_CLIENT_SECRET?.trim();
+  if (!clientId && !clientSecret) return undefined;
+  if (!clientId || !clientSecret) {
+    throw new Error("Configure QA_RADAR_GITHUB_CLIENT_ID e QA_RADAR_GITHUB_CLIENT_SECRET em conjunto.");
+  }
+  return { clientId, clientSecret };
+}
+
 export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): EnvironmentConfig {
   const host = source.HOST ?? "127.0.0.1";
   const sandboxUrl = source.QA_RADAR_SANDBOX_URL?.trim();
@@ -112,6 +125,7 @@ export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): 
     databaseUrl: source.QA_RADAR_DATABASE_URL?.trim() || undefined,
     artifactStorage: artifactStorageFromEnvironment(source),
     accessTokenSecret: source.QA_RADAR_ACCESS_TOKEN_SECRET?.trim() || undefined,
+    githubOAuth: githubOAuthFromEnvironment(source),
     serverOptions: {
       allowPrivateTargets: booleanFromEnvironment(source, "QA_RADAR_ALLOW_PRIVATE_TARGETS"),
       trustProxy: booleanFromEnvironment(source, "QA_RADAR_TRUST_PROXY"),
