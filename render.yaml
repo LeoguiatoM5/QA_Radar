@@ -3,7 +3,10 @@ services:
     name: qa-radar
     runtime: docker
     plan: free
-    healthCheckPath: /health
+    # /ready, não /health: o healthCheckPath do Render decide se a instância
+    # entra em serviço, o que é prontidão e não vivacidade. /health responde
+    # 200 com o processo de pé mesmo sem diretório de resultados gravável.
+    healthCheckPath: /ready
     # As variáveis abaixo cobrem o que este Blueprint precisa. As seguintes
     # ficam de fora de propósito, não por esquecimento:
     #   QA_RADAR_ALLOW_PRIVATE_TARGETS — nunca deve ser true num deploy público.

@@ -758,11 +758,29 @@ erro de rede enquanto a execução seguiu no runner. Ajuste
 
 O servidor limita por padrão cada endereço a 10 novas análises por minuto,
 retorna os cabeçalhos `X-RateLimit-Limit`, `X-RateLimit-Remaining` e
-`X-RateLimit-Reset`, mantém resultados por uma hora e expõe `GET /health` para
-monitoramento. Quando o limite é excedido, a resposta `429` também informa
-`Retry-After`. Em uma hospedagem com proxy reverso conhecido, configure
-`QA_RADAR_TRUST_PROXY=true` para considerar `X-Forwarded-For`. Não habilite essa
-opção ao expor o processo Node diretamente.
+`X-RateLimit-Reset` e mantém resultados por uma hora. Quando o limite é
+excedido, a resposta `429` também informa `Retry-After`. Em uma hospedagem com
+proxy reverso conhecido, configure `QA_RADAR_TRUST_PROXY=true` para considerar
+`X-Forwarded-For`. Não habilite essa opção ao expor o processo Node diretamente.
+
+Para monitoramento há dois endpoints, com propósitos diferentes:
+
+- `GET /health` — **vivacidade**. Responde `200` enquanto o processo estiver de
+  pé e atendendo, sem consultar dependência nenhuma. É o que o `HEALTHCHECK` da
+  imagem Docker usa: quando ele falha o contêiner é reiniciado, e reiniciar não
+  resolve disco cheio nem runner fora do ar — só processo travado.
+- `GET /ready` — **prontidão**. Responde `200 {"status":"ready"}` ou
+  `503 {"status":"not_ready"}` com um objeto `checks` detalhando cada
+  dependência. É o `healthCheckPath` configurado no Render, que decide se a
+  instância entra em serviço.
+
+Hoje só `checks.resultsDir` reprova a prontidão, porque um diretório de
+resultados não gravável é o único problema que impede a instância de produzir
+qualquer relatório. Os demais são informativos: `checks.queue` mostra
+`saturated` com a fila cheia (carga normal, que passa sozinha — reprovar por
+isso faria a hospedagem reiniciar a instância justamente enquanto ela trabalha)
+e `checks.codeMode` mostra `disabled`, `local` ou `hosted`, útil para flagrar o
+Modo Jornada anunciado sem runner hospedado por trás.
 
 O limite global padrão de uma análise é cinco minutos. No Blueprint do Render ele
 é reduzido para três minutos por `QA_RADAR_MAX_JOB_DURATION_MS=180000`. Esse

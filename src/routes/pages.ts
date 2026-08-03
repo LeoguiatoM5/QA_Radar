@@ -17,12 +17,35 @@ async function resultsDirWritable(resultsDir: string): Promise<boolean> {
 export const tryHandlePages: RouteHandler = async (context, request, response, url) => {
   const { config } = context;
 
+  // Vivacidade: o processo está de pé e responde. Não consulta dependência
+  // nenhuma de propósito — quem consome isto (HEALTHCHECK do Docker) reinicia o
+  // contêiner quando falha, e reiniciar não conserta disco cheio nem sandbox
+  // fora do ar. Só um processo travado justifica o reinício.
   if (request.method === "GET" && url.pathname === "/health") {
-    if (!(await resultsDirWritable(config.resultsDir))) {
-      json(response, 503, { status: "error", reason: "results-dir-unwritable" });
-      return true;
-    }
     json(response, 200, { status: "ok", ...context.queueStats() });
+    return true;
+  }
+
+  // Prontidão: esta instância consegue atender agora? É o alvo do
+  // healthCheckPath do Render, que decide se a instância recebe tráfego.
+  if (request.method === "GET" && url.pathname === "/ready") {
+    const stats = context.queueStats();
+    const resultsDir = await resultsDirWritable(config.resultsDir);
+    const checks = {
+      // Sem diretório gravável nenhuma análise produz relatório: é o único
+      // problema aqui que a instância não tem como contornar.
+      resultsDir: resultsDir ? "ok" : "unwritable",
+      // Informativo, nunca reprova. Fila cheia é carga normal e passa sozinha;
+      // reprovar por isso faria a hospedagem reiniciar a instância justamente
+      // quando ela está ocupada trabalhando.
+      queue: stats.queued + stats.active >= config.maxQueueSize ? "saturated" : "ok",
+      // Também informativo: expõe se o Modo Jornada está anunciado sem runner
+      // hospedado por trás, combinação que já deixou a Jornada respondendo 503
+      // em produção sem sinal nenhum.
+      codeMode: !config.allowCodeMode ? "disabled" : config.hostedCodeRunner ? "hosted" : "local",
+      ...stats,
+    };
+    json(response, resultsDir ? 200 : 503, { status: resultsDir ? "ready" : "not_ready", checks });
     return true;
   }
 
