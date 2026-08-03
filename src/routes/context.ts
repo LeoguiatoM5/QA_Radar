@@ -8,6 +8,7 @@ import type { JourneyRunResult } from "../journey-runner.js";
 import type { DashboardActivityStore } from "../dashboard-activity-store.js";
 import type { IdempotencyStore } from "../idempotency-store.js";
 import type { ScanJobPersistence } from "../scan-job-persistence.js";
+import type { ArtifactStorage } from "../artifact-storage.js";
 
 /**
  * Shared state and helpers threaded into every route module's tryHandle().
@@ -25,6 +26,8 @@ export interface RequestContext {
   idempotencyKeys: IdempotencyStore;
   /** Espelha os jobs no banco. Inerte quando não há QA_RADAR_DATABASE_URL. */
   scanJobs: ScanJobPersistence;
+  /** Artefatos duráveis. Inerte sem configuração: só disco, como hoje. */
+  artifacts: ArtifactStorage;
   /**
    * Prefixo com que o cliente chamou a API nesta requisição: `/api/v1` ou o
    * `/api` legado. Toda rota que devolve um caminho da própria API (cookie de

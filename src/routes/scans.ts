@@ -324,7 +324,15 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       return true;
     }
     const outputDir = job?.options.outputDir ?? join(config.resultsDir, id);
-    const content = await readFile(join(outputDir, artifact));
+    // O disco vem primeiro: é mais rápido e é onde o artefato acabou de ser
+    // escrito. O armazenamento durável cobre o caso que hoje quebra — o
+    // contêiner foi recriado e levou o disco junto, deixando morto o link que a
+    // pessoa guardou.
+    const content = (await readFile(join(outputDir, artifact)).catch(() => undefined)) ?? (await context.artifacts.read(id, artifact));
+    if (!content) {
+      jsonError(response, "not_found", "Artefato não encontrado ou já expirado.");
+      return true;
+    }
     const contentType = artifact.endsWith(".html")
       ? "text/html; charset=utf-8"
       : artifact.endsWith(".xml")

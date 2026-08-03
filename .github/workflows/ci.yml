@@ -95,9 +95,19 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - name: Subir MinIO como S3 compatível
+        # Serviço avulso em vez de `services:`: a imagem precisa do argumento
+        # `server /data`, e `services` não permite passar comando.
+        run: |
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin quay.io/minio/minio:latest server /data
+          for i in $(seq 1 30); do
+            curl -sSf http://127.0.0.1:9000/minio/health/live && break
+            sleep 1
+          done
       - run: npm run test:persistence
         env:
           QA_RADAR_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/qaradar
+          QA_RADAR_TEST_STORAGE_ENDPOINT: http://127.0.0.1:9000
 
   sandbox:
     name: Homologação do sandbox

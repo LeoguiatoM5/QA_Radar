@@ -6,6 +6,7 @@ import { createDatabase } from "./database.js";
 import { runMigrations } from "./migrations.js";
 import { PostgresScanJobRepository } from "./scan-job-repository.js";
 import { NO_SCAN_JOB_PERSISTENCE, createScanJobPersistence } from "./scan-job-persistence.js";
+import { NO_ARTIFACT_STORAGE, createS3ArtifactStorage } from "./artifact-storage.js";
 
 try {
   const env = loadEnvironmentConfig();
@@ -41,7 +42,16 @@ try {
     console.log("Sem QA_RADAR_DATABASE_URL: estado em memória, perdido a cada reinício.");
   }
 
-  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs });
+  // Configurado e inacessível é pior que não configurado: o boot falha aqui em
+  // vez de deixar cada análise subir artefato para lugar nenhum.
+  const artifacts = env.artifactStorage ? await createS3ArtifactStorage(env.artifactStorage) : NO_ARTIFACT_STORAGE;
+  console.log(
+    env.artifactStorage
+      ? `Artefatos duráveis no bucket ${env.artifactStorage.bucket}${env.artifactStorage.endpoint ? ` (${env.artifactStorage.endpoint})` : ""}.`
+      : "Artefatos só em disco: um contêiner recriado leva os relatórios junto.",
+  );
+
+  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts });
   server.listen(env.port, env.host, () => {
     console.log(`\nQA Radar Web disponível em http://${env.host}:${env.port}`);
     console.log("Pressione Ctrl+C para encerrar.\n");

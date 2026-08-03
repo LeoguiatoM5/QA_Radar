@@ -839,10 +839,48 @@ Com o banco ligado:
 - o token de acesso continua sendo exigido: persistir não afrouxa o acesso, e o
   banco guarda apenas o hash dele.
 
-**Ainda não persistido:** as chaves de idempotência e os artefatos (relatório
-HTML, screenshots, vídeos), que seguem em memória e em disco. O agendamento
-também continua em processo — o repositório já suporta claim atômico entre
-instâncias (`FOR UPDATE SKIP LOCKED`), mas a fila em si ainda não usa isso.
+**Ainda não persistido:** as chaves de idempotência, que seguem em memória. O
+agendamento também continua em processo — o repositório já suporta claim atômico
+entre instâncias (`FOR UPDATE SKIP LOCKED`), mas a fila em si ainda não usa isso.
+
+### Artefatos duráveis (opcional)
+
+Relatórios, screenshots e vídeos são gravados em disco. Em hospedagem com disco
+efêmero (o caso do Render), isso significa que **todo relatório morre no próximo
+deploy** e o link que alguém guardou para de funcionar.
+
+Para mantê-los, aponte para qualquer armazenamento compatível com S3:
+
+```bash
+QA_RADAR_STORAGE_BUCKET=qa-radar-artefatos \
+QA_RADAR_STORAGE_ACCESS_KEY_ID=... \
+QA_RADAR_STORAGE_SECRET_ACCESS_KEY=... \
+QA_RADAR_STORAGE_ENDPOINT=https://<conta>.r2.cloudflarestorage.com \
+npm run web
+```
+
+- As três primeiras variáveis andam juntas: preencher só parte delas falha no
+  boot, em vez de deixar cada análise subir artefato para lugar nenhum.
+- `QA_RADAR_STORAGE_ENDPOINT` vazio usa a AWS; preenchido aponta para Cloudflare
+  R2, MinIO ou outro compatível.
+- `QA_RADAR_STORAGE_REGION` tem padrão `auto`, que é o que o R2 exige. Na AWS,
+  informe a região do bucket.
+
+O scanner continua escrevendo em disco (ele precisa de sistema de arquivos, e a
+CLI grava exatamente ali). O envio acontece depois que a análise termina, e a
+leitura tenta o disco primeiro — o armazenamento cobre justamente o caso em que
+o disco não existe mais. Falha no envio é registrada e não altera o resultado da
+análise, que já está pronto.
+
+**Duas ressalvas:**
+
+- Servir um artefato depois que o contêiner foi recriado também exige o banco
+  (`QA_RADAR_DATABASE_URL`): o hash do token de acesso fica em disco junto com
+  os artefatos, e sem o banco não há como validar o acesso. Configure os dois.
+- O `@aws-sdk/client-s3` é **dependência opcional** e só é carregado quando o
+  armazenamento está configurado — quem usa apenas a CLI nunca o importa. Ele
+  emite um aviso de descontinuação em Node 20, que é a versão mínima declarada
+  aqui; funciona, mas o aviso aparece. Em Node 22+ não aparece.
 
 Para desenvolver contra um Postgres descartável:
 
