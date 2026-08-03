@@ -145,7 +145,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
         if (previous && existing.accessToken) {
           // Devolve o estado atual do job, não uma cópia congelada da resposta
           // original: quem repete quer saber em que pé a análise está.
-          response.setHeader("set-cookie", accessCookie(request, `/api/scans/${previous.id}`, existing.accessToken, config.retentionMs, config.trustProxy));
+          response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/scans/${previous.id}`, existing.accessToken, config.retentionMs, config.trustProxy));
           json(response, 200, { ...publicJob(previous, jobQueue.position(previous.id)), accessToken: existing.accessToken });
           return true;
         }
@@ -217,7 +217,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       jobQueue.enqueue(job);
       if (idempotency) context.idempotencyKeys.complete(idempotency.scope, job.id, accessToken);
       context.schedule();
-      response.setHeader("set-cookie", accessCookie(request, `/api/scans/${id}`, accessToken, config.retentionMs, config.trustProxy));
+      response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/scans/${id}`, accessToken, config.retentionMs, config.trustProxy));
       json(response, 202, { ...publicJob(job, jobQueue.position(job.id)), accessToken });
     } catch (error) {
       // Uma criação que falhou não pode deixar a chave presa numa reserva que

@@ -107,7 +107,7 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
       await writeFile(join(outputDir, "code-report.json"), JSON.stringify({ status: executionStatus, report, ...(failureDetails ? { failureDetails } : {}) }), { encoding: "utf8", mode: 0o600 });
       retained = true;
       context.expireCodeExecution(job);
-      response.setHeader("set-cookie", accessCookie(request, `/api/code-executions/${id}`, accessToken, config.retentionMs, config.trustProxy));
+      response.setHeader("set-cookie", accessCookie(request, `${context.apiPrefix}/code-executions/${id}`, accessToken, config.retentionMs, config.trustProxy));
       json(response, execution.exitCode === 0 ? 200 : 422, { id, status: executionStatus, report, accessToken, ...(failureDetails ? { failureDetails } : {}) });
     } finally {
       codeExecutionJobs.finish();
@@ -145,7 +145,7 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
     const journey = applyStepDescriptionOverrides(await context.codeReportAsJourney(job), overrides);
     const html = await createJourneyEvidenceHtml(journey, metadata, (relative) => readFile(join(job.outputDir, relative)));
     await writeFile(join(job.outputDir, "code-evidence.html"), html, "utf8");
-    json(response, 201, { url: `/api/code-executions/${job.id}/code-evidence.html` });
+    json(response, 201, { url: `${context.apiPrefix}/code-executions/${job.id}/code-evidence.html` });
     return true;
   }
 

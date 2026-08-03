@@ -1100,6 +1100,48 @@ describe("web server", () => {
     }
   });
 
+  it("serve a API sob /api/v1 e mantém /api como alias, cada um com seu cookie", async () => {
+    const versionedServer = createQaRadarServer({ concurrency: 0, allowPrivateTargets: true });
+    await new Promise<void>((resolve) => versionedServer.listen(0, "127.0.0.1", resolve));
+    const address = versionedServer.address() as AddressInfo;
+    const versionedUrl = `http://127.0.0.1:${address.port}`;
+    try {
+      const created = await fetch(`${versionedUrl}/api/v1/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: versionedUrl }),
+      });
+      assert.equal(created.status, 202);
+      const job = (await created.json()) as { id: string; accessToken: string };
+
+      // O cookie tem de apontar para o prefixo que o cliente usou: preso em
+      // /api ele não acompanharia as consultas seguintes em /api/v1.
+      assert.match(created.headers.get("set-cookie") ?? "", new RegExp(`Path=/api/v1/scans/${job.id}`));
+
+      const status = await fetch(`${versionedUrl}/api/v1/scans/${job.id}`, {
+        headers: { authorization: `Bearer ${job.accessToken}` },
+      });
+      assert.equal(status.status, 200);
+      assert.equal(((await status.json()) as { id: string }).id, job.id);
+
+      // O mesmo job continua acessível pelo caminho legado.
+      const legacy = await fetch(`${versionedUrl}/api/scans/${job.id}`, {
+        headers: { authorization: `Bearer ${job.accessToken}` },
+      });
+      assert.equal(legacy.status, 200);
+
+      // A query string sobrevive à remoção do prefixo.
+      const history = await fetch(`${versionedUrl}/api/v1/history?project=loja&environment=staging`);
+      assert.equal(history.status, 403);
+      assert.equal(((await history.json()) as { code: string }).code, "feature_disabled");
+
+      // Uma versão que não existe não pode cair no alias por acidente.
+      assert.equal((await fetch(`${versionedUrl}/api/v2/scans/${job.id}`)).status, 404);
+    } finally {
+      await new Promise<void>((resolve) => versionedServer.close(() => resolve()));
+    }
+  });
+
   it("repete a criação com Idempotency-Key sem enfileirar uma segunda análise", async () => {
     // concurrency 0 mantém o job na fila, que é onde a repetição importa.
     const idempotentServer = createQaRadarServer({ concurrency: 0, allowPrivateTargets: true });

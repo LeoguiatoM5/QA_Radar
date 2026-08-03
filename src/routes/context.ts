@@ -22,6 +22,12 @@ export interface RequestContext {
   codeExecutionJobs: CodeExecutionJobStore;
   dashboardActivity: DashboardActivityStore;
   idempotencyKeys: IdempotencyStore;
+  /**
+   * Prefixo com que o cliente chamou a API nesta requisição: `/api/v1` ou o
+   * `/api` legado. Toda rota que devolve um caminho da própria API (cookie de
+   * acesso, URL de artefato) tem de usar este valor, não uma constante.
+   */
+  apiPrefix: string;
   queueStats: () => { active: number; queued: number; jobs: number };
   schedule: () => void;
   consumeRateLimit: (request: IncomingMessage, response: ServerResponse) => boolean;

@@ -495,17 +495,21 @@ pipelines de CI e integrações existentes.
 
 ### API HTTP do dashboard (`/api/...`)
 
-- As rotas HTTP do servidor web (`/api/scans`, `/api/code-execution`,
-  `/api/history`, etc.) ainda não são versionadas por caminho (não existe
-  `/api/v1` — isso está no roadmap de arquitetura, ver seção
-  "Limitações da Beta"). Enquanto isso, elas são tratadas como **pré-1.0
-  em evolução**: mudanças de formato são possíveis entre versões menores do
-  pacote, mas toda mudança que quebra um cliente existente é registrada no
-  `CHANGELOG.md` sob "Breaking" antes do release.
-- Assim que a API ganhar prefixo de versão (`/api/v1`), o contrato sob esse
-  prefixo passa a seguir a mesma regra do schema JSON: mudanças que quebram
+- **`/api/v1` é o prefixo canônico.** Toda rota da API responde sob ele
+  (`/api/v1/scans`, `/api/v1/code-execution`, `/api/v1/history`, etc.) e o
+  contrato aí dentro segue a mesma regra do schema JSON: mudanças que quebram
   compatibilidade exigem `/api/v2`, nunca uma alteração silenciosa em
-  `/api/v1`.
+  `/api/v1`. Prefira este caminho em qualquer integração nova.
+- **`/api/...` sem versão continua funcionando** como alias do mesmo conjunto
+  de rotas, para não quebrar clientes existentes. Ele segue tratado como
+  **pré-1.0 em evolução**: mudanças de formato são possíveis entre versões
+  menores do pacote, sempre registradas no `CHANGELOG.md` sob "Breaking" antes
+  do release. O cliente web embutido ainda usa este alias.
+- Caminhos que a API devolve (cookie de acesso, URL de relatório de evidências)
+  acompanham o prefixo com que a requisição chegou, então um cliente que fala
+  `/api/v1` nunca recebe de volta um caminho `/api`.
+- `/health` e `/ready` ficam de fora do versionamento de propósito: são
+  endpoints operacionais da instância, não parte do contrato de dados.
 - A GitHub Action composta já segue este modelo hoje: é publicada com uma
   tag de versão maior (`@v3`) que os consumidores fixam no workflow, e seus
   `inputs`/`outputs` documentados não mudam de formato dentro da mesma
