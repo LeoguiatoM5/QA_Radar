@@ -66,6 +66,39 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:lighthouse
 
+  persistence:
+    name: Persistência (Postgres)
+    runs-on: ubuntu-latest
+    # Container de serviço só existe em runner Linux, por isso este job é
+    # separado do `validate`, que também roda no Windows. Sem ele a
+    # implementação Postgres do repositório nunca seria exercitada no CI: a
+    # suíte padrão só cobre a de memória.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: qaradar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:persistence
+        env:
+          QA_RADAR_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/qaradar
+
   sandbox:
     name: Homologação do sandbox
     runs-on: ubuntu-latest
