@@ -811,6 +811,49 @@ O limite global padrão de uma análise é cinco minutos. No Blueprint do Render
 é reduzido para três minutos por `QA_RADAR_MAX_JOB_DURATION_MS=180000`. Esse
 limite inclui inicialização do navegador, navegação, inspeção e relatórios.
 
+### Persistência (opcional)
+
+Sem configuração, o QA Radar guarda tudo em memória: reiniciar o processo perde
+o registro das análises. Isso é intencional — a CLI e o dashboard local não
+exigem banco nenhum para funcionar.
+
+Para preservar as análises entre reinícios, aponte `QA_RADAR_DATABASE_URL` para
+um PostgreSQL:
+
+```bash
+QA_RADAR_DATABASE_URL="postgresql://usuario:senha@host/banco" npm run web
+```
+
+As migrations são aplicadas no boot, antes de a porta abrir. TLS é decidido pela
+URL: obrigatório em host remoto, dispensado em `localhost` (onde normalmente não
+há certificado), e um `?sslmode=` explícito sempre vence.
+
+Com o banco ligado:
+
+- o registro de cada análise (estado, opções, progresso, relatório, erro)
+  sobrevive ao reinício, e `GET /api/v1/scans/{id}` responde por ela mesmo depois
+  de o processo ter perdido a memória;
+- análises deixadas em execução por uma instância encerrada são fechadas como
+  falha no boot seguinte, com o motivo — antes elas ficariam "em execução" para
+  sempre;
+- o token de acesso continua sendo exigido: persistir não afrouxa o acesso, e o
+  banco guarda apenas o hash dele.
+
+**Ainda não persistido:** as chaves de idempotência e os artefatos (relatório
+HTML, screenshots, vídeos), que seguem em memória e em disco. O agendamento
+também continua em processo — o repositório já suporta claim atômico entre
+instâncias (`FOR UPDATE SKIP LOCKED`), mas a fila em si ainda não usa isso.
+
+Para desenvolver contra um Postgres descartável:
+
+```bash
+docker run -d --name qa-radar-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=qaradar -p 55432:5432 postgres:16-alpine
+QA_RADAR_TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:55432/qaradar" npm run test:persistence
+```
+
+Sem `QA_RADAR_TEST_DATABASE_URL`, `npm run test:persistence` exercita apenas a
+implementação em memória; o CI roda as duas.
+
 Para alterar host ou porta conscientemente:
 
 ```bash

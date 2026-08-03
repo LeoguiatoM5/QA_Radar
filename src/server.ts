@@ -31,6 +31,7 @@ import type { SpawnProcess } from "./code-execution.js";
 import { SERVER_OPTION_DEFAULTS } from "./env.js";
 import { DashboardActivityStore } from "./dashboard-activity-store.js";
 import { IdempotencyStore } from "./idempotency-store.js";
+import { NO_SCAN_JOB_PERSISTENCE, type ScanJobPersistence } from "./scan-job-persistence.js";
 
 export interface OperationalEvent {
   event: "scan.started" | "scan.completed" | "scan.failed" | "scan.cancelled" | "scan.expired";
@@ -96,6 +97,8 @@ export interface ServerOptions {
   codegenSpawner: SpawnProcess;
   codeRunner: HostedCodeRunner;
   hostedCodeRunner: HostedCodeRunner | undefined;
+  /** Persistência dos jobs. O padrão inerte mantém o produto funcionando sem banco. */
+  scanJobs: ScanJobPersistence;
   operationalLogger: (event: OperationalEvent) => void;
 }
 
@@ -125,6 +128,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   codegenSpawner: spawn,
   codeRunner: runPlaywrightCodeWorker,
   hostedCodeRunner: undefined,
+  scanJobs: NO_SCAN_JOB_PERSISTENCE,
   operationalLogger: defaultOperationalLogger,
 };
 
@@ -404,6 +408,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const expireJob = (job: ScanJob): void => {
     const timer = setTimeout(() => {
       jobQueue.delete(job.id);
+      void config.scanJobs.removed(job.id);
       void rm(job.options.outputDir, { recursive: true, force: true }).finally(() => {
         logOperational({
           event: "scan.expired",
@@ -451,6 +456,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         job.controller.abort(new Error(`A análise excedeu o limite global de ${config.maxJobDurationMs} ms.`));
       }, config.maxJobDurationMs);
       deadline.unref();
+      void config.scanJobs.updated(job);
       logOperational({
         event: "scan.started",
         timestamp: new Date(startedAt).toISOString(),
@@ -515,6 +521,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
           // ramos separados: assim a máquina de estados vê exatamente uma
           // saída de "running" por execução.
           transitionJob(job, outcome);
+          void config.scanJobs.updated(job);
           clearTimeout(deadline);
           const usage = resourceUsage(startedAt, cpuStart);
           logOperational({
@@ -549,6 +556,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     codeExecutionJobs,
     dashboardActivity,
     idempotencyKeys,
+    scanJobs: config.scanJobs,
     apiPrefix: UNVERSIONED_API_PREFIX,
     queueStats,
     schedule,

@@ -1,0 +1,107 @@
+import type { ScanJob } from "./job-queue.js";
+import type { PersistedScanJob, ScanJobRepository } from "./scan-job-repository.js";
+
+/**
+ * Persistência write-through dos jobs de análise.
+ *
+ * O agendamento continua em memória de propósito: um `ScanJob` carrega um
+ * `AbortController` e o progresso ao vivo, que só existem no processo que está
+ * rodando a análise. O banco guarda o registro — estado, opções, relatório,
+ * erro — para que ele sobreviva ao reinício e possa ser consultado.
+ *
+ * A interface é sempre chamada, com ou sem banco: sem ele entra a implementação
+ * inerte, e nenhum ponto do código precisa perguntar se há persistência.
+ */
+export interface ScanJobPersistence {
+  /** Grava o job recém-criado. Erro aqui deve abortar a criação. */
+  created(job: ScanJob): Promise<void>;
+  /** Reflete uma mudança de estado, progresso ou resultado. Nunca lança. */
+  updated(job: ScanJob): Promise<void>;
+  /** Remove o registro quando a retenção expira. Nunca lança. */
+  removed(id: string): Promise<void>;
+  /** Busca um job que não está mais em memória. */
+  load(id: string): Promise<PersistedScanJob | undefined>;
+  /**
+   * Fecha jobs que ficaram `running` porque a instância anterior morreu.
+   *
+   * Sem isto eles ficariam "em execução" para sempre: quem os estava rodando
+   * não existe mais, e ninguém vai concluí-los.
+   */
+  recoverOrphans(): Promise<string[]>;
+}
+
+export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
+  created: async () => {},
+  updated: async () => {},
+  removed: async () => {},
+  load: async () => undefined,
+  recoverOrphans: async () => [],
+};
+
+export function toPersistedScanJob(job: ScanJob, retentionMs: number): PersistedScanJob {
+  const now = new Date().toISOString();
+  return {
+    id: job.id,
+    status: job.status,
+    createdAt: job.createdAt,
+    updatedAt: now,
+    expiresAt: new Date(Date.now() + retentionMs).toISOString(),
+    options: job.options,
+    progress: job.progress,
+    report: job.report,
+    error: job.error,
+    cancelRequested: job.cancelRequested,
+    accessTokenHash: job.accessTokenHash,
+  };
+}
+
+export interface ScanJobPersistenceOptions {
+  repository: ScanJobRepository;
+  retentionMs: number;
+  /** Recebe falhas de escrita que não podem interromper a análise em curso. */
+  onError: (operation: string, error: unknown) => void;
+}
+
+export function createScanJobPersistence({ repository, retentionMs, onError }: ScanJobPersistenceOptions): ScanJobPersistence {
+  // Uma falha ao gravar o progresso não pode derrubar a análise que está
+  // rodando: o resultado real é mais valioso que o registro dele. A criação é
+  // a exceção — ali a falha precisa aparecer, senão o cliente recebe um id de
+  // um job que o banco nunca viu.
+  const swallow = async (operation: string, run: () => Promise<unknown>): Promise<void> => {
+    try {
+      await run();
+    } catch (error) {
+      onError(operation, error);
+    }
+  };
+
+  return {
+    created: (job) => repository.insert(toPersistedScanJob(job, retentionMs)).then(() => undefined),
+    updated: (job) => swallow("update", () => repository.update(toPersistedScanJob(job, retentionMs))),
+    removed: (id) => swallow("delete", () => repository.delete(id)),
+    async load(id) {
+      try {
+        return await repository.get(id);
+      } catch (error) {
+        onError("load", error);
+        return undefined;
+      }
+    },
+    async recoverOrphans() {
+      const recovered: string[] = [];
+      try {
+        // `claimNext` não serve aqui: ele pega os enfileirados. Os órfãos já
+        // estão em `running` e precisam ser fechados um a um. A transição é
+        // condicionada ao estado no próprio UPDATE, então duas instâncias
+        // subindo juntas não fecham o mesmo job duas vezes.
+        for (const job of await repository.runningJobs()) {
+          const failed = await repository.transition(job.id, "failed", "A instância que executava esta análise foi encerrada antes de concluí-la.");
+          if (failed) recovered.push(job.id);
+        }
+      } catch (error) {
+        onError("recover", error);
+      }
+      return recovered;
+    },
+  };
+}
