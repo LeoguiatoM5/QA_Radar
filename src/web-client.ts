@@ -136,6 +136,38 @@ function askToSignIn(message){
 const codeExecute=document.querySelector('#code-execute');codeExecute?.addEventListener('click',async()=>{codeExecute.disabled=true;codeExecute.innerHTML='<i class="loader"></i>Executando';codeError.style.display='none';codeResult.hidden=true;try{const response=await fetch('/api/code-execution',{method:'POST',headers:codeExecutionHeaders(),body:JSON.stringify({code:codeEditor.value})}),data=await response.json();if(response.status===401||response.status===403){askToSignIn(data.error||'Entre com sua conta para executar a jornada.');return}if(!response.ok&&data.status!=='failed')throw new Error(data.error||'Não foi possível executar a jornada.');if(journeySignin)journeySignin.hidden=true;const report=data.report||{},passed=data.status==='passed',stats=report.stats||{},errors=report.errors||[],details=data.failureDetails||errors.map(error=>error.message).join('\n\n'),duration=Number(stats.duration||0);codeResult.className='code-result '+(passed?'pass':'fail');codeResult.innerHTML='<div class="code-result-head"><div><span>'+(passed?'✓ Jornada aprovada':'✕ Jornada reprovada')+'</span><small>Execução '+esc(data.id)+'</small></div><strong>'+((duration/1000).toFixed(1))+'s</strong></div><div class="code-result-metrics"><span><b>'+(stats.expected||0)+'</b> aprovados</span><span><b>'+(stats.unexpected||0)+'</b> falhas</span><span><b>'+(stats.skipped||0)+'</b> ignorados</span></div>'+(details?'<pre>'+esc(details)+'</pre>':'');recordActivity({id:'journey-'+data.id,type:'journey',title:'Jornada Playwright',detail:(stats.expected||0)+' aprovado(s) · '+(stats.unexpected||0)+' falha(s)',status:passed?'success':'error',errors:Number(stats.unexpected||0),warnings:Number(stats.skipped||0),durationMs:duration,href:'/journeys',scores:{javascript:passed?100:Math.max(10,100-Number(stats.unexpected||0)*25),dom:passed?100:55}});codeResult.hidden=false;}catch(reason){codeError.textContent=reason.message;codeError.style.display='block'}finally{codeExecute.disabled=false;codeExecute.textContent='Executar'}});
 document.querySelector('#code-import')?.addEventListener('change',async event=>{const file=event.target.files?.[0];if(file)codeEditor.value=await file.text()});
 
+// Conta: a barra superior só mostra alguma coisa se o servidor tiver login
+// configurado. Sem isso o produto segue anônimo e nada aparece.
+const accountControl=document.querySelector('#account-control');
+async function refreshAccount(){
+  if(!accountControl)return;
+  try{
+    const me=await (await fetch('/api/v1/auth/me')).json();
+    if(!me.loginAvailable){accountControl.hidden=true;return}
+    accountControl.hidden=false;
+    const signin=document.querySelector('#account-signin'),user=document.querySelector('#account-user');
+    if(me.authenticated&&me.user){
+      if(signin)signin.hidden=true;
+      if(user)user.hidden=false;
+      const avatar=document.querySelector('#account-avatar'),login=document.querySelector('#account-login');
+      if(login)login.textContent=me.user.name||me.user.login;
+      if(avatar){if(me.user.avatarUrl){avatar.src=me.user.avatarUrl;avatar.hidden=false}else avatar.hidden=true}
+      // Quem entrou não precisa mais do aviso de login na Jornada.
+      const signinNotice=document.querySelector('#journey-signin');
+      if(signinNotice)signinNotice.hidden=true;
+    }else{
+      if(signin)signin.hidden=false;
+      if(user)user.hidden=true;
+    }
+  }catch{accountControl.hidden=true}
+}
+document.querySelector('#account-signout')?.addEventListener('click',async event=>{
+  const button=event.currentTarget;button.disabled=true;
+  try{await fetch('/api/v1/auth/logout',{method:'POST'});location.reload()}
+  catch{button.disabled=false}
+});
+void refreshAccount();
+
 // Cliente HTTP interativo de /api-tests (estilo Postman) — independente do
 // Modo Jornada acima; não compartilha nenhum elemento com ele.
 const httpSend=document.querySelector('#http-send');

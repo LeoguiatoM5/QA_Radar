@@ -3,6 +3,8 @@ import { renderApiPage, renderConstructionPage, renderDashboard, renderDocs, ren
 import { WEB_STYLES } from "./web-styles.js";
 
 const NAV_RESPONSIVE_STYLES = `
+.context-account{display:flex;align-items:center;gap:10px;margin-left:auto}.context-account[hidden]{display:none}.account-signin{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border:1px solid #2a4d66;border-radius:999px;background:#0f2537;color:var(--cyan);font-size:.78rem;font-weight:700;text-decoration:none;white-space:nowrap}.account-signin[hidden]{display:none}.account-signin:hover{border-color:var(--cyan)}.account-user{display:flex;align-items:center;gap:9px}.account-user[hidden]{display:none}.account-avatar{border-radius:50%;background:#0f2537;flex:0 0 auto}.account-login{font-size:.78rem;font-weight:700;color:#d9e7f7;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.account-signout{width:auto;margin:0;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);font-size:.72rem;font-weight:700;box-shadow:none}.account-signout:hover{transform:none;color:var(--text);border-color:var(--cyan)}@media(max-width:760px){.account-login{display:none}}
+
 body{background:#06111c;color:#e9f3ff}
 body:before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(#16304724 1px,transparent 1px),linear-gradient(90deg,#16304724 1px,transparent 1px);background-size:64px 64px;mask-image:linear-gradient(to bottom,#0008,transparent 70%)}
 .shell{position:relative;display:grid;grid-template-columns:240px minmax(0,1fr);max-width:none;min-height:100vh;margin:0;padding:0}
