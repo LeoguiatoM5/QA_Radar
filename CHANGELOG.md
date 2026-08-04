@@ -6,6 +6,33 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **Autenticação por GitHub OAuth (opcional).** Entrar passa a dar dono e
+  histórico às análises, e libera a execução hospedada do Modo Jornada sem token
+  administrativo. Sem `QA_RADAR_GITHUB_CLIENT_ID`/`QA_RADAR_GITHUB_CLIENT_SECRET`
+  a entrada não aparece e o produto segue anônimo.
+- **Isolamento por conta.** Análise criada por quem está logado pertence à conta;
+  o dono a consulta sem apresentar o token. Análise anônima continua acessível
+  apenas pelo token, inclusive para quem está logado. Novo `GET /api/v1/scans`
+  devolve somente o histórico de quem pediu.
+- **Persistência opcional em PostgreSQL** (`QA_RADAR_DATABASE_URL`): o registro
+  das análises sobrevive ao reinício, análises interrompidas por uma instância
+  encerrada são fechadas como falha com o motivo, e as que ficaram na fila são
+  retomadas no boot seguinte. Migrations versionadas aplicadas antes da porta
+  abrir.
+- **Artefatos duráveis opcionais** em armazenamento compatível com S3
+  (`QA_RADAR_STORAGE_*`): relatórios, screenshots e vídeos deixam de morrer com
+  o contêiner. O disco continua sendo lido primeiro.
+- **`Idempotency-Key` em `POST /api/scans`**: repetir a criação com a mesma
+  chave e o mesmo corpo devolve a análise existente em vez de enfileirar outra.
+  Com `QA_RADAR_ACCESS_TOKEN_SECRET`, a repetição também reemite o token de
+  acesso após um reinício, sem que ele seja gravado em lugar nenhum.
+- **`GET /ready`**: prontidão da instância, com detalhe por dependência
+  (`database`, `artifacts`, `resultsDir`, `queue`, `codeMode`).
+- **Contrato OpenAPI 3.1** publicado pela própria instância em
+  `GET /api/v1/openapi.json`, gerado a partir do código.
+- **Código estável em toda resposta de erro** (`{ error, code }`), documentado
+  no README e no OpenAPI.
+
 - Tokens aleatórios por análise para proteger consulta, cancelamento e download
   de relatórios, com hash persistido durante a retenção e cookie `HttpOnly` na UI.
 - Timeout global do servidor e bloqueio de mudanças de resolução DNS durante uma
@@ -36,6 +63,10 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Alterado
 
+- **A API passou a ser servida sob `/api/v1`.** O prefixo antigo `/api/...`
+  continua funcionando como alias, e caminhos devolvidos pela API (cookie de
+  acesso, URL de relatório) acompanham o prefixo com que a requisição chegou.
+
 - Artefatos agora usam política sem cache, sem referrer e sandbox para HTML.
 - Faixas IPv4 reservadas adicionais passaram a ser bloqueadas pela proteção SSRF.
 - Inspeção e Jornadas agora compartilham o mesmo padrão de cabeçalho funcional,
@@ -55,6 +86,32 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 - `server.ts` foi dividido em módulos de rotas (`src/routes/*.ts`), `src/env.ts`,
   `src/http-helpers.ts` e stores dedicados por domínio, sem mudança de contrato
   HTTP: headers, cookies, CSP e mensagens de erro preservados.
+
+### Breaking
+
+Mudanças de contrato nesta versão. Nenhuma afeta a CLI; todas são da API HTTP e
+do endpoint de saúde.
+
+- **`GET /health` não reprova mais por diretório de resultados não gravável.**
+  Ele passou a ser apenas vivacidade do processo e responde `200` enquanto o
+  servidor atender. Quem monitorava disco por esse endpoint deve passar a usar
+  `GET /ready`, que reporta cada dependência e é o novo `healthCheckPath` no
+  Blueprint do Render.
+- **Exceções não previstas respondem `500` em vez de `400`**, com mensagem
+  genérica. Antes, qualquer falha interna virava `400` com a mensagem original,
+  classificando bug do servidor como erro do cliente e expondo detalhe de
+  implementação. A mensagem real agora vai para o log, em `request.failed`.
+- **`POST /api/scans/{id}/cancel` responde `202` ao cancelar uma análise já
+  cancelada**, em vez de `409`. Cancelar uma que concluiu ou falhou continua
+  respondendo `409`.
+- **Corpo de requisição acima do limite responde `413`** em vez de `400`.
+- **Recurso desabilitado no servidor responde `403`** em vez de `400` nos casos
+  de histórico por projeto e de filtros regex personalizados.
+- **A execução hospedada do Modo Jornada não pede mais o token administrativo a
+  usuários.** Uma sessão autenticada satisfaz o mesmo gate, e a interface passou
+  a oferecer entrada em vez de um campo de token. O
+  `QA_RADAR_CODE_MODE_ADMIN_TOKEN` continua válido para automação, mas deixou de
+  ser armazenado no navegador; a mensagem do `401` mudou.
 
 ### Corrigido
 
