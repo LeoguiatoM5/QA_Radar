@@ -68,7 +68,16 @@ export type PublicUrlResolver = (hostname: string) => Promise<ResolvedAddress[]>
 
 const systemResolver: PublicUrlResolver = async (hostname) => (isIP(hostname) ? [{ address: hostname }] : lookup(hostname, { all: true, verbatim: true }));
 
-async function publicResolution(rawUrl: string, resolver: PublicUrlResolver): Promise<PublicResolution> {
+/**
+ * A parte da política que se decide olhando só a URL, sem consultar DNS.
+ *
+ * Separada porque cadastrar uma aplicação precisa validar o endereço sem
+ * resolvê-lo: resolver ali transformaria o cadastro numa sonda de rede a pedido
+ * de qualquer conta, e recusaria endereço de aplicação que ainda não subiu. A
+ * política completa continua sendo aplicada na hora de analisar, que é quando o
+ * servidor de fato busca o destino.
+ */
+export function assertPublicUrlShape(rawUrl: string): URL {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -85,6 +94,16 @@ async function publicResolution(rawUrl: string, resolver: PublicUrlResolver): Pr
   if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
     throw new ApiError("invalid_target", "Endereços locais ou privados não são permitidos.");
   }
+  if (isIP(hostname) && isBlockedNetworkAddress(hostname)) {
+    throw new ApiError("invalid_target", "Endereços locais ou privados não são permitidos.");
+  }
+  return url;
+}
+
+async function publicResolution(rawUrl: string, resolver: PublicUrlResolver): Promise<PublicResolution> {
+  const hostname = assertPublicUrlShape(rawUrl)
+    .hostname.replace(/^\[|\]$/g, "")
+    .toLowerCase();
   let addresses: ResolvedAddress[];
   try {
     addresses = await resolver(hostname);

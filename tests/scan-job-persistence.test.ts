@@ -65,6 +65,7 @@ function runtimeJob(overrides: Partial<ScanJob> = {}): ScanJob {
     cancelRequested: false,
     accessTokenHash: "b".repeat(64),
     ownerId: undefined,
+    applicationId: undefined,
     ...overrides,
   };
 }

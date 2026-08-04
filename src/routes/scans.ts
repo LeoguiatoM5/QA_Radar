@@ -153,6 +153,21 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     // Quem está logado vira dono da análise; anônimo segue sem dono e o token
     // dela é o único caminho para o resultado.
     const owner = await context.currentUser(request);
+    // Com a instalação exigindo conta, executar é o ponto onde se pede para
+    // entrar — navegar e ler continuam livres. O caminho anônimo não sai do
+    // código: é esta chave que decide, e ela vem desligada.
+    if (config.requireAccount && !owner) {
+      throw new ApiError("unauthorized", "Entre ou crie uma conta para executar uma análise.");
+    }
+    // A aplicação é conferida contra o dono, e não apenas lida do corpo: sem
+    // isso qualquer conta apontaria a própria análise para a aplicação de outra
+    // e o histórico alheio passaria a receber execuções de fora.
+    const applicationId = textField(body, "applicationId");
+    if (applicationId) {
+      if (!owner) throw new ApiError("unauthorized", "Entre com sua conta para vincular a análise a uma aplicação.");
+      if (!context.applications) throw new ApiError("feature_disabled", "Aplicações não estão disponíveis neste servidor.");
+      if (!(await context.applications.get(owner.id, applicationId))) throw new ApiError("not_found", "Aplicação não encontrada.");
+    }
     const idempotency = idempotencyRequest(request, context.clientAddress(request), body);
     if (idempotency) {
       const existing = await context.idempotencyKeys.get(idempotency.scope);
@@ -232,6 +247,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       const job: ScanJob = {
         id,
         ownerId: owner?.id,
+        applicationId,
         status: "queued",
         createdAt: new Date().toISOString(),
         options,

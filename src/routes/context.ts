@@ -14,6 +14,7 @@ import type { IdentityStore, User } from "../identity.js";
 import type { OAuthProvider } from "../oauth.js";
 import type { EmailSender } from "../email.js";
 import type { RateLimiter } from "../rate-limit.js";
+import type { ApplicationRepository } from "../application-repository.js";
 
 /**
  * Shared state and helpers threaded into every route module's tryHandle().
@@ -40,6 +41,8 @@ export interface RequestContext {
   oauthProvider: OAuthProvider | undefined;
   /** Inerte sem provedor: confirmação e recuperação de senha ficam indisponíveis. */
   emailSender: EmailSender;
+  /** Ausente sem banco: aplicações precisam de onde ficar entre reinícios. */
+  applications: ApplicationRepository | undefined;
   /**
    * Limite próprio das rotas de conta, separado do limite geral de análises.
    *

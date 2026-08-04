@@ -68,6 +68,7 @@ export function toPersistedScanJob(job: ScanJob, retentionMs: number): Persisted
     cancelRequested: job.cancelRequested,
     accessTokenHash: job.accessTokenHash,
     ownerId: job.ownerId,
+    applicationId: job.applicationId,
   };
 }
 
@@ -163,5 +164,6 @@ export function toRuntimeScanJob(stored: PersistedScanJob): ScanJob {
     cancelRequested: false,
     accessTokenHash: stored.accessTokenHash,
     ownerId: stored.ownerId,
+    applicationId: stored.applicationId,
   };
 }

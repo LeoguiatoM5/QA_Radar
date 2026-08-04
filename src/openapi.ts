@@ -95,6 +95,70 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      "/api/v1/auth/me": {
+        get: {
+          tags: ["Conta"],
+          summary: "Quem é a requisição, se for alguém",
+          description: "Sempre responde 200, autenticado ou não. `loginAvailable` diz se esta instalação guarda contas; `passwordResetAvailable` diz se ela envia e-mail.",
+          responses: {
+            "200": { description: "Estado da sessão.", content: { "application/json": { schema: { $ref: "#/components/schemas/SessionState" } } } },
+            ...errorResponses([500]),
+          },
+        },
+      },
+      "/api/v1/applications": {
+        get: {
+          tags: ["Aplicações"],
+          summary: "Listar as aplicações da conta",
+          description: "Devolve exclusivamente as aplicações de quem pediu. Use `?arquivadas=1` para incluir as arquivadas.",
+          responses: {
+            "200": { description: "Aplicações da conta.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApplicationList" } } } },
+            ...errorResponses([401, 403, 500]),
+          },
+        },
+        post: {
+          tags: ["Aplicações"],
+          summary: "Cadastrar uma aplicação",
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/ApplicationRequest" } } } },
+          responses: {
+            "201": { description: "Aplicação cadastrada.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApplicationEnvelope" } } } },
+            ...errorResponses([400, 401, 403, 409, 413, 500]),
+          },
+        },
+      },
+      "/api/v1/applications/{id}": {
+        get: {
+          tags: ["Aplicações"],
+          summary: "Consultar uma aplicação",
+          description: "Aplicação de outra conta responde 404, e não 403: responder proibido confirmaria que aquele id existe.",
+          parameters: [{ $ref: "#/components/parameters/ApplicationId" }],
+          responses: {
+            "200": { description: "Aplicação.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApplicationEnvelope" } } } },
+            ...errorResponses([401, 403, 404, 500]),
+          },
+        },
+        patch: {
+          tags: ["Aplicações"],
+          summary: "Alterar uma aplicação",
+          description: "Campo ausente não é alterado. Corpo vazio responde 400.",
+          parameters: [{ $ref: "#/components/parameters/ApplicationId" }],
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/ApplicationRequest" } } } },
+          responses: {
+            "200": { description: "Aplicação alterada.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApplicationEnvelope" } } } },
+            ...errorResponses([400, 401, 403, 404, 409, 413, 500]),
+          },
+        },
+        delete: {
+          tags: ["Aplicações"],
+          summary: "Arquivar uma aplicação",
+          description: "Arquiva em vez de apagar: as análises já feitas continuam apontando para ela.",
+          parameters: [{ $ref: "#/components/parameters/ApplicationId" }],
+          responses: {
+            "200": { description: "Aplicação arquivada.", content: { "application/json": { schema: { type: "object", properties: { archived: { type: "boolean" } } } } } },
+            ...errorResponses([401, 403, 404, 500]),
+          },
+        },
+      },
       "/api/v1/scans": {
         post: {
           tags: ["Análises"],
@@ -331,8 +395,52 @@ export function createOpenApiDocument(): Record<string, unknown> {
       parameters: {
         ScanId: { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ExecutionId: { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ApplicationId: { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
       },
       schemas: {
+        SessionState: {
+          type: "object",
+          required: ["authenticated", "loginAvailable"],
+          properties: {
+            authenticated: { type: "boolean" },
+            loginAvailable: { type: "boolean", description: "Esta instalação guarda contas. Falso sem banco de dados." },
+            githubAvailable: { type: "boolean", description: "A entrada pelo GitHub está configurada. O cadastro por senha não depende disto." },
+            passwordResetAvailable: { type: "boolean", description: "Há provedor de e-mail, então existe caminho de volta para quem esquecer a senha." },
+            user: {
+              type: "object",
+              properties: {
+                login: { type: "string" },
+                name: { type: "string", nullable: true },
+                avatarUrl: { type: "string", nullable: true },
+                email: { type: "string", nullable: true },
+                emailVerified: { type: "boolean" },
+                hasPassword: { type: "boolean" },
+              },
+            },
+          },
+        },
+        Application: {
+          type: "object",
+          required: ["id", "name", "baseUrl", "environments", "createdAt", "archived"],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string", maxLength: 60, description: "Único dentro da conta, comparado sem diferenciar maiúsculas." },
+            baseUrl: { type: "string", format: "uri" },
+            environments: { type: "array", items: { type: "string", maxLength: 40 }, maxItems: 10 },
+            createdAt: { type: "string", format: "date-time" },
+            archived: { type: "boolean" },
+          },
+        },
+        ApplicationEnvelope: { type: "object", required: ["application"], properties: { application: { $ref: "#/components/schemas/Application" } } },
+        ApplicationList: { type: "object", required: ["applications"], properties: { applications: { type: "array", items: { $ref: "#/components/schemas/Application" } } } },
+        ApplicationRequest: {
+          type: "object",
+          properties: {
+            name: { type: "string", maxLength: 60 },
+            baseUrl: { type: "string", format: "uri", description: "Endereço público. Local, privado ou com credencial é recusado com `invalid_target`." },
+            environments: { type: "array", items: { type: "string", maxLength: 40 }, maxItems: 10 },
+          },
+        },
         ApiError: {
           type: "object",
           required: ["error", "code"],
@@ -364,6 +472,11 @@ export function createOpenApiDocument(): Record<string, unknown> {
           required: ["url"],
           properties: {
             url: { type: "string", format: "uri", description: "Alvo HTTP ou HTTPS. Endereços privados são recusados salvo configuração explícita." },
+            applicationId: {
+              type: "string",
+              format: "uuid",
+              description: "Aplicação da própria conta a que a análise pertence. Exige sessão; aplicação de outra conta responde 404.",
+            },
             browser: { type: "string", enum: ["chromium", "firefox", "webkit"] },
             failOn: { type: "string", enum: ["error", "warning", "never"] },
             timeoutMs: { type: "integer", maximum: 120000 },

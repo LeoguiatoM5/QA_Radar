@@ -8,6 +8,10 @@ const scanTab=document.querySelector('#scan-tab'),helpTab=document.querySelector
 function selectTab(name){if(!scanTab||!helpTab||!scanPanel||!helpPanel)return;const help=name==='help';scanTab.classList.toggle('active',!help);helpTab.classList.toggle('active',help);scanTab.setAttribute('aria-selected',String(!help));helpTab.setAttribute('aria-selected',String(help));scanPanel.hidden=help;helpPanel.hidden=!help}
 if(scanTab&&helpTab){scanTab.addEventListener('click',()=>selectTab('scan'));helpTab.addEventListener('click',()=>selectTab('help'))}
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+// Numa instalação que exige conta, o 401 de uma execução não é erro para ler na
+// tela: é o momento de pedir para entrar. Leva a pessoa ao cadastro guardando de
+// onde ela veio, para voltar ao mesmo lugar depois.
+function signInAndReturn(){location.href='/entrar?proximo='+encodeURIComponent(location.pathname+location.search)}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const ACTIVITY_KEY='qa-radar-activity',ACTIVITY_LIMIT=40;
 function recordActivity(activity){
@@ -81,7 +85,42 @@ async function render(job){
 }
 async function poll(id){for(;;){const response=await fetch('/api/scans/'+id),job=await response.json();if(!response.ok)throw new Error(job.error||'Não foi possível consultar a análise.');renderProgress(job.progress,job.status,job.queuePosition);if(job.status==='completed'){await render(job);return}if(job.status==='cancelled')throw new Error('A análise foi cancelada.');if(job.status==='failed')throw new Error(job.error||'A análise falhou.');await sleep(800)}}
 if(cancelButton)cancelButton.addEventListener('click',async()=>{if(!currentJobId)return;cancelButton.disabled=true;cancelButton.textContent='Cancelando…';try{const response=await fetch('/api/scans/'+currentJobId+'/cancel',{method:'POST'}),job=await response.json();if(!response.ok)throw new Error(job.error||'Não foi possível cancelar a análise.')}catch(error){showError(error.message);cancelButton.disabled=false;cancelButton.textContent='Cancelar'}});
-if(form)form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;button.innerHTML='<i class="loader"></i>Iniciando';running();const formData=new FormData(form),data=Object.fromEntries(formData);data.timeoutMs=Number(data.timeoutMs);data.settleMs=Number(data.settleMs);data.maxPages=Number(data.maxPages);data.sitemap=formData.has('sitemap');data.accessibility=formData.has('accessibility');data.regressionsOnly=formData.has('regressionsOnly');data.acceptBaseline=formData.has('acceptBaseline');try{const response=await fetch('/api/scans',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)}),job=await response.json();if(!response.ok)throw new Error(job.error||'Não foi possível iniciar a análise.');currentJobId=job.id;cancelButton.hidden=false;button.innerHTML='<i class="loader"></i>Analisando';await poll(job.id)}catch(error){showError(error.message);document.querySelector('#status').className='status fail';document.querySelector('#status').textContent=error.message.includes('cancelada')?'CANCELADA':'FALHA NA EXECUÇÃO'}finally{currentJobId=undefined;cancelButton.hidden=true;cancelButton.textContent='Cancelar';if(globalThis.turnstile)globalThis.turnstile.reset();if(turnstileBlock)turnstileBlock.hidden=false;button.disabled=false;button.textContent='Executar novo scanner'}});
+if(form)form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;button.innerHTML='<i class="loader"></i>Iniciando';running();const formData=new FormData(form),data=Object.fromEntries(formData);data.timeoutMs=Number(data.timeoutMs);data.settleMs=Number(data.settleMs);data.maxPages=Number(data.maxPages);data.sitemap=formData.has('sitemap');data.accessibility=formData.has('accessibility');data.regressionsOnly=formData.has('regressionsOnly');data.acceptBaseline=formData.has('acceptBaseline');try{const response=await fetch('/api/scans',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)}),job=await response.json();if(response.status===401){signInAndReturn();return}if(!response.ok)throw new Error(job.error||'Não foi possível iniciar a análise.');currentJobId=job.id;cancelButton.hidden=false;button.innerHTML='<i class="loader"></i>Analisando';await poll(job.id)}catch(error){showError(error.message);document.querySelector('#status').className='status fail';document.querySelector('#status').textContent=error.message.includes('cancelada')?'CANCELADA':'FALHA NA EXECUÇÃO'}finally{currentJobId=undefined;cancelButton.hidden=true;cancelButton.textContent='Cancelar';if(globalThis.turnstile)globalThis.turnstile.reset();if(turnstileBlock)turnstileBlock.hidden=false;button.disabled=false;button.textContent='Executar novo scanner'}});
+// Seletor de aplicação da Inspeção. Nasce oculto e só aparece para quem tem
+// conta com aplicação cadastrada: anônimo e servidor sem banco não teriam o que
+// escolher, e um campo vazio ali só levantaria a pergunta "o que é isso?".
+const scanApplicationPicker=document.querySelector('#application-picker'),scanApplicationSelect=document.querySelector('#scan-application');
+async function loadScanApplications(){
+  if(!scanApplicationPicker||!scanApplicationSelect)return;
+  try{
+    const response=await fetch('/api/v1/applications');
+    if(!response.ok)return;
+    const applications=(await response.json()).applications||[];
+    if(!applications.length)return;
+    for(const application of applications){
+      const option=document.createElement('option');
+      option.value=application.id;
+      option.textContent=application.name;
+      option.dataset.baseUrl=application.baseUrl;
+      scanApplicationSelect.append(option);
+    }
+    scanApplicationPicker.hidden=false;
+    // Vindo de "Inspecionar" na lista de aplicações, já chega escolhida.
+    const wanted=new URLSearchParams(location.search).get('aplicacao');
+    if(wanted&&applications.some(application=>application.id===wanted))scanApplicationSelect.value=wanted;
+    const urlField=document.querySelector('#url');
+    const fillUrl=()=>{
+      const chosen=scanApplicationSelect.selectedOptions[0];
+      // Só preenche o que está vazio: sobrescrever a URL digitada seria apagar
+      // o trabalho de quem quer inspecionar uma página específica.
+      if(chosen?.dataset.baseUrl&&urlField&&!urlField.value)urlField.value=chosen.dataset.baseUrl;
+    };
+    scanApplicationSelect.addEventListener('change',fillUrl);
+    fillUrl();
+  }catch{}
+}
+void loadScanApplications();
+
 const journeyEvidenceModal=document.querySelector('#journey-evidence-modal');
 const journeyEvidenceForm=document.querySelector('#journey-evidence-form');
 for(const id of ['journey-evidence-close','journey-evidence-cancel'])document.querySelector('#'+id)?.addEventListener('click',()=>journeyEvidenceModal?.close());
@@ -362,6 +401,7 @@ if(httpSend){
     let historyRecorded=false;
     try{
       const response=await fetch('/api/http-request',{method:'POST',headers:{'content-type':'application/json'},signal:activeHttpRequest.signal,body:JSON.stringify({method,url,headers,...(body!==undefined?{body}:{})})}),data=await response.json();
+      if(response.status===401){signInAndReturn();return}
       if(!response.ok)throw new Error(data.error||'Não foi possível enviar a requisição.');
       httpResponse.hidden=false;httpResponseEmpty.hidden=true;httpCopyResponse.hidden=false;
       const statusClass=data.status>=200&&data.status<300?'ok':data.status>=300&&data.status<400?'redirect':'error';
@@ -475,6 +515,133 @@ document.querySelector('#verify-resend')?.addEventListener('click',async event=>
   }catch{say('Não foi possível reenviar agora.');button.disabled=false}
 });
 void refreshAccount();
+`;
+
+/**
+ * Cliente das aplicações.
+ *
+ * O mesmo formulário cadastra e edita: são o mesmo conjunto de campos, e uma
+ * segunda tela só para editar dobraria a superfície sem mudar nada do que a
+ * pessoa faz.
+ */
+export const APPLICATIONS_CLIENT_SCRIPT = String.raw`
+const applicationForm=document.querySelector('#application-form');
+const applicationList=document.querySelector('#application-list');
+const applicationHint=document.querySelector('#application-list-hint');
+const applicationError=document.querySelector('#application-error');
+const applicationTitle=document.querySelector('#application-form-title');
+const applicationSubmit=document.querySelector('#application-submit');
+const applicationCancel=document.querySelector('#application-cancel');
+const fieldId=document.querySelector('#application-id');
+const fieldName=document.querySelector('#application-name');
+const fieldBaseUrl=document.querySelector('#application-base-url');
+const fieldEnvironments=document.querySelector('#application-environments');
+const appEsc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+
+function applicationFail(message){if(applicationError){applicationError.textContent=message;applicationError.style.display='block'}}
+function applicationClearError(){if(applicationError){applicationError.textContent='';applicationError.style.display='none'}}
+
+function editApplication(application){
+  if(fieldId)fieldId.value=application.id;
+  if(fieldName)fieldName.value=application.name;
+  if(fieldBaseUrl)fieldBaseUrl.value=application.baseUrl;
+  if(fieldEnvironments)fieldEnvironments.value=(application.environments||[]).join(', ');
+  if(applicationTitle)applicationTitle.textContent='Editar aplicação';
+  if(applicationSubmit)applicationSubmit.textContent='Salvar alterações';
+  if(applicationCancel)applicationCancel.hidden=false;
+  applicationClearError();
+  fieldName?.focus();
+}
+
+function resetApplicationForm(){
+  applicationForm?.reset();
+  if(fieldId)fieldId.value='';
+  if(applicationTitle)applicationTitle.textContent='Nova aplicação';
+  if(applicationSubmit)applicationSubmit.textContent='Cadastrar aplicação';
+  if(applicationCancel)applicationCancel.hidden=true;
+  applicationClearError();
+}
+applicationCancel?.addEventListener('click',resetApplicationForm);
+
+function renderApplications(applications){
+  if(!applicationList)return;
+  if(!applications.length){
+    applicationList.innerHTML='';
+    if(applicationHint)applicationHint.textContent='Nenhuma aplicação cadastrada ainda. Comece pelo formulário ao lado.';
+    return;
+  }
+  if(applicationHint)applicationHint.textContent=applications.length===1?'1 aplicação cadastrada.':applications.length+' aplicações cadastradas.';
+  applicationList.innerHTML=applications.map(application=>
+    '<article class="application-item" data-id="'+appEsc(application.id)+'">'+
+      '<div class="application-info"><strong>'+appEsc(application.name)+'</strong>'+
+        '<a href="'+appEsc(application.baseUrl)+'" target="_blank" rel="noopener noreferrer">'+appEsc(application.baseUrl)+'</a>'+
+        (application.environments&&application.environments.length?'<div class="application-tags">'+application.environments.map(environment=>'<span>'+appEsc(environment)+'</span>').join('')+'</div>':'')+
+      '</div>'+
+      '<div class="application-actions">'+
+        '<button type="button" data-action="scan">Inspecionar</button>'+
+        '<button type="button" data-action="edit">Editar</button>'+
+        '<button type="button" data-action="archive">Arquivar</button>'+
+      '</div>'+
+    '</article>').join('');
+}
+
+let applicationsCache=[];
+async function loadApplications(){
+  try{
+    const response=await fetch('/api/v1/applications');
+    if(response.status===401){location.href='/entrar?proximo='+encodeURIComponent(location.pathname);return}
+    const body=await response.json();
+    if(!response.ok){if(applicationHint)applicationHint.textContent=body.error||'Não foi possível carregar suas aplicações.';return}
+    applicationsCache=body.applications||[];
+    renderApplications(applicationsCache);
+  }catch{if(applicationHint)applicationHint.textContent='Não foi possível carregar suas aplicações.'}
+}
+
+applicationList?.addEventListener('click',async event=>{
+  const button=event.target.closest('button[data-action]');
+  if(!button)return;
+  const id=button.closest('.application-item')?.dataset.id;
+  const application=applicationsCache.find(item=>item.id===id);
+  if(!application)return;
+  if(button.dataset.action==='edit'){editApplication(application);return}
+  if(button.dataset.action==='scan'){location.href='/scanner?aplicacao='+encodeURIComponent(application.id);return}
+  // Arquivar é reversível no banco, mas some da lista: confirmar evita o clique
+  // errado numa lista onde os botões ficam lado a lado.
+  if(!confirm('Arquivar "'+application.name+'"? As análises já feitas continuam no histórico.'))return;
+  button.disabled=true;
+  try{
+    const response=await fetch('/api/v1/applications/'+encodeURIComponent(application.id),{method:'DELETE'});
+    if(!response.ok){const body=await response.json().catch(()=>({}));applicationFail(body.error||'Não foi possível arquivar.');button.disabled=false;return}
+    await loadApplications();
+  }catch{applicationFail('Não foi possível arquivar.');button.disabled=false}
+});
+
+applicationForm?.addEventListener('submit',async event=>{
+  event.preventDefault();
+  applicationClearError();
+  const id=fieldId?.value||'';
+  const payload={
+    name:fieldName?.value.trim()||'',
+    baseUrl:fieldBaseUrl?.value.trim()||'',
+    environments:(fieldEnvironments?.value||'').split(',').map(part=>part.trim()).filter(Boolean),
+  };
+  if(applicationSubmit)applicationSubmit.disabled=true;
+  try{
+    const response=await fetch('/api/v1/applications'+(id?'/'+encodeURIComponent(id):''),{
+      method:id?'PATCH':'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify(payload),
+    });
+    if(response.status===401){location.href='/entrar?proximo='+encodeURIComponent(location.pathname);return}
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok){applicationFail(body.error||'Não foi possível salvar.');return}
+    resetApplicationForm();
+    await loadApplications();
+  }catch{applicationFail('Não foi possível salvar.')}
+  finally{if(applicationSubmit)applicationSubmit.disabled=false}
+});
+
+void loadApplications();
 `;
 
 /**
@@ -773,4 +940,49 @@ document.querySelectorAll('[data-dashboard-filter]').forEach(button=>button.addE
 }));
 document.querySelector('#dashboard-history-toggle')?.addEventListener('click',()=>{dashboardShowAll=!dashboardShowAll;renderDashboard()});
 window.addEventListener('storage',event=>{if(event.key===dashboardActivityKey){dashboardActivities=loadDashboardActivity();renderDashboard()}});
+
+/**
+ * Histórico da conta, quando existe.
+ *
+ * O localStorage continua sendo a fonte de quem não tem conta — e é o único
+ * histórico possível nesse caminho, que é decisão de produto. Para quem entrou,
+ * o servidor manda: é o que faz o histórico sobreviver a outro navegador, a uma
+ * limpeza de cache e a um computador diferente. As duas listas se somam pelo id,
+ * porque a mesma análise aparece nas duas e ela não pode ser listada duas vezes.
+ */
+function scanToActivity(scan){
+  const report=scan.report||{},summary=report.summary||{};
+  const errors=Number(summary.errors||0),warnings=Number(summary.warnings||0);
+  let target=String(report.url||scan.url||'Inspeção');
+  try{const url=new URL(target);target=url.host+url.pathname}catch{}
+  return {
+    id:scan.id,
+    type:'scan',
+    title:'Inspeção · '+target,
+    detail:scan.status==='completed'?dashboardCount(errors,'erro','erros')+' · '+dashboardCount(warnings,'aviso','avisos'):scan.status,
+    status:scan.status!=='completed'?'error':report.passed===false?'error':'success',
+    errors,
+    warnings,
+    durationMs:Number(report.durationMs||0),
+    createdAt:scan.createdAt,
+    href:'/scanner',
+    scores:{},
+  };
+}
+async function loadAccountHistory(){
+  try{
+    const response=await fetch('/api/v1/scans');
+    // 401 é o caminho anônimo, não uma falha: segue só com o histórico local.
+    if(!response.ok)return;
+    const scans=(await response.json()).scans||[];
+    const source=document.querySelector('#dashboard-source');
+    if(source)source.hidden=false;
+    if(!scans.length)return;
+    const seen=new Set(dashboardActivities.map(item=>item.id));
+    dashboardActivities=[...dashboardActivities,...scans.filter(scan=>!seen.has(scan.id)).map(scanToActivity)]
+      .sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+    renderDashboard();
+  }catch{}
+}
+void loadAccountHistory();
 `;

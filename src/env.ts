@@ -152,6 +152,9 @@ export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): 
       allowPrivateTargets: booleanFromEnvironment(source, "QA_RADAR_ALLOW_PRIVATE_TARGETS"),
       trustProxy: booleanFromEnvironment(source, "QA_RADAR_TRUST_PROXY"),
       allowHistory: booleanFromEnvironment(source, "QA_RADAR_ENABLE_HISTORY"),
+      // Desligado por padrão: quem roda `npm run web` ou instala o pacote não
+      // pode ser obrigado a criar conta para inspecionar uma página.
+      requireAccount: booleanFromEnvironment(source, "QA_RADAR_REQUIRE_ACCOUNT"),
       allowCodeMode: codeModeEnabledForHost(host, source.QA_RADAR_ENABLE_CODE_MODE),
       codeModeAdminToken: source.QA_RADAR_CODE_MODE_ADMIN_TOKEN,
       concurrency: positiveIntegerFromEnvironment(source, "QA_RADAR_CONCURRENCY", SERVER_OPTION_DEFAULTS.concurrency),
