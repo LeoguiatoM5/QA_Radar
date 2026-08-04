@@ -11,6 +11,7 @@ import { PostgresIdempotencyKeys, type IdempotencyKeys } from "./idempotency-sto
 import { createDerivedAccessTokenIssuer, createRandomAccessTokenIssuer } from "./access-token.js";
 import { PostgresIdentityStore, type IdentityStore } from "./identity.js";
 import { createGitHubOAuthProvider } from "./oauth.js";
+import { NO_EMAIL_SENDER, createBrevoEmailSender } from "./email.js";
 import { randomBytes } from "node:crypto";
 
 try {
@@ -64,17 +65,24 @@ try {
     console.log("Sem QA_RADAR_ACCESS_TOKEN_SECRET: a repetição de uma criação não reemite token após reinício.");
   }
 
-  // Login exige banco: sem onde guardar usuário e sessão não há como entrar.
+  // Contas exigem banco: sem onde guardar usuário e sessão não há como entrar.
   const oauthProvider = env.githubOAuth && identity ? createGitHubOAuthProvider(env.githubOAuth) : undefined;
   if (env.githubOAuth && !identity) {
     console.log("Login por GitHub configurado, mas sem QA_RADAR_DATABASE_URL: entrada indisponível até o banco existir.");
   }
-  console.log(oauthProvider ? "Login por GitHub disponível." : "Sem login: o produto roda anônimo, com acesso por token da análise.");
+  console.log(identity ? `Contas disponíveis: cadastro por e-mail e senha${oauthProvider ? " e entrada pelo GitHub" : ""}.` : "Sem contas: o produto roda anônimo, com acesso por token da análise.");
+
+  // Sem provedor de e-mail o cadastro continua funcionando; o que some é a
+  // confirmação do endereço e o "esqueci minha senha".
+  const emailSender = env.email ? createBrevoEmailSender(env.email) : NO_EMAIL_SENDER;
+  if (identity) {
+    console.log(env.email ? `E-mail transacional por ${emailSender.name}, remetente ${env.email.from}.` : "Sem QA_RADAR_EMAIL_API_KEY: quem esquecer a senha não terá como redefini-la.");
+  }
   // Assina só o estado do OAuth. Aleatório por processo é suficiente: o estado
   // vive 10 minutos e um reinício no meio do login apenas pede para repetir.
   const sessionSecret = env.accessTokenSecret ?? randomBytes(32).toString("base64url");
 
-  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts, accessTokens, idempotencyKeys, identity, oauthProvider, sessionSecret });
+  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts, accessTokens, idempotencyKeys, identity, oauthProvider, emailSender, sessionSecret });
   server.listen(env.port, env.host, () => {
     console.log(`\nQA Radar Web disponível em http://${env.host}:${env.port}`);
     console.log("Pressione Ctrl+C para encerrar.\n");

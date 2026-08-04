@@ -6,6 +6,7 @@ import { InMemoryIdentityStore } from "../src/identity.js";
 import { issueOAuthState, verifyOAuthState, OAUTH_STATE_TTL_MS, type OAuthProvider } from "../src/oauth.js";
 import { InMemoryScanJobRepository } from "../src/scan-job-repository.js";
 import { createScanJobPersistence } from "../src/scan-job-persistence.js";
+import type { EmailMessage, EmailSender } from "../src/email.js";
 
 const SECRET = "segredo-de-sessao-com-32-bytes-x";
 
@@ -16,7 +17,7 @@ function fakeProvider(overrides: Partial<OAuthProvider> = {}): OAuthProvider {
     authorizationUrl: (state, redirectUri) => `https://provedor.exemplo/authorize?state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
     profileFor: async (code) => {
       if (code !== "codigo-bom") throw new Error("código inválido");
-      return { providerAccountId: "42", login: "leo", name: "Leo", avatarUrl: undefined };
+      return { providerAccountId: "42", login: "leo", name: "Leo", avatarUrl: undefined, verifiedEmail: undefined };
     },
     ...overrides,
   };
@@ -53,15 +54,35 @@ describe("oauth state", () => {
 });
 
 describe("login", () => {
-  it("declara login indisponível quando não há provedor", async () => {
-    // O produto continua inteiro sem login; a interface só não oferece entrada.
+  it("declara conta indisponível quando não há onde guardá-la", async () => {
+    // O produto continua inteiro sem contas; a interface só não oferece entrada.
     const { baseUrl, close } = await startServer();
     try {
-      const me = (await (await fetch(`${baseUrl}/api/v1/auth/me`)).json()) as { authenticated: boolean; loginAvailable: boolean };
-      assert.deepEqual(me, { authenticated: false, loginAvailable: false });
+      const me = (await (await fetch(`${baseUrl}/api/v1/auth/me`)).json()) as Record<string, unknown>;
+      assert.deepEqual(me, { authenticated: false, loginAvailable: false, githubAvailable: false, passwordResetAvailable: false });
       const start = await fetch(`${baseUrl}/api/v1/auth/github`, { redirect: "manual" });
       assert.equal(start.status, 403);
       assert.equal(((await start.json()) as { code: string }).code, "feature_disabled");
+      // Cadastro também some junto: sem banco não há conta nenhuma.
+      const cadastro = await fetch(`${baseUrl}/api/v1/auth/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "pessoa@exemplo.com", password: "senha-bem-comprida" }),
+      });
+      assert.equal(cadastro.status, 403);
+      assert.equal(((await cadastro.json()) as { code: string }).code, "feature_disabled");
+    } finally {
+      await close();
+    }
+  });
+
+  it("anuncia a entrada por senha mesmo sem provedor externo configurado", async () => {
+    // Cadastro por e-mail não pode depender do GitHub estar configurado.
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+    try {
+      const me = (await (await fetch(`${baseUrl}/api/v1/auth/me`)).json()) as { loginAvailable: boolean; githubAvailable: boolean };
+      assert.equal(me.loginAvailable, true);
+      assert.equal(me.githubAvailable, false);
     } finally {
       await close();
     }
@@ -137,6 +158,275 @@ describe("login", () => {
   });
 });
 
+describe("cadastro e entrada por senha", () => {
+  /** Provedor de e-mail falso: guarda o que teria sido enviado. */
+  function fakeEmail(): EmailSender & { sent: EmailMessage[] } {
+    const sent: EmailMessage[] = [];
+    return {
+      name: "fake",
+      delivers: true,
+      sent,
+      async send(message) {
+        sent.push(message);
+      },
+    };
+  }
+
+  /** Extrai o segredo do link que foi para o e-mail. */
+  function tokenFrom(message: EmailMessage, parameter: string): string {
+    const match = new RegExp(`[?&]${parameter}=([^\\s"&<]+)`).exec(message.text);
+    assert.ok(match, `o e-mail deveria trazer o parâmetro ${parameter}`);
+    return decodeURIComponent(match[1] as string);
+  }
+
+  async function register(baseUrl: string, email: string, password: string, name?: string) {
+    return fetch(`${baseUrl}/api/v1/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
+    });
+  }
+
+  async function login(baseUrl: string, email: string, password: string) {
+    return fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
+  it("cria a conta, já entra e manda o e-mail de confirmação", async () => {
+    const emailSender = fakeEmail();
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore(), emailSender });
+    try {
+      const response = await register(baseUrl, "Pessoa@Exemplo.com", "uma-senha-comprida", "Pessoa");
+      assert.equal(response.status, 201);
+      const body = (await response.json()) as { user: { email: string; emailVerified: boolean; hasPassword: boolean } };
+      assert.equal(body.user.email, "pessoa@exemplo.com", "o e-mail é guardado normalizado");
+      assert.equal(body.user.emailVerified, false);
+      assert.equal(body.user.hasPassword, true);
+
+      const cookie = (response.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      assert.match(cookie, /^qa_radar_session=/, "cadastrar já deixa a pessoa dentro");
+      const me = (await (await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie } })).json()) as { authenticated: boolean };
+      assert.equal(me.authenticated, true);
+
+      assert.equal(emailSender.sent.length, 1);
+      assert.equal(emailSender.sent[0]?.to, "pessoa@exemplo.com");
+    } finally {
+      await close();
+    }
+  });
+
+  it("recusa o segundo cadastro com o mesmo e-mail", async () => {
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+    try {
+      assert.equal((await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida")).status, 201);
+      const repetido = await register(baseUrl, "PESSOA@exemplo.com", "outra-senha-comprida");
+      assert.equal(repetido.status, 409);
+      assert.equal(((await repetido.json()) as { code: string }).code, "conflict");
+    } finally {
+      await close();
+    }
+  });
+
+  it("recusa e-mail malformado e senha fraca antes de criar qualquer coisa", async () => {
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+    try {
+      assert.equal((await register(baseUrl, "sem-arroba", "uma-senha-comprida")).status, 400);
+      const curta = await register(baseUrl, "pessoa@exemplo.com", "curta");
+      assert.equal(curta.status, 400);
+      assert.match(((await curta.json()) as { error: string }).error, /pelo menos 10 caracteres/);
+      // A senha não pode ser o próprio e-mail: é o primeiro palpite de quem tenta.
+      assert.equal((await register(baseUrl, "pessoa@exemplo.com", "pessoa@exemplo.com")).status, 400);
+      // Nenhuma delas pode ter criado conta.
+      assert.equal((await login(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida")).status, 401);
+    } finally {
+      await close();
+    }
+  });
+
+  it("entra com a senha certa e recusa a errada", async () => {
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+    try {
+      await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida");
+      const certa = await login(baseUrl, "PESSOA@Exemplo.com", "uma-senha-comprida");
+      assert.equal(certa.status, 200);
+      assert.match(certa.headers.get("set-cookie") ?? "", /^qa_radar_session=/);
+
+      const errada = await login(baseUrl, "pessoa@exemplo.com", "senha-errada-mas-longa");
+      assert.equal(errada.status, 401);
+    } finally {
+      await close();
+    }
+  });
+
+  it("dá a mesma resposta para e-mail inexistente e senha errada", async () => {
+    // Mensagens diferentes transformariam a tela de login numa consulta de quem
+    // tem conta no produto.
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+    try {
+      await register(baseUrl, "existe@exemplo.com", "uma-senha-comprida");
+      const senhaErrada = await login(baseUrl, "existe@exemplo.com", "outra-coisa-comprida");
+      const semConta = await login(baseUrl, "naoexiste@exemplo.com", "outra-coisa-comprida");
+      assert.equal(senhaErrada.status, semConta.status);
+      assert.deepEqual(await senhaErrada.json(), await semConta.json());
+    } finally {
+      await close();
+    }
+  });
+
+  it("confirma o e-mail pelo link e o token não serve duas vezes", async () => {
+    const emailSender = fakeEmail();
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore(), emailSender });
+    try {
+      const cadastro = await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida");
+      const cookie = (cadastro.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      const token = tokenFrom(emailSender.sent[0] as EmailMessage, "token");
+
+      const confirmacao = await fetch(`${baseUrl}/api/v1/auth/verify?token=${encodeURIComponent(token)}`, { redirect: "manual" });
+      assert.equal(confirmacao.status, 302);
+      const me = (await (await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie } })).json()) as { user?: { emailVerified: boolean } };
+      assert.equal(me.user?.emailVerified, true);
+
+      const repetido = await fetch(`${baseUrl}/api/v1/auth/verify?token=${encodeURIComponent(token)}`, { redirect: "manual" });
+      assert.match(repetido.headers.get("location") ?? "", /erro=confirmacao/);
+    } finally {
+      await close();
+    }
+  });
+
+  it("redefine a senha pelo link, derruba as sessões antigas e invalida a senha anterior", async () => {
+    const emailSender = fakeEmail();
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore(), emailSender });
+    try {
+      const cadastro = await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida");
+      const cookieAntigo = (cadastro.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+
+      const pedido = await fetch(`${baseUrl}/api/v1/auth/password/forgot`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "pessoa@exemplo.com" }),
+      });
+      assert.equal(pedido.status, 202);
+      const reset = emailSender.sent.at(-1) as EmailMessage;
+      const token = tokenFrom(reset, "redefinir");
+
+      const troca = await fetch(`${baseUrl}/api/v1/auth/password/reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token, password: "senha-nova-comprida" }),
+      });
+      assert.equal(troca.status, 200);
+
+      // A sessão que existia antes da troca não vale mais: se a redefinição
+      // aconteceu porque alguém entrou na conta, ele tem de cair junto.
+      const antiga = (await (await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie: cookieAntigo } })).json()) as { authenticated: boolean };
+      assert.equal(antiga.authenticated, false);
+
+      assert.equal((await login(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida")).status, 401, "a senha antiga tem de morrer");
+      assert.equal((await login(baseUrl, "pessoa@exemplo.com", "senha-nova-comprida")).status, 200);
+    } finally {
+      await close();
+    }
+  });
+
+  it("responde igual a quem pede redefinição para e-mail sem cadastro", async () => {
+    const emailSender = fakeEmail();
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore(), emailSender });
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/auth/password/forgot`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "ninguem@exemplo.com" }),
+      });
+      assert.equal(response.status, 202);
+      assert.deepEqual(await response.json(), { requested: true });
+      assert.equal(emailSender.sent.length, 0, "não existe conta, então nada é enviado — mas a resposta é a mesma");
+    } finally {
+      await close();
+    }
+  });
+
+  it("não oferece redefinição quando o servidor não envia e-mail", async () => {
+    // Sem provedor, prometer o link seria mandar a pessoa esperar para sempre.
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+    try {
+      const me = (await (await fetch(`${baseUrl}/api/v1/auth/me`)).json()) as { passwordResetAvailable: boolean };
+      assert.equal(me.passwordResetAvailable, false);
+      const response = await fetch(`${baseUrl}/api/v1/auth/password/forgot`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "pessoa@exemplo.com" }),
+      });
+      assert.equal(response.status, 403);
+      assert.equal(((await response.json()) as { code: string }).code, "feature_disabled");
+    } finally {
+      await close();
+    }
+  });
+
+  it("recusa o token de confirmação como token de redefinição", async () => {
+    // Os dois viajam por e-mail, mas só o de redefinição pode trocar a senha.
+    const emailSender = fakeEmail();
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore(), emailSender });
+    try {
+      await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida");
+      const confirmacao = tokenFrom(emailSender.sent[0] as EmailMessage, "token");
+      const troca = await fetch(`${baseUrl}/api/v1/auth/password/reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: confirmacao, password: "senha-nova-comprida" }),
+      });
+      assert.equal(troca.status, 401);
+    } finally {
+      await close();
+    }
+  });
+
+  it("corta tentativas de senha em série", async () => {
+    // Sem limite, a tela de login vira oráculo de força bruta.
+    const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+    try {
+      await register(baseUrl, "alvo@exemplo.com", "uma-senha-comprida");
+      let bloqueado = false;
+      for (let attempt = 0; attempt < 15 && !bloqueado; attempt += 1) {
+        const response = await login(baseUrl, "alvo@exemplo.com", `palpite-numero-${attempt}`);
+        if (response.status === 429) bloqueado = true;
+        else await response.json();
+      }
+      assert.equal(bloqueado, true, "as tentativas repetidas deveriam ser cortadas");
+    } finally {
+      await close();
+    }
+  });
+
+  it("entrar pelo GitHub com o mesmo e-mail cai na conta já cadastrada", async () => {
+    // O que impede a pessoa de terminar com duas contas e um histórico partido.
+    const identity = new InMemoryIdentityStore();
+    const provider = fakeProvider({
+      profileFor: async () => ({ providerAccountId: "42", login: "leo", name: "Leo", avatarUrl: undefined, verifiedEmail: "Pessoa@Exemplo.com" }),
+    });
+    const { baseUrl, close } = await startServer({ identity, oauthProvider: provider });
+    try {
+      const cadastro = await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida");
+      const cookieCadastro = (cadastro.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      const antes = (await (await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie: cookieCadastro } })).json()) as { user?: { email: string } };
+
+      const state = issueOAuthState(SECRET);
+      const callback = await fetch(`${baseUrl}/api/v1/auth/github/callback?code=codigo-bom&state=${encodeURIComponent(state)}`, { redirect: "manual" });
+      const cookieGithub = (callback.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      const depois = (await (await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie: cookieGithub } })).json()) as { user?: { email: string; hasPassword: boolean; emailVerified: boolean } };
+
+      assert.equal(depois.user?.email, antes.user?.email);
+      assert.equal(depois.user?.hasPassword, true, "a senha cadastrada continua valendo");
+      assert.equal(depois.user?.emailVerified, true, "entrar pelo provedor prova a posse do endereço");
+    } finally {
+      await close();
+    }
+  });
+});
+
 describe("isolamento entre contas", () => {
   /** Loga uma conta do provedor e devolve o cookie de sessão. */
   async function signIn(baseUrl: string, accountId: string, login: string): Promise<string> {
@@ -148,7 +438,7 @@ describe("isolamento entre contas", () => {
 
   /** Provedor que devolve uma conta diferente conforme o código recebido. */
   const multiAccount = fakeProvider({
-    profileFor: async (code) => ({ providerAccountId: code, login: `usuario-${code}`, name: undefined, avatarUrl: undefined }),
+    profileFor: async (code) => ({ providerAccountId: code, login: `usuario-${code}`, name: undefined, avatarUrl: undefined, verifiedEmail: undefined }),
   });
 
   async function createScan(baseUrl: string, cookie?: string) {

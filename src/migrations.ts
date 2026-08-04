@@ -89,6 +89,50 @@ export const MIGRATIONS: Migration[] = [
       `create index if not exists scan_jobs_owner_idx on scan_jobs (owner_id, created_at desc)`,
     ],
   },
+  {
+    id: "0004_password_accounts",
+    statements: [
+      // A identidade externa sai de `users` e vira tabela própria porque a conta
+      // deixou de ser "uma conta do GitHub": agora nasce de um cadastro com
+      // e-mail e senha, e o GitHub passa a ser uma forma de entrar nela. Com as
+      // colunas antigas no lugar, a mesma pessoa entrando pelos dois caminhos
+      // viraria duas contas com históricos separados.
+      `create table if not exists user_identities (
+         provider text not null,
+         provider_account_id text not null,
+         user_id uuid not null references users (id) on delete cascade,
+         created_at timestamptz not null default now(),
+         primary key (provider, provider_account_id)
+       )`,
+      `create index if not exists user_identities_user_idx on user_identities (user_id)`,
+      `insert into user_identities (provider, provider_account_id, user_id)
+         select provider, provider_account_id, id from users
+         where provider is not null and provider_account_id is not null
+         on conflict do nothing`,
+      `alter table users add column if not exists email text`,
+      `alter table users add column if not exists password_hash text`,
+      `alter table users add column if not exists email_verified_at timestamptz`,
+      // Índice sobre `lower(email)` em vez de `unique (email)`: sem isso
+      // "Ana@x.com" e "ana@x.com" seriam contas diferentes, e quem cadastrou a
+      // primeira nunca entenderia por que a senha "não funciona".
+      `create unique index if not exists users_email_idx on users (lower(email)) where email is not null`,
+      `alter table users drop column if exists provider`,
+      `alter table users drop column if exists provider_account_id`,
+      // Confirmação de e-mail e redefinição de senha. Guarda-se o hash do
+      // segredo enviado, como nas sessões: quem lesse a tabela não pode sair
+      // redefinindo a senha de ninguém.
+      `create table if not exists user_tokens (
+         id text primary key,
+         user_id uuid not null references users (id) on delete cascade,
+         purpose text not null,
+         created_at timestamptz not null default now(),
+         expires_at timestamptz not null,
+         used_at timestamptz
+       )`,
+      `create index if not exists user_tokens_user_idx on user_tokens (user_id, purpose)`,
+      `create index if not exists user_tokens_expires_idx on user_tokens (expires_at)`,
+    ],
+  },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `create table if not exists schema_migrations (

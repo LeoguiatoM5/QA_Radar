@@ -37,6 +37,7 @@ import { NO_ARTIFACT_STORAGE, type ArtifactStorage } from "./artifact-storage.js
 import { createRandomAccessTokenIssuer, type AccessTokenIssuer } from "./access-token.js";
 import type { IdentityStore, User } from "./identity.js";
 import type { OAuthProvider } from "./oauth.js";
+import { NO_EMAIL_SENDER, type EmailSender } from "./email.js";
 import { tryHandleAuth, sessionTokenFrom } from "./routes/auth.js";
 
 export interface OperationalEvent {
@@ -114,6 +115,8 @@ export interface ServerOptions {
   /** Ausentes = login indisponível e produto 100% anônimo, como antes. */
   identity: IdentityStore | undefined;
   oauthProvider: OAuthProvider | undefined;
+  /** Inerte por padrão: confirmação de e-mail e recuperação de senha ficam de fora. */
+  emailSender: EmailSender;
   /** Assina o estado do OAuth e nada mais. */
   sessionSecret: string;
   operationalLogger: (event: OperationalEvent) => void;
@@ -151,6 +154,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   idempotencyKeys: undefined,
   identity: undefined,
   oauthProvider: undefined,
+  emailSender: NO_EMAIL_SENDER,
   sessionSecret: randomBytes(32).toString("base64url"),
   operationalLogger: defaultOperationalLogger,
 };
@@ -206,6 +210,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const codeModeAdminTokenHash = config.codeModeAdminToken ? tokenHash(config.codeModeAdminToken) : undefined;
   const jobQueue = new JobQueue();
   const rateLimiter = new RateLimiter(config.rateLimitMax, config.rateLimitWindowMs);
+  // Janela larga e contagem baixa: adivinhar senha é ataque de muitas tentativas
+  // ao longo do tempo, e não de rajada, então o limite útil é por quinze minutos
+  // e não por minuto como o das análises.
+  const authRateLimiter = new RateLimiter(10, 15 * 60_000);
   const legacyJourneys = new LegacyJourneyRegistry();
   const codegenSessions = new CodegenSessionStore();
   const codeExecutionJobs = new CodeExecutionJobStore();
@@ -635,6 +643,8 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     artifacts: config.artifacts,
     identity: config.identity,
     oauthProvider: config.oauthProvider,
+    emailSender: config.emailSender,
+    authRateLimiter,
     currentUser,
     accessTokens: config.accessTokens,
     apiPrefix: UNVERSIONED_API_PREFIX,
