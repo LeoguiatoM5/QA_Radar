@@ -76,6 +76,23 @@ describe("configuração de ambiente", () => {
     assert.throws(() => loadEnvironmentConfig({ QA_RADAR_MAX_SITEMAP_PAGES: "3.5" }), /QA_RADAR_MAX_SITEMAP_PAGES deve ser um número inteiro positivo/);
   });
 
+  it("nomeia a chave de e-mail que falta, e não só o par", () => {
+    // Uma mensagem que só diz "configure A e B em conjunto" manda a pessoa
+    // reconferir as duas no painel para descobrir qual é. Isso já reprovou um
+    // deploy real com a chave preenchida e o remetente ausente.
+    assert.equal(loadEnvironmentConfig({}).email, undefined);
+    assert.throws(() => loadEnvironmentConfig({ QA_RADAR_EMAIL_API_KEY: "chave" }), /Falta preencher QA_RADAR_EMAIL_FROM\b/);
+    assert.throws(() => loadEnvironmentConfig({ QA_RADAR_EMAIL_FROM: "qa@exemplo.com" }), /Falta preencher QA_RADAR_EMAIL_API_KEY\b/);
+    // Presente mas vazio é o que a hospedagem cria para uma chave `sync: false`
+    // ainda não preenchida: tem de contar como ausente, não como configurada.
+    assert.throws(() => loadEnvironmentConfig({ QA_RADAR_EMAIL_API_KEY: "chave", QA_RADAR_EMAIL_FROM: "   " }), /Falta preencher QA_RADAR_EMAIL_FROM\b/);
+  });
+
+  it("monta o remetente com o nome padrão quando só o nome falta", () => {
+    const env = loadEnvironmentConfig({ QA_RADAR_EMAIL_API_KEY: " chave ", QA_RADAR_EMAIL_FROM: " qa@exemplo.com " });
+    assert.deepEqual(env.email, { apiKey: "chave", from: "qa@exemplo.com", fromName: "QA Radar" });
+  });
+
   it("exige QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto", () => {
     assert.equal(loadEnvironmentConfig({}).sandbox, undefined);
     assert.throws(() => loadEnvironmentConfig({ QA_RADAR_SANDBOX_URL: "https://sandbox.example.com" }), /QA_RADAR_SANDBOX_URL e QA_RADAR_SANDBOX_SIGNING_SECRET em conjunto/);
