@@ -5,6 +5,14 @@ import { createDatabase, type Database } from "../src/database.js";
 import { runMigrations } from "../src/migrations.js";
 import { ApplicationNameTakenError, InMemoryApplicationRepository, PostgresApplicationRepository, normalizeApplicationName, type ApplicationRepository } from "../src/application-repository.js";
 
+/**
+ * Estes testes compartilham um banco com os outros arquivos da suíte de
+ * persistência, e cada um limpa as tabelas para começar do zero. Por isso
+ * `test:persistence` roda com `--test-concurrency=1`: o runner do Node executa
+ * arquivos em paralelo por padrão, e o `delete from users` de um apagava, no
+ * meio do caminho, o dono que o outro tinha acabado de semear — a falha aparecia
+ * como violação de chave estrangeira em um subconjunto aleatório dos casos.
+ */
 interface Fixture {
   repository: ApplicationRepository;
   /** Dono real: no Postgres `owner_id` tem chave estrangeira para `users`. */

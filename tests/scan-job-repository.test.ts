@@ -248,7 +248,10 @@ if (TEST_DATABASE_URL) {
         [OWNER_A, "dono-a"],
         [OWNER_B, "dono-b"],
       ]) {
-        await database.query("insert into users (id, provider, provider_account_id, login) values ($1,'teste',$2,$3) on conflict (provider, provider_account_id) do nothing", [id, login, login]);
+        // `on conflict (id)`: a identidade externa saiu de `users` para
+        // `user_identities`, então não há mais par (provedor, conta) para
+        // reconciliar aqui — o dono destes testes é o próprio id fixo.
+        await database.query("insert into users (id, login) values ($1,$2) on conflict (id) do nothing", [id, login]);
       }
       return new PostgresScanJobRepository(database);
     },
