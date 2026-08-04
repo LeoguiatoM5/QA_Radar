@@ -1,8 +1,58 @@
-import { HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
-import { renderApiPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
+import { AUTH_CLIENT_SCRIPT, HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
+import { renderApiPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
 import { WEB_STYLES } from "./web-styles.js";
 
+/**
+ * Estilo da entrada e do cadastro.
+ *
+ * Bloco próprio porque só a página `/entrar` o usa; o aviso de e-mail não
+ * confirmado, esse sim, vive em `NAV_RESPONSIVE_STYLES`, já que aparece no
+ * cabeçalho de todas as páginas — componente compartilhado com CSS num arquivo
+ * servido só em uma delas já rendeu bug em produção.
+ */
+const AUTH_STYLES = `
+.auth-shell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;min-height:100vh;padding:32px 18px}
+.auth-brand{display:flex;align-items:center;gap:11px;color:#f5f9ff;font-size:1.3rem;font-weight:800;letter-spacing:.055em;text-decoration:none}
+.auth-brand .radar{width:28px;height:28px;border-radius:50%;border:2px solid var(--cyan);box-shadow:0 0 0 4px #0d2436 inset}
+.auth-card{width:100%;max-width:404px;padding:26px 26px 24px;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:0 24px 60px #02080f66}
+.auth-tabs{display:flex;gap:4px;margin-bottom:20px;padding:4px;border-radius:10px;background:#07101d}
+.auth-tabs button{flex:1;width:auto;margin:0;padding:9px 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:.83rem;font-weight:700;box-shadow:none}
+.auth-tabs button:hover{transform:none;color:var(--text)}
+.auth-tabs button.active{background:var(--panel2);color:var(--text)}
+.auth-form h1{margin:0 0 5px;font-size:1.18rem;letter-spacing:-.01em}
+.auth-lead{margin:0 0 18px;color:var(--muted);font-size:.82rem;line-height:1.55}
+.auth-field{display:block;margin-bottom:14px}
+.auth-field span{display:block;margin-bottom:6px;color:#c8d8ea;font-size:.79rem;font-weight:700}
+.auth-field input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:#07101d;color:var(--text);font-size:.9rem}
+.auth-field input:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px #17c3e422}
+.auth-field small{display:block;margin-top:6px;color:var(--muted);font-size:.73rem;line-height:1.45}
+.auth-form>button[type=submit]{width:100%;margin:4px 0 0;padding:12px}
+.auth-link{width:auto;margin:14px auto 0;padding:0;display:block;border:0;background:none;color:var(--cyan);font-size:.78rem;font-weight:700;box-shadow:none}
+.auth-link:hover{transform:none;text-decoration:underline}
+.auth-link[hidden]{display:none}
+.auth-alert{margin:0 0 16px;padding:11px 13px;border-radius:8px;font-size:.79rem;line-height:1.5}
+.auth-alert[hidden]{display:none}
+.auth-alert-error{border:1px solid #6d2634;background:#2a1119;color:#ffc7d1}
+.auth-alert-ok{border:1px solid #1f5d4f;background:#0c2620;color:#a9e8d5}
+.auth-external{margin-top:20px}
+.auth-external[hidden]{display:none}
+.auth-divider{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em}
+.auth-divider i{flex:1;height:1px;background:var(--line)}
+.auth-github{display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border:1px solid var(--line);border-radius:8px;background:#07101d;color:#d9e7f7;font-size:.85rem;font-weight:700;text-decoration:none}
+.auth-github:hover{border-color:var(--cyan);color:var(--cyan)}
+.auth-foot{margin:0;color:var(--muted);font-size:.75rem;text-align:center}
+.auth-foot a{color:var(--cyan)}
+@media(max-width:460px){.auth-card{padding:22px 18px}}
+`;
+
 const NAV_RESPONSIVE_STYLES = `
+.verify-banner{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin:0;padding:10px 22px;border-bottom:1px solid #5c4a15;background:#201a06;color:#f0dca4;font-size:.79rem}
+.verify-banner[hidden]{display:none}
+.verify-banner button{width:auto;margin:0;padding:5px 12px;border:1px solid #6b5619;border-radius:999px;background:transparent;color:#f0dca4;font-size:.73rem;font-weight:700;box-shadow:none}
+.verify-banner button:hover{transform:none;border-color:#f0dca4}
+.verify-state{color:#c9b981;font-size:.74rem}
+.verify-state[hidden]{display:none}
+@media(max-width:560px){.verify-banner{padding:10px 14px}}
 .context-account{display:flex;align-items:center;gap:10px;margin-left:auto}.context-account[hidden]{display:none}.account-signin{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border:1px solid #2a4d66;border-radius:999px;background:#0f2537;color:var(--cyan);font-size:.78rem;font-weight:700;text-decoration:none;white-space:nowrap}.account-signin[hidden]{display:none}.account-signin:hover{border-color:var(--cyan)}.account-user{display:flex;align-items:center;gap:9px}.account-user[hidden]{display:none}.account-avatar{border-radius:50%;background:#0f2537;flex:0 0 auto}.account-login{font-size:.78rem;font-weight:700;color:#d9e7f7;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.account-signout{width:auto;margin:0;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);font-size:.72rem;font-weight:700;box-shadow:none}.account-signout:hover{transform:none;color:var(--text);border-color:var(--cyan)}@media(max-width:760px){.account-login{display:none}}
 
 body{background:#06111c;color:#e9f3ff}
@@ -345,6 +395,14 @@ export function createHomePage(): string {
   <style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}</style>
 </head>
 <body>${renderHome()}<script>${SHELL_CLIENT_SCRIPT}</script><script>${HOME_DASHBOARD_SCRIPT}</script></body>
+</html>`;
+}
+
+export function createAuthPage(): string {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Entrar ou criar conta no QA Radar"><meta name="robots" content="noindex"><title>QA Radar · Entrar</title><style>${WEB_STYLES}${AUTH_STYLES}</style></head>
+<body>${renderAuthPage()}<script>${AUTH_CLIENT_SCRIPT}</script></body>
 </html>`;
 }
 

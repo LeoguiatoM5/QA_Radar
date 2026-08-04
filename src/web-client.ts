@@ -138,36 +138,6 @@ document.querySelector('#code-import')?.addEventListener('change',async event=>{
 
 // Conta: a barra superior só mostra alguma coisa se o servidor tiver login
 // configurado. Sem isso o produto segue anônimo e nada aparece.
-const accountControl=document.querySelector('#account-control');
-async function refreshAccount(){
-  if(!accountControl)return;
-  try{
-    const me=await (await fetch('/api/v1/auth/me')).json();
-    if(!me.loginAvailable){accountControl.hidden=true;return}
-    accountControl.hidden=false;
-    const signin=document.querySelector('#account-signin'),user=document.querySelector('#account-user');
-    if(me.authenticated&&me.user){
-      if(signin)signin.hidden=true;
-      if(user)user.hidden=false;
-      const avatar=document.querySelector('#account-avatar'),login=document.querySelector('#account-login');
-      if(login)login.textContent=me.user.name||me.user.login;
-      if(avatar){if(me.user.avatarUrl){avatar.src=me.user.avatarUrl;avatar.hidden=false}else avatar.hidden=true}
-      // Quem entrou não precisa mais do aviso de login na Jornada.
-      const signinNotice=document.querySelector('#journey-signin');
-      if(signinNotice)signinNotice.hidden=true;
-    }else{
-      if(signin)signin.hidden=false;
-      if(user)user.hidden=true;
-    }
-  }catch{accountControl.hidden=true}
-}
-document.querySelector('#account-signout')?.addEventListener('click',async event=>{
-  const button=event.currentTarget;button.disabled=true;
-  try{await fetch('/api/v1/auth/logout',{method:'POST'});location.reload()}
-  catch{button.disabled=false}
-});
-void refreshAccount();
-
 // Cliente HTTP interativo de /api-tests (estilo Postman) — independente do
 // Modo Jornada acima; não compartilha nenhum elemento com ele.
 const httpSend=document.querySelector('#http-send');
@@ -455,6 +425,174 @@ mobileNavToggle?.addEventListener('click',()=>setMobileNavigation(!appSidebar.cl
 appSidebar?.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',()=>setMobileNavigation(false)));
 document.addEventListener('keydown',event=>{if(event.key==='Escape')setMobileNavigation(false)});
 window.matchMedia('(min-width: 861px)').addEventListener('change',event=>{if(event.matches)setMobileNavigation(false)});
+
+// Conta na barra superior. Vive aqui, e não no script das ferramentas, porque a
+// Visão geral e a Ajuda não carregam aquele script — com a lógica lá, o controle
+// nascia oculto e nunca aparecia justamente na primeira página que se abre.
+const accountControl=document.querySelector('#account-control');
+const verifyBanner=document.querySelector('#verify-banner');
+async function refreshAccount(){
+  if(!accountControl)return;
+  try{
+    const me=await (await fetch('/api/v1/auth/me')).json();
+    if(!me.loginAvailable){accountControl.hidden=true;return}
+    accountControl.hidden=false;
+    const signin=document.querySelector('#account-signin'),user=document.querySelector('#account-user');
+    if(me.authenticated&&me.user){
+      if(signin)signin.hidden=true;
+      if(user)user.hidden=false;
+      const avatar=document.querySelector('#account-avatar'),login=document.querySelector('#account-login');
+      if(login)login.textContent=me.user.name||me.user.login;
+      if(avatar){if(me.user.avatarUrl){avatar.src=me.user.avatarUrl;avatar.hidden=false}else avatar.hidden=true}
+      // Quem entrou não precisa mais do aviso de login na Jornada.
+      const signinNotice=document.querySelector('#journey-signin');
+      if(signinNotice)signinNotice.hidden=true;
+      // Só avisa quem tem e-mail e ainda não confirmou; conta vinda só do
+      // provedor externo pode não ter endereço nenhum para confirmar.
+      if(verifyBanner)verifyBanner.hidden=!(me.user.email&&!me.user.emailVerified);
+    }else{
+      if(signin)signin.hidden=false;
+      if(user)user.hidden=true;
+      if(verifyBanner)verifyBanner.hidden=true;
+    }
+  }catch{accountControl.hidden=true}
+}
+document.querySelector('#account-signout')?.addEventListener('click',async event=>{
+  const button=event.currentTarget;button.disabled=true;
+  try{await fetch('/api/v1/auth/logout',{method:'POST'});location.reload()}
+  catch{button.disabled=false}
+});
+document.querySelector('#verify-resend')?.addEventListener('click',async event=>{
+  const button=event.currentTarget,state=document.querySelector('#verify-state');
+  button.disabled=true;
+  const say=text=>{if(state){state.textContent=text;state.hidden=false}};
+  try{
+    const response=await fetch('/api/v1/auth/verify/request',{method:'POST'});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok){say(body.error||'Não foi possível reenviar agora.');button.disabled=false;return}
+    if(body.verified){if(verifyBanner)verifyBanner.hidden=true;return}
+    say(body.sent?'Enviado. Confira sua caixa de entrada.':'Este servidor não envia e-mail.');
+  }catch{say('Não foi possível reenviar agora.');button.disabled=false}
+});
+void refreshAccount();
+`;
+
+/**
+ * Cliente da página de entrada e cadastro.
+ *
+ * Os quatro formulários compartilham a mesma caixa de erro e o mesmo bloqueio de
+ * botão porque são o mesmo assunto: trocar de tela a cada passo perderia o
+ * e-mail já digitado.
+ */
+export const AUTH_CLIENT_SCRIPT = String.raw`
+const tabSignin=document.querySelector('#auth-tab-signin'),tabSignup=document.querySelector('#auth-tab-signup');
+const formSignin=document.querySelector('#auth-signin-form'),formSignup=document.querySelector('#auth-signup-form');
+const formForgot=document.querySelector('#auth-forgot-form'),formReset=document.querySelector('#auth-reset-form');
+const authError=document.querySelector('#auth-error'),authNotice=document.querySelector('#auth-notice');
+const authTabs=document.querySelector('#auth-tabs'),githubBlock=document.querySelector('#auth-github-block');
+const forgotOpen=document.querySelector('#auth-forgot-open');
+const params=new URLSearchParams(location.search);
+const resetToken=params.get('redefinir')||'';
+
+function clearMessages(){
+  if(authError){authError.hidden=true;authError.textContent=''}
+  if(authNotice){authNotice.hidden=true;authNotice.textContent=''}
+}
+function fail(message){if(authError){authError.textContent=message;authError.hidden=false}}
+function tell(message){if(authNotice){authNotice.textContent=message;authNotice.hidden=false}}
+
+function show(which){
+  clearMessages();
+  const panels={signin:formSignin,signup:formSignup,forgot:formForgot,reset:formReset};
+  for(const [name,form] of Object.entries(panels))if(form)form.hidden=name!==which;
+  // As abas só fazem sentido entre entrar e cadastrar; recuperação e
+  // redefinição são desvios do fluxo, não um terceiro caminho de entrada.
+  const paired=which==='signin'||which==='signup';
+  if(authTabs)authTabs.hidden=!paired;
+  if(githubBlock)githubBlock.hidden=!paired||githubBlock.dataset.available!=='true';
+  if(tabSignin){tabSignin.classList.toggle('active',which==='signin');tabSignin.setAttribute('aria-selected',String(which==='signin'))}
+  if(tabSignup){tabSignup.classList.toggle('active',which==='signup');tabSignup.setAttribute('aria-selected',String(which==='signup'))}
+  const first=panels[which]?.querySelector('input:not([type=hidden])');
+  if(first)first.focus();
+}
+
+tabSignin?.addEventListener('click',()=>show('signin'));
+tabSignup?.addEventListener('click',()=>show('signup'));
+forgotOpen?.addEventListener('click',()=>show('forgot'));
+document.querySelector('#auth-forgot-cancel')?.addEventListener('click',()=>show('signin'));
+
+async function submit(button,label,run){
+  clearMessages();
+  button.disabled=true;
+  const original=button.textContent;
+  button.textContent=label;
+  try{await run()}
+  catch(error){fail(error&&error.message?error.message:'Não foi possível concluir agora.')}
+  finally{button.disabled=false;button.textContent=original}
+}
+
+async function send(path,payload){
+  const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+  const body=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(body.error||'Não foi possível concluir agora.');
+  return body;
+}
+
+formSignin?.addEventListener('submit',event=>{
+  event.preventDefault();
+  void submit(document.querySelector('#signin-submit'),'Entrando...',async()=>{
+    await send('/api/v1/auth/login',{email:document.querySelector('#signin-email').value,password:document.querySelector('#signin-password').value});
+    location.href='/';
+  });
+});
+
+formSignup?.addEventListener('submit',event=>{
+  event.preventDefault();
+  void submit(document.querySelector('#signup-submit'),'Criando...',async()=>{
+    await send('/api/v1/auth/register',{
+      email:document.querySelector('#signup-email').value,
+      password:document.querySelector('#signup-password').value,
+      name:document.querySelector('#signup-name').value||undefined,
+    });
+    location.href='/';
+  });
+});
+
+formForgot?.addEventListener('submit',event=>{
+  event.preventDefault();
+  void submit(document.querySelector('#forgot-submit'),'Enviando...',async()=>{
+    await send('/api/v1/auth/password/forgot',{email:document.querySelector('#forgot-email').value});
+    // Mensagem igual exista ou não a conta: o contrário publicaria quem tem
+    // cadastro para qualquer um que digitasse um endereço.
+    show('signin');
+    tell('Se existir uma conta com esse e-mail, o link de redefinição já está a caminho.');
+  });
+});
+
+formReset?.addEventListener('submit',event=>{
+  event.preventDefault();
+  void submit(document.querySelector('#reset-submit'),'Salvando...',async()=>{
+    await send('/api/v1/auth/password/reset',{token:resetToken,password:document.querySelector('#reset-password').value});
+    location.href='/';
+  });
+});
+
+async function start(){
+  try{
+    const me=await (await fetch('/api/v1/auth/me')).json();
+    // Quem já está dentro não tem o que fazer aqui.
+    if(me.authenticated){location.replace('/');return}
+    if(!me.loginAvailable){fail('Este servidor não guarda contas: use o QA Radar sem entrar.');if(authTabs)authTabs.hidden=true;return}
+    if(githubBlock)githubBlock.dataset.available=me.githubAvailable?'true':'false';
+    // Sem provedor de e-mail não há caminho de volta, então o link não aparece.
+    if(forgotOpen)forgotOpen.hidden=!me.passwordResetAvailable;
+  }catch{}
+  if(resetToken){show('reset');return}
+  show(params.get('cadastro')==='1'?'signup':'signin');
+  if(params.get('erro')==='confirmacao')fail('Esse link de confirmação expirou ou já foi usado. Entre e peça outro.');
+  if(params.get('proximo'))tell('Entre ou crie uma conta para continuar.');
+}
+void start();
 `;
 
 export const HOME_DASHBOARD_SCRIPT = String.raw`

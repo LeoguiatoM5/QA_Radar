@@ -1,7 +1,49 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CONSTRUCTION_AREAS, renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
-import { createApiTestsPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
+import { createApiTestsPage, createAuthPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
+
+describe("entrada e cadastro", () => {
+  it("compõe os quatro formulários de conta numa página só", () => {
+    const html = createAuthPage();
+
+    assert.match(html, /^<!doctype html>/);
+    assert.match(html, /id="auth-signin-form"/);
+    assert.match(html, /id="auth-signup-form"/);
+    assert.match(html, /id="auth-forgot-form"/);
+    assert.match(html, /id="auth-reset-form"/);
+    assert.match(html, /type="password"/);
+    assert.match(html, /autocomplete="new-password"/, "o cadastro precisa dizer ao gerenciador de senhas que é senha nova");
+    assert.match(html, /autocomplete="current-password"/);
+    assert.match(html, /name="robots" content="noindex"/, "a tela de entrada não deve ser indexada");
+  });
+
+  it("não carrega o script das ferramentas na tela de entrada", () => {
+    // A página é anônima por definição: puxar o cliente do scanner traria
+    // consultas e estado que ninguém ali pode usar.
+    const html = createAuthPage();
+    assert.ok(!html.includes("#scan-form"), "a tela de entrada não deve conter o cliente do scanner");
+    assert.match(html, /AUTH|auth-tabs/);
+  });
+
+  it("leva o controle de conta para /entrar, não direto ao provedor", () => {
+    // Quem ainda não tem conta precisa achar o cadastro; mandar direto ao
+    // GitHub esconderia o caminho de quem não usa GitHub.
+    for (const html of [createHomePage(), createDocsPage(), createWebPage()]) {
+      assert.match(html, /id="account-signin" href="\/entrar"/);
+    }
+  });
+
+  it("ativa o controle de conta em toda página, inclusive nas que não carregam o cliente do scanner", () => {
+    // A lógica já morou no script das ferramentas, que a Visão geral e a Ajuda
+    // não carregam: o controle nascia oculto e nunca aparecia na primeira
+    // página que se abre.
+    for (const html of [createHomePage(), createDocsPage(), createJourneyPage(), createApiTestsPage(), createWebPage()]) {
+      assert.match(html, /refreshAccount/, "toda página precisa consultar /auth/me");
+      assert.match(html, /id="verify-banner"/);
+    }
+  });
+});
 
 describe("dashboard components", () => {
   it("compõe a Home sem carregar o cliente do scanner", () => {
@@ -154,11 +196,13 @@ describe("dashboard components", () => {
     // O controle de conta existe em toda página, mas nasce oculto: quem decide
     // mostrá-lo é o cliente, depois de perguntar ao servidor se há login.
     assert.match(html, /id="account-control" hidden/);
-    assert.match(html, /id="account-signin"[^>]*href="\/api\/v1\/auth\/github"/);
+    // Entrar leva à tela de conta, e não direto ao provedor: com cadastro por
+    // e-mail e senha, o GitHub virou um dos caminhos e não mais o único.
+    assert.match(html, /id="account-signin"[^>]*href="\/entrar"/);
     assert.match(html, /id="account-signout"/);
     assert.match(html, /loginAvailable/);
     assert.match(html, /id="journey-signin"/);
-    assert.match(html, /Entrar com GitHub/);
+    assert.match(html, /Entrar ou criar conta/);
     assert.doesNotMatch(html, /journey-admin-token/);
     assert.doesNotMatch(html, /qa-radar-code-admin-token/);
     assert.match(html, /\.app-sidebar \.nav-link\{/);

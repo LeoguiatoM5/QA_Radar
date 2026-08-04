@@ -93,7 +93,20 @@ function renderAppNav(active: NavSection, area = ""): string {
  * produto continua anônimo como sempre.
  */
 function renderAccountControl(): string {
-  return `<div class="context-account" id="account-control" hidden><a class="account-signin" id="account-signin" href="/api/v1/auth/github" hidden>Entrar</a><div class="account-user" id="account-user" hidden><img class="account-avatar" id="account-avatar" alt="" width="26" height="26"><span class="account-login" id="account-login"></span><button type="button" class="account-signout" id="account-signout">Sair</button></div></div>`;
+  // Aponta para /entrar, e não direto para o GitHub: o provedor externo virou um
+  // dos caminhos de entrada, e quem não tem conta precisa achar o cadastro.
+  return `<div class="context-account" id="account-control" hidden><a class="account-signin" id="account-signin" href="/entrar" hidden>Entrar</a><div class="account-user" id="account-user" hidden><img class="account-avatar" id="account-avatar" alt="" width="26" height="26"><span class="account-login" id="account-login"></span><button type="button" class="account-signout" id="account-signout">Sair</button></div></div>`;
+}
+
+/**
+ * Aviso de e-mail ainda não confirmado.
+ *
+ * Fica no topo de toda página e só aparece pelo `/auth/me`. Não bloqueia nada de
+ * propósito: exigir confirmação para usar o produto deixaria quem não recebeu a
+ * mensagem — caixa de spam, provedor lento — parado sem ter o que fazer.
+ */
+function renderVerifyBanner(): string {
+  return `<div class="verify-banner" id="verify-banner" hidden><span>Confirme seu e-mail para poder recuperar a senha depois.</span><button type="button" id="verify-resend">Reenviar</button><span class="verify-state" id="verify-state" hidden></span></div>`;
 }
 
 function renderWorkspaceStart(active: NavSection, section: string, area = ""): string {
@@ -105,6 +118,7 @@ function renderWorkspaceStart(active: NavSection, section: string, area = ""): s
       <div class="context-item context-environment" data-environment="local"><small>Ambiente</small><strong><span class="live-dot"></span><span id="context-environment-label">Local</span></strong><select id="context-environment" aria-label="Ambiente do projeto">${ENVIRONMENTS.map((environment) => `<option value="${environment.slug}">${environment.label}</option>`).join("")}</select></div>
       <div class="context-section"><span class="context-page">${section}</span><span class="context-clock"><i aria-hidden="true"></i><time id="context-clock" datetime="">--/--/---- --:--</time></span><span class="context-period" title="Janela usada nos indicadores do dashboard">Últimas 24h</span>${renderAccountControl()}</div>
     </header>
+    ${renderVerifyBanner()}
     <div class="app-page app-page-${active}">`;
 }
 
@@ -154,7 +168,7 @@ function renderEvidenceModal(): string {
 }
 
 function renderCodePanel(): string {
-  return `<section class="panel" id="code-mode-panel"><div class="eyebrow">Jornada Playwright</div><h2>Teste Playwright em TypeScript</h2><p class="sub">Grave o fluxo no navegador, revise o código oficial e execute a jornada no ambiente configurado.</p><div class="code-flow"><span><b>1</b>Gravar</span><span><b>2</b>Revisar</span><span><b>3</b>Executar</span></div><label for="codegen-url">URL inicial da gravação</label><input id="codegen-url" type="url" placeholder="https://staging.sua-aplicacao.com"><div class="journey-controls"><button id="codegen-start" type="button">Abrir gravador</button><button id="codegen-stop" class="secondary" type="button" disabled>Usar código gravado</button></div><div class="error-box" id="codegen-error"></div><div class="code-editor-head"><div><label for="playwright-code">Arquivo Playwright</label><small>qa-radar.spec.ts</small></div><label class="code-import" for="code-import">Importar arquivo</label><input id="code-import" type="file" accept=".ts,.spec.ts" hidden></div><textarea id="playwright-code" rows="18" spellcheck="false" aria-label="Código do teste Playwright" placeholder="import { test, expect } from '@playwright/test';"></textarea><div class="journey-controls code-actions"><button id="code-save" class="secondary" type="button">Exportar .spec.ts</button><button id="code-execute" type="button">Executar</button></div><div class="journey-admin" id="journey-signin" hidden><div class="error-box" id="journey-signin-error" role="alert"></div><label>Entre para executar</label><small class="hint">A execução da jornada neste servidor exige uma conta. Entrar leva um clique e mantém suas execuções reunidas no seu histórico.</small><div class="journey-admin-row"><a class="button" id="journey-signin-link" href="/api/v1/auth/github">Entrar com GitHub</a></div></div><div id="code-result" hidden aria-live="polite"></div><p class="hint">Este recurso executa código informado pelo usuário. Revise o arquivo antes de executar.</p></section>`;
+  return `<section class="panel" id="code-mode-panel"><div class="eyebrow">Jornada Playwright</div><h2>Teste Playwright em TypeScript</h2><p class="sub">Grave o fluxo no navegador, revise o código oficial e execute a jornada no ambiente configurado.</p><div class="code-flow"><span><b>1</b>Gravar</span><span><b>2</b>Revisar</span><span><b>3</b>Executar</span></div><label for="codegen-url">URL inicial da gravação</label><input id="codegen-url" type="url" placeholder="https://staging.sua-aplicacao.com"><div class="journey-controls"><button id="codegen-start" type="button">Abrir gravador</button><button id="codegen-stop" class="secondary" type="button" disabled>Usar código gravado</button></div><div class="error-box" id="codegen-error"></div><div class="code-editor-head"><div><label for="playwright-code">Arquivo Playwright</label><small>qa-radar.spec.ts</small></div><label class="code-import" for="code-import">Importar arquivo</label><input id="code-import" type="file" accept=".ts,.spec.ts" hidden></div><textarea id="playwright-code" rows="18" spellcheck="false" aria-label="Código do teste Playwright" placeholder="import { test, expect } from '@playwright/test';"></textarea><div class="journey-controls code-actions"><button id="code-save" class="secondary" type="button">Exportar .spec.ts</button><button id="code-execute" type="button">Executar</button></div><div class="journey-admin" id="journey-signin" hidden><div class="error-box" id="journey-signin-error" role="alert"></div><label>Entre para executar</label><small class="hint">A execução da jornada neste servidor exige uma conta. Entrar leva um clique e mantém suas execuções reunidas no seu histórico.</small><div class="journey-admin-row"><a class="button" id="journey-signin-link" href="/entrar">Entrar ou criar conta</a></div></div><div id="code-result" hidden aria-live="polite"></div><p class="hint">Este recurso executa código informado pelo usuário. Revise o arquivo antes de executar.</p></section>`;
 }
 
 function renderHttpKeyValueRow(keyPlaceholder: string, valuePlaceholder: string): string {
@@ -341,6 +355,73 @@ export function renderConstructionPage(area: string): string {
     </div>
   </section>
   ${renderWorkspaceEnd()}`;
+}
+
+function authField(id: string, label: string, type: string, autocomplete: string, hint = "", attributes = ""): string {
+  return `<label class="auth-field" for="${id}"><span>${label}</span><input id="${id}" name="${id}" type="${type}" autocomplete="${autocomplete}" ${attributes}>${hint ? `<small>${hint}</small>` : ""}</label>`;
+}
+
+/**
+ * Entrada e cadastro.
+ *
+ * Fora do shell do produto de propósito: quem chega aqui não está trabalhando
+ * numa análise, e a navegação lateral cheia de ferramentas que exigem conta só
+ * atrapalharia. Os quatro formulários vivem na mesma página e o cliente decide
+ * qual mostrar, porque são o mesmo assunto e trocar de tela a cada passo perde
+ * o e-mail já digitado.
+ */
+export function renderAuthPage(): string {
+  return `<main class="auth-shell">
+  <a class="auth-brand" href="/"><span class="radar" aria-hidden="true"></span><span>QA Radar</span></a>
+  <section class="auth-card">
+    <div class="auth-tabs" id="auth-tabs" role="tablist">
+      <button type="button" role="tab" id="auth-tab-signin" class="active" aria-selected="true">Entrar</button>
+      <button type="button" role="tab" id="auth-tab-signup" aria-selected="false">Criar conta</button>
+    </div>
+
+    <p class="auth-alert auth-alert-error" id="auth-error" role="alert" hidden></p>
+    <p class="auth-alert auth-alert-ok" id="auth-notice" role="status" hidden></p>
+
+    <form class="auth-form" id="auth-signin-form" novalidate>
+      <h1>Entrar na sua conta</h1>
+      <p class="auth-lead">Suas aplicações, execuções e histórico ficam guardados na conta.</p>
+      ${authField("signin-email", "E-mail", "email", "email", "", 'required inputmode="email" maxlength="254"')}
+      ${authField("signin-password", "Senha", "password", "current-password", "", 'required maxlength="200"')}
+      <button type="submit" id="signin-submit">Entrar</button>
+      <button type="button" class="auth-link" id="auth-forgot-open" hidden>Esqueci minha senha</button>
+    </form>
+
+    <form class="auth-form" id="auth-signup-form" novalidate hidden>
+      <h1>Criar sua conta</h1>
+      <p class="auth-lead">Leva um minuto e não custa nada durante o Beta.</p>
+      ${authField("signup-name", "Nome", "text", "name", "Opcional. Aparece só para você.", 'maxlength="80"')}
+      ${authField("signup-email", "E-mail", "email", "email", "", 'required inputmode="email" maxlength="254"')}
+      ${authField("signup-password", "Senha", "password", "new-password", "Pelo menos 10 caracteres. Prefira uma frase a uma palavra com símbolos.", 'required minlength="10" maxlength="200"')}
+      <button type="submit" id="signup-submit">Criar conta</button>
+    </form>
+
+    <form class="auth-form" id="auth-forgot-form" novalidate hidden>
+      <h1>Recuperar acesso</h1>
+      <p class="auth-lead">Enviamos um link para você escolher uma senha nova. Ele vale por uma hora.</p>
+      ${authField("forgot-email", "E-mail da conta", "email", "email", "", 'required inputmode="email" maxlength="254"')}
+      <button type="submit" id="forgot-submit">Enviar link</button>
+      <button type="button" class="auth-link" id="auth-forgot-cancel">Voltar para a entrada</button>
+    </form>
+
+    <form class="auth-form" id="auth-reset-form" novalidate hidden>
+      <h1>Escolher uma nova senha</h1>
+      <p class="auth-lead">Ao confirmar, todas as sessões abertas nesta conta são encerradas.</p>
+      ${authField("reset-password", "Nova senha", "password", "new-password", "Pelo menos 10 caracteres.", 'required minlength="10" maxlength="200"')}
+      <button type="submit" id="reset-submit">Salvar e entrar</button>
+    </form>
+
+    <div class="auth-external" id="auth-github-block" hidden>
+      <span class="auth-divider"><i></i>ou<i></i></span>
+      <a class="auth-github" id="auth-github" href="/api/v1/auth/github">Continuar com o GitHub</a>
+    </div>
+  </section>
+  <p class="auth-foot">Ao criar uma conta você concorda com a licença de avaliação do QA Radar. <a href="/docs">Dúvidas?</a></p>
+</main>`;
 }
 
 function faqItem(id: string, question: string, answer: string): string {
