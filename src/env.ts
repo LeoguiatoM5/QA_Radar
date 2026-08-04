@@ -80,18 +80,35 @@ export interface EnvironmentConfig {
 }
 
 /**
+ * Chaves que só fazem sentido preenchidas em conjunto: ou todas, ou nenhuma.
+ *
+ * A mensagem nomeia **o que falta**, e não só o conjunto. Dizer "configure A e B
+ * em conjunto" quando A já está lá manda a pessoa reconferir as duas no painel
+ * para descobrir sozinha qual é — e isso já custou um deploy reprovado.
+ */
+function requireTogether(source: NodeJS.ProcessEnv, names: string[]): Record<string, string> | undefined {
+  const values = new Map(names.map((name) => [name, source[name]?.trim() ?? ""]));
+  const missing = names.filter((name) => !values.get(name));
+  if (missing.length === names.length) return undefined;
+  if (missing.length > 0) {
+    throw new Error(`Falta preencher ${missing.join(" e ")}: ${names.join(", ")} só funcionam em conjunto.`);
+  }
+  return Object.fromEntries(values) as Record<string, string>;
+}
+
+/**
  * Chave e remetente andam juntos, como no storage: metade configurada é engano
  * de quem configurou, e descobrir isso no primeiro "esqueci minha senha" é bem
  * pior do que falhar no boot.
  */
 function emailFromEnvironment(source: NodeJS.ProcessEnv): EmailConfig | undefined {
-  const apiKey = source.QA_RADAR_EMAIL_API_KEY?.trim();
-  const from = source.QA_RADAR_EMAIL_FROM?.trim();
-  if (!apiKey && !from) return undefined;
-  if (!apiKey || !from) {
-    throw new Error("Configure QA_RADAR_EMAIL_API_KEY e QA_RADAR_EMAIL_FROM em conjunto.");
-  }
-  return { apiKey, from, fromName: source.QA_RADAR_EMAIL_FROM_NAME?.trim() || "QA Radar" };
+  const values = requireTogether(source, ["QA_RADAR_EMAIL_API_KEY", "QA_RADAR_EMAIL_FROM"]);
+  if (!values) return undefined;
+  return {
+    apiKey: values.QA_RADAR_EMAIL_API_KEY as string,
+    from: values.QA_RADAR_EMAIL_FROM as string,
+    fromName: source.QA_RADAR_EMAIL_FROM_NAME?.trim() || "QA Radar",
+  };
 }
 
 /**
