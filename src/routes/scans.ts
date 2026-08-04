@@ -11,6 +11,9 @@ import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { isTerminalJobStatus } from "../job-state.js";
 import { MAX_IDEMPOTENCY_KEY_LENGTH, idempotencyScope, requestFingerprint } from "../idempotency-store.js";
 import type { PersistedScanJob } from "../scan-job-repository.js";
+
+/** Teto do histórico devolvido de uma vez. */
+const MAX_HISTORY_ITEMS = 50;
 import type { IncomingMessage } from "node:http";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import type { ServerOptions } from "../server.js";
@@ -147,6 +150,9 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     // requisição precisa da impressão digital dele, e é justamente sob carga —
     // quando a fila enche e o cliente sofre timeout — que a repetição acontece.
     const body = await readJson(request, MAX_JSON_BODY_BYTES);
+    // Quem está logado vira dono da análise; anônimo segue sem dono e o token
+    // dela é o único caminho para o resultado.
+    const owner = await context.currentUser(request);
     const idempotency = idempotencyRequest(request, context.clientAddress(request), body);
     if (idempotency) {
       const existing = await context.idempotencyKeys.get(idempotency.scope);
@@ -225,6 +231,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       await writeFile(join(options.outputDir, ACCESS_HASH_FILE), `${accessTokenHash}\n`, { encoding: "utf8", mode: 0o600 });
       const job: ScanJob = {
         id,
+        ownerId: owner?.id,
         status: "queued",
         createdAt: new Date().toISOString(),
         options,
@@ -255,6 +262,20 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       if (idempotency) await context.idempotencyKeys.release(idempotency.scope);
       throw error;
     }
+    return true;
+  }
+
+  // Histórico da própria conta. Só existe logado, e devolve exclusivamente o
+  // que pertence a quem pediu — a listagem é o lugar onde um vazamento entre
+  // contas seria mais fácil de acontecer e mais difícil de notar.
+  if (request.method === "GET" && url.pathname === "/api/scans") {
+    const viewer = await context.currentUser(request);
+    if (!viewer) {
+      jsonError(response, "unauthorized", "Entre com sua conta para ver seu histórico de análises.");
+      return true;
+    }
+    const scans = await context.scanJobs.listForOwner(viewer.id, MAX_HISTORY_ITEMS);
+    json(response, 200, { scans: scans.map((scan) => publicPersistedJob(scan)) });
     return true;
   }
 
@@ -314,7 +335,13 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       jsonError(response, "not_found", "Análise não encontrada ou já expirada.");
       return true;
     }
-    if (!requireAccess(request, response, expectedHash)) return true;
+    // O dono entra sem apresentar o token: a análise é dele. Uma análise
+    // anônima (sem dono) não pertence a ninguém, então continua exigindo o
+    // token mesmo de quem está logado — é o que impede uma conta de alcançar o
+    // que não é dela.
+    const ownerId = job?.ownerId ?? persisted?.ownerId;
+    const viewer = ownerId ? await context.currentUser(request) : undefined;
+    if (!(ownerId && viewer?.id === ownerId) && !requireAccess(request, response, expectedHash)) return true;
     if (!artifact) {
       if (job) {
         json(response, 200, publicJob(job, jobQueue.position(job.id)));

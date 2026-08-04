@@ -4,6 +4,8 @@ import type { AddressInfo } from "node:net";
 import { createQaRadarServer } from "../src/server.js";
 import { InMemoryIdentityStore } from "../src/identity.js";
 import { issueOAuthState, verifyOAuthState, OAUTH_STATE_TTL_MS, type OAuthProvider } from "../src/oauth.js";
+import { InMemoryScanJobRepository } from "../src/scan-job-repository.js";
+import { createScanJobPersistence } from "../src/scan-job-persistence.js";
 
 const SECRET = "segredo-de-sessao-com-32-bytes-x";
 
@@ -129,6 +131,118 @@ describe("login", () => {
       // O cookie antigo não vale mais nem se for reenviado.
       const me = (await (await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie } })).json()) as { authenticated: boolean };
       assert.equal(me.authenticated, false);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("isolamento entre contas", () => {
+  /** Loga uma conta do provedor e devolve o cookie de sessão. */
+  async function signIn(baseUrl: string, accountId: string, login: string): Promise<string> {
+    const state = issueOAuthState(SECRET);
+    const callback = await fetch(`${baseUrl}/api/v1/auth/github/callback?code=${accountId}&state=${encodeURIComponent(state)}`, { redirect: "manual" });
+    assert.equal(callback.status, 302, `login de ${login} falhou`);
+    return (callback.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+  }
+
+  /** Provedor que devolve uma conta diferente conforme o código recebido. */
+  const multiAccount = fakeProvider({
+    profileFor: async (code) => ({ providerAccountId: code, login: `usuario-${code}`, name: undefined, avatarUrl: undefined }),
+  });
+
+  async function createScan(baseUrl: string, cookie?: string) {
+    const response = await fetch(`${baseUrl}/api/v1/scans`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify({ url: baseUrl }),
+    });
+    assert.equal(response.status, 202);
+    return (await response.json()) as { id: string; accessToken: string };
+  }
+
+  it("deixa o dono abrir a própria análise sem apresentar o token", async () => {
+    const identity = new InMemoryIdentityStore();
+    const scanJobs = createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 3_600_000, onError: () => {} });
+    const { baseUrl, close } = await startServer({ concurrency: 0, identity, oauthProvider: multiAccount, scanJobs });
+    try {
+      const cookie = await signIn(baseUrl, "conta-a", "a");
+      const scan = await createScan(baseUrl, cookie);
+      const semToken = await fetch(`${baseUrl}/api/v1/scans/${scan.id}`, { headers: { cookie } });
+      assert.equal(semToken.status, 200);
+      assert.equal(((await semToken.json()) as { id: string }).id, scan.id);
+    } finally {
+      await close();
+    }
+  });
+
+  it("não deixa uma conta abrir a análise de outra", async () => {
+    // Autorização horizontal: é o teste que separa isolamento de intenção.
+    const identity = new InMemoryIdentityStore();
+    const scanJobs = createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 3_600_000, onError: () => {} });
+    const { baseUrl, close } = await startServer({ concurrency: 0, identity, oauthProvider: multiAccount, scanJobs });
+    try {
+      const cookieA = await signIn(baseUrl, "conta-a", "a");
+      const scanDeA = await createScan(baseUrl, cookieA);
+      const cookieB = await signIn(baseUrl, "conta-b", "b");
+
+      const invasao = await fetch(`${baseUrl}/api/v1/scans/${scanDeA.id}`, { headers: { cookie: cookieB } });
+      assert.equal(invasao.status, 401, "a conta B não pode abrir a análise da conta A");
+    } finally {
+      await close();
+    }
+  });
+
+  it("mantém a análise anônima fora do alcance de quem está logado", async () => {
+    // Sem dono ela não pertence a ninguém: só o token abre, mesmo para contas.
+    const identity = new InMemoryIdentityStore();
+    const scanJobs = createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 3_600_000, onError: () => {} });
+    const { baseUrl, close } = await startServer({ concurrency: 0, identity, oauthProvider: multiAccount, scanJobs });
+    try {
+      const anonima = await createScan(baseUrl);
+      const cookie = await signIn(baseUrl, "conta-a", "a");
+      assert.equal((await fetch(`${baseUrl}/api/v1/scans/${anonima.id}`, { headers: { cookie } })).status, 401);
+      // O token dela continua funcionando, que é o caminho anônimo de sempre.
+      const comToken = await fetch(`${baseUrl}/api/v1/scans/${anonima.id}`, { headers: { authorization: `Bearer ${anonima.accessToken}` } });
+      assert.equal(comToken.status, 200);
+    } finally {
+      await close();
+    }
+  });
+
+  it("lista no histórico só o que é da própria conta", async () => {
+    const identity = new InMemoryIdentityStore();
+    const scanJobs = createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 3_600_000, onError: () => {} });
+    const { baseUrl, close } = await startServer({ concurrency: 0, identity, oauthProvider: multiAccount, scanJobs });
+    try {
+      const cookieA = await signIn(baseUrl, "conta-a", "a");
+      const daContaA = await createScan(baseUrl, cookieA);
+      const cookieB = await signIn(baseUrl, "conta-b", "b");
+      const daContaB = await createScan(baseUrl, cookieB);
+      await createScan(baseUrl);
+
+      const listaB = (await (await fetch(`${baseUrl}/api/v1/scans`, { headers: { cookie: cookieB } })).json()) as { scans: Array<{ id: string }> };
+      assert.deepEqual(
+        listaB.scans.map((scan) => scan.id),
+        [daContaB.id],
+        "a listagem só pode conter as análises de quem pediu",
+      );
+      const listaA = (await (await fetch(`${baseUrl}/api/v1/scans`, { headers: { cookie: cookieA } })).json()) as { scans: Array<{ id: string }> };
+      assert.deepEqual(
+        listaA.scans.map((scan) => scan.id),
+        [daContaA.id],
+      );
+    } finally {
+      await close();
+    }
+  });
+
+  it("exige conta para consultar histórico", async () => {
+    const { baseUrl, close } = await startServer({ concurrency: 0, identity: new InMemoryIdentityStore(), oauthProvider: multiAccount });
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/scans`);
+      assert.equal(response.status, 401);
+      assert.equal(((await response.json()) as { code: string }).code, "unauthorized");
     } finally {
       await close();
     }

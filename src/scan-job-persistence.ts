@@ -36,6 +36,8 @@ export interface ScanJobPersistence {
    * indefinidamente, o que é pior do que falhar.
    */
   pending(): Promise<PersistedScanJob[]>;
+  /** Histórico de uma conta. Vazio sem banco: não há o que listar. */
+  listForOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]>;
   /** Sondagem barata para o readiness. Nunca lança. */
   status(): Promise<"disabled" | "ok" | "unreachable">;
 }
@@ -47,6 +49,7 @@ export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
   load: async () => undefined,
   recoverOrphans: async () => [],
   pending: async () => [],
+  listForOwner: async () => [],
   status: async () => "disabled",
 };
 
@@ -64,6 +67,7 @@ export function toPersistedScanJob(job: ScanJob, retentionMs: number): Persisted
     error: job.error,
     cancelRequested: job.cancelRequested,
     accessTokenHash: job.accessTokenHash,
+    ownerId: job.ownerId,
   };
 }
 
@@ -123,6 +127,14 @@ export function createScanJobPersistence({ repository, retentionMs, onError }: S
         return [];
       }
     },
+    async listForOwner(ownerId, limit) {
+      try {
+        return await repository.listByOwner(ownerId, limit);
+      } catch (error) {
+        onError("list", error);
+        return [];
+      }
+    },
     async status() {
       // `counts` é a consulta mais barata que ainda prova que o banco responde.
       try {
@@ -150,5 +162,6 @@ export function toRuntimeScanJob(stored: PersistedScanJob): ScanJob {
     controller: new AbortController(),
     cancelRequested: false,
     accessTokenHash: stored.accessTokenHash,
+    ownerId: stored.ownerId,
   };
 }

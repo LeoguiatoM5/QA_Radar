@@ -26,6 +26,7 @@ function job(id: string): ScanJob {
     controller: new AbortController(),
     cancelRequested: false,
     accessTokenHash: "0".repeat(64),
+    ownerId: undefined,
   };
 }
 
