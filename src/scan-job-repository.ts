@@ -22,6 +22,8 @@ export interface PersistedScanJob {
   accessTokenHash: string;
   /** Nulo = anônima: só o token abre. Preenchido = pertence a uma conta. */
   ownerId: string | undefined;
+  /** Aplicação a que a análise pertence. Nulo = avulsa, ou aplicação apagada. */
+  applicationId: string | undefined;
 }
 
 export interface ScanJobRepository {
@@ -200,6 +202,7 @@ interface ScanJobRow {
   cancel_requested: boolean;
   access_token_hash: string;
   owner_id: string | null;
+  application_id: string | null;
 }
 
 function fromRow(row: ScanJobRow): PersistedScanJob {
@@ -216,18 +219,19 @@ function fromRow(row: ScanJobRow): PersistedScanJob {
     cancelRequested: row.cancel_requested,
     accessTokenHash: row.access_token_hash,
     ownerId: row.owner_id ?? undefined,
+    applicationId: row.application_id ?? undefined,
   };
 }
 
-const COLUMNS = "id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id";
+const COLUMNS = "id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id, application_id";
 
 export class PostgresScanJobRepository implements ScanJobRepository {
   constructor(private readonly database: Database) {}
 
   async insert(job: PersistedScanJob): Promise<void> {
     await this.database.query(
-      `insert into scan_jobs (id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id, queued_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, case when $2 = 'queued' then $3::timestamptz else null end)`,
+      `insert into scan_jobs (id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id, application_id, queued_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, case when $2 = 'queued' then $3::timestamptz else null end)`,
       [
         job.id,
         job.status,
@@ -241,6 +245,7 @@ export class PostgresScanJobRepository implements ScanJobRepository {
         job.cancelRequested,
         job.accessTokenHash,
         job.ownerId ?? null,
+        job.applicationId ?? null,
       ],
     );
   }

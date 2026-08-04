@@ -38,6 +38,8 @@ import { createRandomAccessTokenIssuer, type AccessTokenIssuer } from "./access-
 import type { IdentityStore, User } from "./identity.js";
 import type { OAuthProvider } from "./oauth.js";
 import { NO_EMAIL_SENDER, type EmailSender } from "./email.js";
+import type { ApplicationRepository } from "./application-repository.js";
+import { tryHandleApplications } from "./routes/applications.js";
 import { tryHandleAuth, sessionTokenFrom } from "./routes/auth.js";
 
 export interface OperationalEvent {
@@ -83,6 +85,15 @@ export interface ServerOptions {
   turnstileSiteKey: string | undefined;
   turnstileSecretKey: string | undefined;
   allowHistory: boolean;
+  /**
+   * Exigir conta para executar qualquer coisa.
+   *
+   * Padrão `false`, e não `true`, porque a CLI e o dashboard local não podem
+   * passar a exigir cadastro para rodar — é a mesma regra do banco, do storage e
+   * do login. Ligada, a instalação vira um produto com conta: navegar continua
+   * livre, executar exige entrar.
+   */
+  requireAccount: boolean;
   // allowJourneys e os limites maxJourney* abaixo não são lidos de nenhuma
   // variável de ambiente em produção: a jornada declarativa em JSON é legado
   // e não faz parte do produto. Permanecem aqui apenas para os testes que
@@ -117,6 +128,8 @@ export interface ServerOptions {
   oauthProvider: OAuthProvider | undefined;
   /** Inerte por padrão: confirmação de e-mail e recuperação de senha ficam de fora. */
   emailSender: EmailSender;
+  /** Ausente = aplicações indisponíveis; o resto do produto não depende delas. */
+  applications: ApplicationRepository | undefined;
   /** Assina o estado do OAuth e nada mais. */
   sessionSecret: string;
   operationalLogger: (event: OperationalEvent) => void;
@@ -136,6 +149,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   turnstileSiteKey: undefined,
   turnstileSecretKey: undefined,
   allowHistory: false,
+  requireAccount: false,
   allowJourneys: false,
   allowCodeMode: false,
   codeModeAdminToken: undefined,
@@ -155,6 +169,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   identity: undefined,
   oauthProvider: undefined,
   emailSender: NO_EMAIL_SENDER,
+  applications: undefined,
   sessionSecret: randomBytes(32).toString("base64url"),
   operationalLogger: defaultOperationalLogger,
 };
@@ -162,6 +177,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
 const ROUTE_HANDLERS: RouteHandler[] = [
   tryHandlePages,
   tryHandleAuth,
+  tryHandleApplications,
   tryHandleDashboardActivity,
   tryHandleCodegen,
   tryHandleCodeExecution,
@@ -644,6 +660,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     identity: config.identity,
     oauthProvider: config.oauthProvider,
     emailSender: config.emailSender,
+    applications: config.applications,
     authRateLimiter,
     currentUser,
     accessTokens: config.accessTokens,

@@ -1,5 +1,5 @@
 import { json, readJson, textField } from "../http-helpers.js";
-import { invalidRequest } from "../api-error.js";
+import { ApiError, invalidRequest } from "../api-error.js";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import { PublicNetworkGuard, type PublicUrlResolver } from "../security.js";
 import type { RouteHandler } from "./context.js";
@@ -100,6 +100,11 @@ export const tryHandleHttpRequest: RouteHandler = async (context, request, respo
   const { config } = context;
 
   if (request.method === "POST" && url.pathname === "/api/http-request") {
+    // Mesma regra da análise: com a instalação exigindo conta, disparar uma
+    // requisição a partir do servidor é execução e pede sessão.
+    if (config.requireAccount && !(await context.currentUser(request))) {
+      throw new ApiError("unauthorized", "Entre ou crie uma conta para executar testes de API.");
+    }
     if (!context.consumeRateLimit(request, response)) return true;
     const requestBody = await readJson(request, MAX_JSON_BODY_BYTES);
     const targetUrl = textField(requestBody, "url");

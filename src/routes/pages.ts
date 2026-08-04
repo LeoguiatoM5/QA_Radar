@@ -1,6 +1,6 @@
 import { access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
-import { createApiTestsPage, createAuthPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../web-page.js";
+import { createApiTestsPage, createApplicationsPage, createAuthPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../web-page.js";
 import { json } from "../http-helpers.js";
 import { createOpenApiDocument } from "../openapi.js";
 import type { RouteHandler } from "./context.js";
@@ -86,6 +86,20 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       "content-security-policy": "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'",
     });
     response.end(createDocsPage());
+    return true;
+  }
+
+  if (request.method === "GET" && url.pathname === "/aplicacoes") {
+    response.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
+      "content-security-policy":
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'",
+    });
+    response.end(createApplicationsPage());
     return true;
   }
 

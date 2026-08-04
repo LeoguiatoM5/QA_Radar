@@ -6,6 +6,22 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **Cadastro com e-mail e senha.** A conta deixou de ser "uma conta do GitHub":
+  nasce de um cadastro em `/entrar`, com confirmação de e-mail e recuperação de
+  senha. O GitHub passou a ser um dos caminhos de entrada, e quem entra por ele
+  com um e-mail **verificado** cai na conta que já existe com esse endereço, em
+  vez de ganhar uma segunda. Senhas usam `scrypt` da plataforma, com o custo
+  gravado dentro do próprio hash. Sem `QA_RADAR_EMAIL_API_KEY` /
+  `QA_RADAR_EMAIL_FROM` o cadastro continua funcionando e o que fica de fora é
+  a confirmação e o "esqueci minha senha".
+- **Aplicações por conta.** Nova entidade com nome, URL base e ambientes,
+  gerenciada em `/aplicacoes` e por `GET/POST /api/v1/applications` e
+  `GET/PATCH/DELETE /api/v1/applications/:id`. Uma análise pode ser vinculada a
+  uma aplicação (`applicationId` em `POST /api/v1/scans`), e o nome só precisa
+  ser único dentro da conta. Aplicação de outra conta responde `404`, não `403`.
+- **`QA_RADAR_REQUIRE_ACCOUNT`.** Ligada, executar análise, jornada ou teste de
+  API exige estar logado; navegar e ler continuam livres. **Desligada por
+  padrão**, para a CLI e o dashboard local não passarem a exigir cadastro.
 - **Autenticação por GitHub OAuth (opcional).** Entrar passa a dar dono e
   histórico às análises, e libera a execução hospedada do Modo Jornada sem token
   administrativo. Sem `QA_RADAR_GITHUB_CLIENT_ID`/`QA_RADAR_GITHUB_CLIENT_SECRET`
@@ -92,6 +108,19 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 Mudanças de contrato nesta versão. Nenhuma afeta a CLI; todas são da API HTTP e
 do endpoint de saúde.
 
+- **`QA_RADAR_REQUIRE_ACCOUNT=true` faz `POST /api/v1/scans`,
+  `POST /api/v1/code-execution` e `POST /api/v1/http-request` responderem `401`
+  sem sessão.** A chave vem desligada, então nada muda para quem não a ligar; o
+  deploy público do QA Radar a liga.
+- **A tabela `users` perdeu `provider` e `provider_account_id`**, que foram para
+  `user_identities` (migration `0004`, com backfill). Só afeta quem lia o banco
+  diretamente; a API não expunha esses campos.
+- **`GET /api/v1/auth/me` mudou de significado em `loginAvailable`:** agora quer
+  dizer "esta instalação guarda contas", e não mais "GitHub configurado". Para o
+  provedor externo existe o campo novo `githubAvailable`.
+- **O escopo do OAuth do GitHub passou a incluir `user:email`.** Uma autorização
+  concedida antes disso precisa ser refeita — sem o e-mail verificado, entrar
+  pelo GitHub cria uma conta nova em vez de cair na já cadastrada.
 - **`GET /health` não reprova mais por diretório de resultados não gravável.**
   Ele passou a ser apenas vivacidade do processo e responde `200` enquanto o
   servidor atender. Quem monitorava disco por esse endpoint deve passar a usar

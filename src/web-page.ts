@@ -1,5 +1,5 @@
-import { AUTH_CLIENT_SCRIPT, HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
-import { renderApiPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
+import { APPLICATIONS_CLIENT_SCRIPT, AUTH_CLIENT_SCRIPT, HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
+import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
 import { WEB_STYLES } from "./web-styles.js";
 
 /**
@@ -45,7 +45,28 @@ const AUTH_STYLES = `
 @media(max-width:460px){.auth-card{padding:22px 18px}}
 `;
 
+const APPLICATIONS_STYLES = `
+.applications-layout{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:18px;align-items:start}
+.application-list{display:flex;flex-direction:column;gap:11px;margin-top:14px}
+.application-item{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 15px;border:1px solid var(--line);border-radius:10px;background:#07101d}
+.application-info{min-width:0}
+.application-info strong{display:block;color:var(--text);font-size:.92rem}
+.application-info a{display:block;margin-top:3px;color:var(--muted);font-size:.78rem;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.application-info a:hover{color:var(--cyan)}
+.application-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.application-tags span{padding:2px 8px;border:1px solid var(--line);border-radius:999px;color:#9db0c2;font-size:.7rem}
+.application-actions{display:flex;gap:6px;flex:0 0 auto}
+.application-actions button{width:auto;margin:0;padding:6px 11px;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--muted);font-size:.73rem;font-weight:700;box-shadow:none}
+.application-actions button:hover{transform:none;color:var(--text);border-color:var(--cyan)}
+@media(max-width:900px){.applications-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:560px){.application-item{flex-direction:column;align-items:stretch}.application-actions{justify-content:flex-start;flex-wrap:wrap}}
+`;
+
 const NAV_RESPONSIVE_STYLES = `
+.run-source{margin-left:8px;padding:2px 9px;border:1px solid #1f5d4f;border-radius:999px;background:#0c2620;color:#a9e8d5;font-size:.68rem;font-weight:700;letter-spacing:.04em}
+.run-source[hidden]{display:none}
+.application-picker[hidden]{display:none}
+.application-picker a{color:var(--cyan)}
 .verify-banner{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin:0;padding:10px 22px;border-bottom:1px solid #5c4a15;background:#201a06;color:#f0dca4;font-size:.79rem}
 .verify-banner[hidden]{display:none}
 .verify-banner button{width:auto;margin:0;padding:5px 12px;border:1px solid #6b5619;border-radius:999px;background:transparent;color:#f0dca4;font-size:.73rem;font-weight:700;box-shadow:none}
@@ -395,6 +416,14 @@ export function createHomePage(): string {
   <style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}</style>
 </head>
 <body>${renderHome()}<script>${SHELL_CLIENT_SCRIPT}</script><script>${HOME_DASHBOARD_SCRIPT}</script></body>
+</html>`;
+}
+
+export function createApplicationsPage(): string {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - aplicações da sua conta"><title>QA Radar · Aplicações</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${APPLICATIONS_STYLES}</style></head>
+<body>${renderApplicationsPage()}<script>${SHELL_CLIENT_SCRIPT}</script><script>${APPLICATIONS_CLIENT_SCRIPT}</script></body>
 </html>`;
 }
 

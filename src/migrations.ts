@@ -133,6 +133,28 @@ export const MIGRATIONS: Migration[] = [
       `create index if not exists user_tokens_expires_idx on user_tokens (expires_at)`,
     ],
   },
+  {
+    id: "0005_applications",
+    statements: [
+      `create table if not exists applications (
+         id uuid primary key,
+         owner_id uuid not null references users (id) on delete cascade,
+         name text not null,
+         base_url text not null,
+         environments jsonb not null default '[]'::jsonb,
+         created_at timestamptz not null default now(),
+         archived_at timestamptz
+       )`,
+      // Unicidade sobre `lower(name)`: duas "Loja" na mesma conta não se
+      // distinguem numa lista, e a segunda só existiria por engano.
+      `create unique index if not exists applications_owner_name_idx on applications (owner_id, lower(name))`,
+      `create index if not exists applications_owner_idx on applications (owner_id, created_at desc)`,
+      // `set null` e não `cascade`: arquivar ou apagar a aplicação não pode
+      // levar junto o histórico de execuções, que é o registro do que aconteceu.
+      `alter table scan_jobs add column if not exists application_id uuid references applications (id) on delete set null`,
+      `create index if not exists scan_jobs_application_idx on scan_jobs (application_id, created_at desc)`,
+    ],
+  },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `create table if not exists schema_migrations (

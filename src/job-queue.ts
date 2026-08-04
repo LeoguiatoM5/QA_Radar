@@ -16,6 +16,8 @@ export interface ScanJob {
   accessTokenHash: string;
   /** Conta dona. Ausente = anônima, acessível só pelo token. */
   ownerId: string | undefined;
+  /** Aplicação a que a análise pertence. Ausente = análise avulsa. */
+  applicationId: string | undefined;
 }
 
 export interface QueueStats {

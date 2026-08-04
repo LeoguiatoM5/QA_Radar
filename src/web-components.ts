@@ -1,4 +1,4 @@
-type NavSection = "home" | "scanner" | "journeys" | "api" | "docs" | "construcao";
+type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "docs" | "construcao";
 
 /** Ambientes oferecidos no seletor da barra de contexto. */
 export const ENVIRONMENTS = [
@@ -12,7 +12,10 @@ export const CONSTRUCTION_AREAS = {
   relatorios: { label: "Relatórios", summary: "Uma área dedicada a consolidar os relatórios de todas as execuções, com filtros por projeto, período e ambiente." },
   "central-de-qualidade": { label: "Central de qualidade", summary: "O painel de padrões, tendências e evolução da qualidade do projeto ao longo do tempo." },
   alertas: { label: "Alertas", summary: "Notificações automáticas quando uma execução falhar ou um indicador de qualidade piorar." },
-  ambientes: { label: "Ambientes", summary: "O cadastro de ambientes do projeto, com URLs, credenciais e histórico separados por ambiente." },
+  // "Ambientes" saiu daqui quando Aplicações passou a existir de verdade: as
+  // duas prometiam a mesma coisa — cadastrar o que se testa, com URL e ambiente
+  // — e ficavam lado a lado na navegação, com o mesmo ícone, uma funcionando e
+  // a outra sendo um aviso. O ambiente agora é um campo da aplicação.
   configuracoes: { label: "Configurações", summary: "As preferências do projeto e da conta reunidas em um só lugar." },
 } as const;
 
@@ -32,6 +35,7 @@ export function renderScannerForm(options: DashboardOptions): string {
       <div class="tabs" role="tablist" aria-label="Conteúdo do scanner"><button class="tab active" id="scan-tab" type="button" role="tab" aria-selected="true" aria-controls="scan-panel">Nova análise</button><button class="tab" id="help-tab" type="button" role="tab" aria-selected="false" aria-controls="help-panel">Como funciona</button></div>
       <div class="scan-panel" id="scan-panel" role="tabpanel" aria-labelledby="scan-tab">
         <h2>Nova análise</h2><p class="sub">Informe o ambiente que deseja inspecionar.</p>
+        <div class="application-picker" id="application-picker" hidden><label for="scan-application">Aplicação</label><select id="scan-application" name="applicationId"><option value="">Sem aplicação</option></select><small class="hint">Escolha uma aplicação da sua conta para guardar esta análise no histórico dela. <a href="/aplicacoes">Gerenciar aplicações</a></small></div>
         <label for="url">URL da aplicação</label><div class="url-row"><span>⌁</span><input id="url" name="url" type="url" placeholder="https://staging.sua-aplicacao.com" required autofocus></div><small class="hint">Endereço público iniciado por http:// ou https://. Ambientes locais e redes privadas são bloqueados na versão pública.</small>
         <div class="row"><div><label for="browser">Navegador</label><select id="browser" name="browser"><option>chromium</option><option>firefox</option><option>webkit</option></select><small class="hint">Motor usado para abrir e observar a página.</small></div><div><label for="failOn">Reprovar a partir de</label><select id="failOn" name="failOn"><option value="error">Erros</option><option value="warning">Avisos</option><option value="none">Nunca</option></select><small class="hint">Define quando o resultado será marcado como reprovado.</small></div></div>
         <div class="row"><div><label for="project">Projeto</label><input id="project" name="project" placeholder="loja-web" ${allowHistory ? "" : "disabled"}><small class="hint">${allowHistory ? "Ativa histórico e baseline automático." : "Histórico desabilitado neste servidor."}</small></div><div><label for="environment">Ambiente</label><input id="environment" name="environment" value="staging" ${allowHistory ? "" : "disabled"}><small class="hint">Separa staging, produção e outros ambientes.</small></div></div>
@@ -72,12 +76,12 @@ function renderAppNav(active: NavSection, area = ""): string {
         ${link("scanner", "Inspeção", "/scanner", "inspection")}
         ${link("journeys", "Jornada", "/journeys", "journey")}
         ${link("api", "Testes de API", "/api-tests", "api")}
+        ${link("aplicacoes", "Aplicações", "/aplicacoes", "environments")}
         ${supportingLink("relatorios", "Relatórios", "reports")}
         ${supportingLink("central-de-qualidade", "Central de qualidade", "quality")}
       </div>
       <div class="nav-group nav-group-support">
         ${supportingLink("alertas", "Alertas", "alerts")}
-        ${supportingLink("ambientes", "Ambientes", "environments")}
         ${supportingLink("configuracoes", "Configurações", "settings")}
       </div>
     </nav>
@@ -321,7 +325,7 @@ export function renderHome(): string {
       </div>
       </section>
       <section class="recent-runs">
-        <div class="recent-head"><div class="section-kicker">Execuções recentes <span class="run-count" id="dashboard-run-count">Dados locais</span></div><div class="recent-controls"><div class="dashboard-filters" role="group" aria-label="Filtrar execuções"><button class="active" type="button" data-dashboard-filter="all">Todas</button><button type="button" data-dashboard-filter="scan">Inspeção</button><button type="button" data-dashboard-filter="journey">Jornada</button><button type="button" data-dashboard-filter="api">API</button></div><button class="history-toggle" id="dashboard-history-toggle" type="button" aria-expanded="false" hidden>Ver histórico completo</button></div></div>
+        <div class="recent-head"><div class="section-kicker">Execuções recentes <span class="run-count" id="dashboard-run-count">Dados locais</span><span class="run-source" id="dashboard-source" hidden>Da sua conta</span></div><div class="recent-controls"><div class="dashboard-filters" role="group" aria-label="Filtrar execuções"><button class="active" type="button" data-dashboard-filter="all">Todas</button><button type="button" data-dashboard-filter="scan">Inspeção</button><button type="button" data-dashboard-filter="journey">Jornada</button><button type="button" data-dashboard-filter="api">API</button></div><button class="history-toggle" id="dashboard-history-toggle" type="button" aria-expanded="false" hidden>Ver histórico completo</button></div></div>
         <div class="dashboard-table-head" id="dashboard-table-head" role="row" hidden><span></span><span role="columnheader">Execução</span><span role="columnheader">Ambiente</span><span role="columnheader">Status</span><span role="columnheader">Erros</span><span role="columnheader">Avisos</span><span role="columnheader">Qualidade</span><span role="columnheader">Horário</span><span role="columnheader">Duração</span><span></span></div>
         <div class="dashboard-runs" id="dashboard-recent-list" role="rowgroup"></div>
         <div class="recent-empty" id="dashboard-recent-empty"><span class="icon-overview"><i></i></span><div><strong>Nenhuma execução encontrada</strong><p>Comece por uma inspeção, uma jornada ou uma requisição de API.</p></div><a href="/scanner">Executar agora</a></div>
@@ -353,6 +357,47 @@ export function renderConstructionPage(area: string): string {
       <a href="/scanner">Executar uma inspeção</a>
       <a href="/docs">Ver perguntas frequentes</a>
     </div>
+  </section>
+  ${renderWorkspaceEnd()}`;
+}
+
+/**
+ * Aplicações da conta.
+ *
+ * Tudo nasce vazio e é preenchido pelo cliente: a página é servida igual para
+ * todo mundo, então nenhum dado de conta pode vir no HTML — o servidor não sabe
+ * quem pediu no momento em que monta o documento, e cravar dados aqui os deixaria
+ * no cache de qualquer intermediário.
+ */
+export function renderApplicationsPage(): string {
+  return `${renderWorkspaceStart("aplicacoes", "Aplicações")}
+  ${renderToolHeader("Cadastro", "Aplicações", "Dê nome ao que você testa. Cada análise fica guardada na aplicação certa, dentro da sua conta.")}
+  <section class="tool-layout applications-layout">
+    <form class="panel" id="application-form" novalidate>
+      <h2 id="application-form-title">Nova aplicação</h2>
+      <p class="sub">Um apelido e o endereço onde ela roda.</p>
+      <input type="hidden" id="application-id">
+      <label for="application-name">Nome</label>
+      <input id="application-name" maxlength="60" placeholder="Loja Web" required>
+      <small class="hint">Como você reconhece essa aplicação. Único dentro da sua conta.</small>
+      <label for="application-base-url">URL base</label>
+      <input id="application-base-url" type="url" placeholder="https://loja.exemplo.com" required>
+      <small class="hint">Endereço público iniciado por http:// ou https://. Endereços locais e redes privadas são bloqueados.</small>
+      <label for="application-environments">Ambientes</label>
+      <input id="application-environments" placeholder="staging, produção" maxlength="200">
+      <small class="hint">Separados por vírgula. Opcional.</small>
+      <div class="journey-controls">
+        <button id="application-submit" type="submit">Cadastrar aplicação</button>
+        <button id="application-cancel" class="secondary" type="button" hidden>Cancelar edição</button>
+      </div>
+      <div class="error-box" id="application-error"></div>
+    </form>
+
+    <section class="panel" id="application-list-panel">
+      <h2>Suas aplicações</h2>
+      <p class="sub" id="application-list-hint">Carregando...</p>
+      <div class="application-list" id="application-list"></div>
+    </section>
   </section>
   ${renderWorkspaceEnd()}`;
 }

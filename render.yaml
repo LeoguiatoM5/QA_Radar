@@ -72,11 +72,30 @@ services:
       # Trocar este valor invalida os tokens em circulação.
       - key: QA_RADAR_ACCESS_TOKEN_SECRET
         generateValue: true
-      # Login por GitHub. Sem as duas, a entrada não aparece e o produto segue
-      # anônimo: roda a análise e o token dela é o que abre o resultado. O
-      # callback cadastrado no OAuth App precisa ser exatamente
+      # Entrada pelo GitHub, que é um atalho e não o único caminho: o cadastro
+      # por e-mail e senha não depende destas chaves. O callback cadastrado no
+      # OAuth App precisa ser exatamente
       # https://qa-radar.onrender.com/api/v1/auth/github/callback
+      # O escopo passou a incluir user:email, então uma autorização concedida
+      # antes dessa mudança precisa ser refeita — sem o e-mail verificado, entrar
+      # pelo GitHub cria uma segunda conta em vez de cair na já cadastrada.
       - key: QA_RADAR_GITHUB_CLIENT_ID
         sync: false
       - key: QA_RADAR_GITHUB_CLIENT_SECRET
         sync: false
+      # E-mail transacional (Brevo). Sem as duas primeiras, o cadastro continua
+      # funcionando e o que some é a confirmação do endereço e o "esqueci minha
+      # senha" — quem perder a senha fica sem caminho de volta. O remetente
+      # precisa estar verificado no painel do Brevo.
+      - key: QA_RADAR_EMAIL_API_KEY
+        sync: false
+      - key: QA_RADAR_EMAIL_FROM
+        sync: false
+      - key: QA_RADAR_EMAIL_FROM_NAME
+        value: QA Radar
+      # Conta obrigatória para executar. Navegar e ler continuam livres; iniciar
+      # uma análise, uma jornada ou um teste de API exige entrar. Fica ligada
+      # apenas neste deploy: o padrão do pacote é desligado, senão a CLI e o
+      # dashboard local passariam a exigir cadastro para rodar.
+      - key: QA_RADAR_REQUIRE_ACCOUNT
+        value: true

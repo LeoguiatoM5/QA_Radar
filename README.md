@@ -911,6 +911,34 @@ QA_RADAR_TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:55432/qarad
 Sem `QA_RADAR_TEST_DATABASE_URL`, `npm run test:persistence` exercita apenas a
 implementação em memória; o CI roda as duas.
 
+### Contas, aplicações e acesso (opcional)
+
+Tudo aqui depende de `QA_RADAR_DATABASE_URL`: sem banco não há onde guardar
+usuário nem sessão, e o produto roda anônimo como sempre — a análise devolve um
+token e esse token é o que abre o resultado.
+
+Com banco, a pessoa se cadastra em `/entrar` com e-mail e senha. As senhas usam
+`scrypt` da plataforma, com o custo gravado dentro do próprio hash, então subir
+o custo depois vale para senhas novas sem invalidar as existentes.
+
+| Variável                                                      | Efeito                                                                                                                                                                                                               |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QA_RADAR_EMAIL_API_KEY` + `QA_RADAR_EMAIL_FROM`              | Ligam a confirmação de e-mail e o "esqueci minha senha" (provedor: Brevo). Sem elas o cadastro funciona e quem perder a senha fica sem caminho de volta. O remetente precisa estar verificado no painel do provedor. |
+| `QA_RADAR_EMAIL_FROM_NAME`                                    | Nome exibido no remetente. Padrão `QA Radar`.                                                                                                                                                                        |
+| `QA_RADAR_GITHUB_CLIENT_ID` + `QA_RADAR_GITHUB_CLIENT_SECRET` | Acrescentam a entrada pelo GitHub. Escopo `read:user user:email` — o e-mail **verificado** é o que faz quem já se cadastrou cair na própria conta em vez de ganhar uma segunda.                                      |
+| `QA_RADAR_REQUIRE_ACCOUNT`                                    | `true` exige conta para **executar** análise, jornada ou teste de API. Navegar, ler e abrir relatório continuam livres. **Padrão `false`**, para a CLI e o dashboard local não passarem a exigir cadastro.           |
+
+Cada conta tem suas próprias **aplicações** (nome, URL base e ambientes),
+gerenciadas em `/aplicacoes`. Uma análise pode ser vinculada a uma aplicação, e
+o histórico de `GET /api/v1/scans` devolve exclusivamente o que pertence a quem
+pediu. Aplicação de outra conta responde `404`, e não `403`: responder proibido
+confirmaria que aquele identificador existe.
+
+Brevo em vez de Resend por uma restrição concreta: o Resend só entrega para
+endereço de terceiros depois de verificar um **domínio**, e o endereço público
+do projeto está em `onrender.com`, que não é nosso para verificar. O Brevo
+aceita verificar um remetente avulso.
+
 Para alterar host ou porta conscientemente:
 
 ```bash

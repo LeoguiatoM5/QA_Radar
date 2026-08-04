@@ -10,6 +10,7 @@ import { NO_ARTIFACT_STORAGE, createS3ArtifactStorage } from "./artifact-storage
 import { PostgresIdempotencyKeys, type IdempotencyKeys } from "./idempotency-store.js";
 import { createDerivedAccessTokenIssuer, createRandomAccessTokenIssuer } from "./access-token.js";
 import { PostgresIdentityStore, type IdentityStore } from "./identity.js";
+import { PostgresApplicationRepository, type ApplicationRepository } from "./application-repository.js";
 import { createGitHubOAuthProvider } from "./oauth.js";
 import { NO_EMAIL_SENDER, createBrevoEmailSender } from "./email.js";
 import { randomBytes } from "node:crypto";
@@ -25,6 +26,7 @@ try {
   let scanJobs = NO_SCAN_JOB_PERSISTENCE;
   let idempotencyKeys: IdempotencyKeys | undefined;
   let identity: IdentityStore | undefined;
+  let applications: ApplicationRepository | undefined;
   if (database) {
     const result = await runMigrations(database);
     console.log(`Banco conectado. Migrations aplicadas agora: ${result.applied.length > 0 ? result.applied.join(", ") : "nenhuma"}.`);
@@ -44,6 +46,7 @@ try {
     });
     idempotencyKeys = new PostgresIdempotencyKeys(database, env.serverOptions.retentionMs ?? SERVER_OPTION_DEFAULTS.retentionMs);
     identity = new PostgresIdentityStore(database);
+    applications = new PostgresApplicationRepository(database);
   } else {
     console.log("Sem QA_RADAR_DATABASE_URL: estado em memória, perdido a cada reinício.");
   }
@@ -82,7 +85,7 @@ try {
   // vive 10 minutos e um reinício no meio do login apenas pede para repetir.
   const sessionSecret = env.accessTokenSecret ?? randomBytes(32).toString("base64url");
 
-  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts, accessTokens, idempotencyKeys, identity, oauthProvider, emailSender, sessionSecret });
+  const server = createQaRadarServer({ ...env.serverOptions, hostedCodeRunner, scanJobs, artifacts, accessTokens, idempotencyKeys, identity, oauthProvider, emailSender, applications, sessionSecret });
   server.listen(env.port, env.host, () => {
     console.log(`\nQA Radar Web disponível em http://${env.host}:${env.port}`);
     console.log("Pressione Ctrl+C para encerrar.\n");
