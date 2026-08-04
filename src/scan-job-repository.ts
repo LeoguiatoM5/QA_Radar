@@ -20,6 +20,8 @@ export interface PersistedScanJob {
   error: string | undefined;
   cancelRequested: boolean;
   accessTokenHash: string;
+  /** Nulo = anônima: só o token abre. Preenchido = pertence a uma conta. */
+  ownerId: string | undefined;
 }
 
 export interface ScanJobRepository {
@@ -39,6 +41,8 @@ export interface ScanJobRepository {
   runningJobs(): Promise<PersistedScanJob[]>;
   /** Jobs ainda `queued`, em ordem de chegada, para reenfileirar no boot. */
   queuedJobs(): Promise<PersistedScanJob[]>;
+  /** Histórico de uma conta, do mais recente para o mais antigo. */
+  listByOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]>;
   delete(id: string): Promise<void>;
   /** Posição na fila, 1 para o próximo. `undefined` se o job não está na fila. */
   position(id: string): Promise<number | undefined>;
@@ -134,6 +138,14 @@ export class InMemoryScanJobRepository implements ScanJobRepository {
     });
   }
 
+  async listByOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]> {
+    return [...this.#jobs.values()]
+      .filter((job) => job.ownerId === ownerId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+      .map((job) => ({ ...job }));
+  }
+
   async delete(id: string): Promise<void> {
     this.#jobs.delete(id);
     const index = this.#order.indexOf(id);
@@ -187,6 +199,7 @@ interface ScanJobRow {
   error: string | null;
   cancel_requested: boolean;
   access_token_hash: string;
+  owner_id: string | null;
 }
 
 function fromRow(row: ScanJobRow): PersistedScanJob {
@@ -202,18 +215,19 @@ function fromRow(row: ScanJobRow): PersistedScanJob {
     error: row.error ?? undefined,
     cancelRequested: row.cancel_requested,
     accessTokenHash: row.access_token_hash,
+    ownerId: row.owner_id ?? undefined,
   };
 }
 
-const COLUMNS = "id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash";
+const COLUMNS = "id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id";
 
 export class PostgresScanJobRepository implements ScanJobRepository {
   constructor(private readonly database: Database) {}
 
   async insert(job: PersistedScanJob): Promise<void> {
     await this.database.query(
-      `insert into scan_jobs (id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, queued_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, case when $2 = 'queued' then $3::timestamptz else null end)`,
+      `insert into scan_jobs (id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id, queued_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, case when $2 = 'queued' then $3::timestamptz else null end)`,
       [
         job.id,
         job.status,
@@ -226,6 +240,7 @@ export class PostgresScanJobRepository implements ScanJobRepository {
         job.error ?? null,
         job.cancelRequested,
         job.accessTokenHash,
+        job.ownerId ?? null,
       ],
     );
   }
@@ -277,6 +292,11 @@ export class PostgresScanJobRepository implements ScanJobRepository {
 
   async queuedJobs(): Promise<PersistedScanJob[]> {
     const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where status = 'queued' order by queued_at`);
+    return rows.map(fromRow);
+  }
+
+  async listByOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]> {
+    const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where owner_id = $1 order by created_at desc limit $2`, [ownerId, limit]);
     return rows.map(fromRow);
   }
 

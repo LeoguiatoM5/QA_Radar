@@ -7,6 +7,13 @@ import { InMemoryScanJobRepository, PostgresScanJobRepository, deserializeOption
 import type { ScanOptions } from "../src/types.js";
 import { PostgresIdempotencyKeys, idempotencyScope } from "../src/idempotency-store.js";
 
+/**
+ * Donos fixos. No Postgres `owner_id` tem chave estrangeira para `users`, então
+ * a implementação de lá precisa desses usuários existindo de verdade.
+ */
+const OWNER_A = "11111111-1111-4111-8111-111111111111";
+const OWNER_B = "22222222-2222-4222-8222-222222222222";
+
 function options(overrides: Partial<ScanOptions> = {}): ScanOptions {
   return {
     url: "https://example.com",
@@ -38,6 +45,7 @@ function job(overrides: Partial<PersistedScanJob> = {}): PersistedScanJob {
     error: undefined,
     cancelRequested: false,
     accessTokenHash: "a".repeat(64),
+    ownerId: undefined,
     ...overrides,
   };
 }
@@ -163,6 +171,46 @@ function contractFor(name: string, create: () => Promise<ScanJobRepository>, hoo
       assert.equal(loaded?.error, "estourou o tempo");
     });
 
+    it("lista só o histórico do dono, do mais novo para o mais antigo", async () => {
+      // A listagem é onde um vazamento entre contas seria mais fácil de
+      // acontecer e mais difícil de perceber.
+      const repository = await create();
+      const daContaA = job({ ownerId: OWNER_A, createdAt: "2026-08-01T10:00:00.000Z" });
+      const outraDaContaA = job({ ownerId: OWNER_A, createdAt: "2026-08-02T10:00:00.000Z" });
+      const daContaB = job({ ownerId: OWNER_B });
+      const anonima = job();
+      for (const entry of [daContaA, outraDaContaA, daContaB, anonima]) await repository.insert(entry);
+
+      const historico = await repository.listByOwner(OWNER_A, 50);
+      assert.deepEqual(
+        historico.map((entry) => entry.id),
+        [outraDaContaA.id, daContaA.id],
+        "só as da conta A, mais recente primeiro",
+      );
+    });
+
+    it("respeita o teto do histórico", async () => {
+      const repository = await create();
+      for (let i = 0; i < 5; i += 1) await repository.insert(job({ ownerId: OWNER_A, createdAt: `2026-08-0${i + 1}T10:00:00.000Z` }));
+      assert.equal((await repository.listByOwner(OWNER_A, 2)).length, 2);
+    });
+
+    it("não devolve nada para uma conta sem análises", async () => {
+      const repository = await create();
+      await repository.insert(job({ ownerId: OWNER_A }));
+      assert.deepEqual(await repository.listByOwner(OWNER_B, 50), []);
+    });
+
+    it("preserva o dono na volta do armazenamento", async () => {
+      const repository = await create();
+      const comDono = job({ ownerId: OWNER_A });
+      const semDono = job();
+      await repository.insert(comDono);
+      await repository.insert(semDono);
+      assert.equal((await repository.get(comDono.id))?.ownerId, OWNER_A);
+      assert.equal((await repository.get(semDono.id))?.ownerId, undefined, "anônima não pode ganhar dono");
+    });
+
     it("remove só o que passou da retenção", async () => {
       const repository = await create();
       const now = new Date("2026-08-03T12:00:00.000Z");
@@ -195,6 +243,12 @@ if (TEST_DATABASE_URL) {
       // Cada caso começa com a tabela limpa: os testes de contagem e de ordem
       // de fila descrevem o repositório inteiro, não um pedaço dele.
       await database.query("delete from scan_jobs");
+      for (const [id, login] of [
+        [OWNER_A, "dono-a"],
+        [OWNER_B, "dono-b"],
+      ]) {
+        await database.query("insert into users (id, provider, provider_account_id, login) values ($1,'teste',$2,$3) on conflict (provider, provider_account_id) do nothing", [id, login, login]);
+      }
       return new PostgresScanJobRepository(database);
     },
     {

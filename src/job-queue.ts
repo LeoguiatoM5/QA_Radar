@@ -14,6 +14,8 @@ export interface ScanJob {
   controller: AbortController;
   cancelRequested: boolean;
   accessTokenHash: string;
+  /** Conta dona. Ausente = anônima, acessível só pelo token. */
+  ownerId: string | undefined;
 }
 
 export interface QueueStats {

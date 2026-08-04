@@ -64,6 +64,7 @@ function runtimeJob(overrides: Partial<ScanJob> = {}): ScanJob {
     controller: new AbortController(),
     cancelRequested: false,
     accessTokenHash: "b".repeat(64),
+    ownerId: undefined,
     ...overrides,
   };
 }
