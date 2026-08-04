@@ -85,6 +85,17 @@ function renderAppNav(active: NavSection, area = ""): string {
   </aside>`;
 }
 
+/**
+ * Controle de conta da barra superior.
+ *
+ * Começa oculto e o cliente decide o que mostrar a partir de
+ * `GET /api/v1/auth/me`: sem login configurado no servidor nada aparece, e o
+ * produto continua anônimo como sempre.
+ */
+function renderAccountControl(): string {
+  return `<div class="context-account" id="account-control" hidden><a class="account-signin" id="account-signin" href="/api/v1/auth/github" hidden>Entrar</a><div class="account-user" id="account-user" hidden><img class="account-avatar" id="account-avatar" alt="" width="26" height="26"><span class="account-login" id="account-login"></span><button type="button" class="account-signout" id="account-signout">Sair</button></div></div>`;
+}
+
 function renderWorkspaceStart(active: NavSection, section: string, area = ""): string {
   return `<main class="shell ${active === "home" ? "home-shell" : ""}">
   ${renderAppNav(active, area)}
@@ -92,7 +103,7 @@ function renderWorkspaceStart(active: NavSection, section: string, area = ""): s
     <header class="context-bar">
       <div class="context-item context-project"><small>Projeto</small><strong>QA Radar Web</strong></div>
       <div class="context-item context-environment" data-environment="local"><small>Ambiente</small><strong><span class="live-dot"></span><span id="context-environment-label">Local</span></strong><select id="context-environment" aria-label="Ambiente do projeto">${ENVIRONMENTS.map((environment) => `<option value="${environment.slug}">${environment.label}</option>`).join("")}</select></div>
-      <div class="context-section"><span class="context-page">${section}</span><span class="context-clock"><i aria-hidden="true"></i><time id="context-clock" datetime="">--/--/---- --:--</time></span><span class="context-period" title="Janela usada nos indicadores do dashboard">Últimas 24h</span></div>
+      <div class="context-section"><span class="context-page">${section}</span><span class="context-clock"><i aria-hidden="true"></i><time id="context-clock" datetime="">--/--/---- --:--</time></span><span class="context-period" title="Janela usada nos indicadores do dashboard">Últimas 24h</span>${renderAccountControl()}</div>
     </header>
     <div class="app-page app-page-${active}">`;
 }

@@ -151,6 +151,12 @@ describe("dashboard components", () => {
     // O painel de token administrativo virou aviso para entrar. O token segue
     // valendo na API para automação, mas deixou de ser o que se pede a uma
     // pessoa — e por isso não é mais guardado no navegador.
+    // O controle de conta existe em toda página, mas nasce oculto: quem decide
+    // mostrá-lo é o cliente, depois de perguntar ao servidor se há login.
+    assert.match(html, /id="account-control" hidden/);
+    assert.match(html, /id="account-signin"[^>]*href="\/api\/v1\/auth\/github"/);
+    assert.match(html, /id="account-signout"/);
+    assert.match(html, /loginAvailable/);
     assert.match(html, /id="journey-signin"/);
     assert.match(html, /Entrar com GitHub/);
     assert.doesNotMatch(html, /journey-admin-token/);
