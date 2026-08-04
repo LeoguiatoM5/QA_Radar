@@ -1,5 +1,6 @@
 import type { ServerOptions } from "./server.js";
 import type { ArtifactStorageConfig } from "./artifact-storage.js";
+import type { EmailConfig } from "./email.js";
 
 export function codeModeEnabledForHost(host: string, setting?: string): boolean {
   // Um painel de hospedagem pode criar a chave sem valor (Render faz isso com
@@ -69,8 +70,28 @@ export interface EnvironmentConfig {
    * depois de um reinício, sem guardar nada em texto claro.
    */
   accessTokenSecret: string | undefined;
-  /** Ausente = login indisponível; a interface nem oferece entrada. */
+  /** Ausente = entrada por GitHub indisponível; o cadastro por senha não depende dela. */
   githubOAuth: { clientId: string; clientSecret: string } | undefined;
+  /**
+   * Ausente = sem confirmação de e-mail e sem "esqueci minha senha". O cadastro
+   * continua funcionando; quem perder a senha é que fica sem caminho de volta.
+   */
+  email: EmailConfig | undefined;
+}
+
+/**
+ * Chave e remetente andam juntos, como no storage: metade configurada é engano
+ * de quem configurou, e descobrir isso no primeiro "esqueci minha senha" é bem
+ * pior do que falhar no boot.
+ */
+function emailFromEnvironment(source: NodeJS.ProcessEnv): EmailConfig | undefined {
+  const apiKey = source.QA_RADAR_EMAIL_API_KEY?.trim();
+  const from = source.QA_RADAR_EMAIL_FROM?.trim();
+  if (!apiKey && !from) return undefined;
+  if (!apiKey || !from) {
+    throw new Error("Configure QA_RADAR_EMAIL_API_KEY e QA_RADAR_EMAIL_FROM em conjunto.");
+  }
+  return { apiKey, from, fromName: source.QA_RADAR_EMAIL_FROM_NAME?.trim() || "QA Radar" };
 }
 
 /**
@@ -126,6 +147,7 @@ export function loadEnvironmentConfig(source: NodeJS.ProcessEnv = process.env): 
     artifactStorage: artifactStorageFromEnvironment(source),
     accessTokenSecret: source.QA_RADAR_ACCESS_TOKEN_SECRET?.trim() || undefined,
     githubOAuth: githubOAuthFromEnvironment(source),
+    email: emailFromEnvironment(source),
     serverOptions: {
       allowPrivateTargets: booleanFromEnvironment(source, "QA_RADAR_ALLOW_PRIVATE_TARGETS"),
       trustProxy: booleanFromEnvironment(source, "QA_RADAR_TRUST_PROXY"),

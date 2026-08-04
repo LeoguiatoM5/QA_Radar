@@ -15,6 +15,15 @@ export interface OAuthProfile {
   login: string;
   name: string | undefined;
   avatarUrl: string | undefined;
+  /**
+   * Só é preenchido quando o provedor afirma que o endereço está **verificado**.
+   *
+   * É por ele que quem já se cadastrou com e-mail e senha cai na própria conta
+   * ao entrar pelo GitHub, em vez de ganhar uma segunda conta vazia. Por isso o
+   * e-mail apenas declarado no perfil público não serve: qualquer pessoa pode
+   * escrever o endereço de outra ali.
+   */
+  verifiedEmail: string | undefined;
 }
 
 export interface OAuthProvider {
@@ -58,6 +67,28 @@ export function verifyOAuthState(secret: string, state: string, now = Date.now()
   return Number.isFinite(timestamp) && now - timestamp >= 0 && now - timestamp <= OAUTH_STATE_TTL_MS;
 }
 
+/**
+ * O e-mail principal e verificado, quando houver.
+ *
+ * Falhar aqui não pode impedir a entrada: quem revoga `user:email` ou tem só
+ * endereços não verificados continua entrando, apenas sem o vínculo automático
+ * com uma conta de mesmo e-mail. Por isso a falha vira `undefined` e não exceção.
+ */
+async function primaryVerifiedEmail(fetchImpl: typeof fetch, accessToken: string): Promise<string | undefined> {
+  try {
+    const response = await fetchImpl("https://api.github.com/user/emails", {
+      headers: { authorization: `Bearer ${accessToken}`, accept: "application/vnd.github+json", "user-agent": "qa-radar" },
+    });
+    if (!response.ok) return undefined;
+    const emails = (await response.json()) as { email?: string; primary?: boolean; verified?: boolean }[];
+    if (!Array.isArray(emails)) return undefined;
+    const verified = emails.filter((entry) => entry.verified === true && typeof entry.email === "string");
+    return (verified.find((entry) => entry.primary === true) ?? verified[0])?.email;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createGitHubOAuthProvider(config: GitHubOAuthConfig, fetchImpl: typeof fetch = fetch): OAuthProvider {
   return {
     name: "github",
@@ -67,9 +98,10 @@ export function createGitHubOAuthProvider(config: GitHubOAuthConfig, fetchImpl: 
       url.searchParams.set("client_id", config.clientId);
       url.searchParams.set("redirect_uri", redirectUri);
       url.searchParams.set("state", state);
-      // Só a identidade pública: o QA Radar não precisa ler repositório nenhum,
-      // e pedir menos é o que faz a tela de autorização não assustar.
-      url.searchParams.set("scope", "read:user");
+      // Identidade e e-mail, nada além: o QA Radar não lê repositório nenhum.
+      // `user:email` entrou porque sem ele não há como saber que quem está
+      // entrando é a mesma pessoa que já se cadastrou com e-mail e senha.
+      url.searchParams.set("scope", "read:user user:email");
       return url.toString();
     },
 
@@ -94,6 +126,7 @@ export function createGitHubOAuthProvider(config: GitHubOAuthConfig, fetchImpl: 
         login: profile.login,
         name: profile.name ?? undefined,
         avatarUrl: profile.avatar_url ?? undefined,
+        verifiedEmail: await primaryVerifiedEmail(fetchImpl, token.access_token),
       };
     },
   };

@@ -12,6 +12,8 @@ import type { ArtifactStorage } from "../artifact-storage.js";
 import type { AccessTokenIssuer } from "../access-token.js";
 import type { IdentityStore, User } from "../identity.js";
 import type { OAuthProvider } from "../oauth.js";
+import type { EmailSender } from "../email.js";
+import type { RateLimiter } from "../rate-limit.js";
 
 /**
  * Shared state and helpers threaded into every route module's tryHandle().
@@ -36,6 +38,15 @@ export interface RequestContext {
   /** Ausente = login indisponível; o produto segue anônimo. */
   identity: IdentityStore | undefined;
   oauthProvider: OAuthProvider | undefined;
+  /** Inerte sem provedor: confirmação e recuperação de senha ficam indisponíveis. */
+  emailSender: EmailSender;
+  /**
+   * Limite próprio das rotas de conta, separado do limite geral de análises.
+   *
+   * Compartilhar o contador deixaria uma rajada de tentativas de senha consumir
+   * a cota de quem só quer rodar uma análise, e vice-versa.
+   */
+  authRateLimiter: RateLimiter;
   /** Usuário da sessão desta requisição, se houver. */
   currentUser: (request: IncomingMessage) => Promise<User | undefined>;
   /**
