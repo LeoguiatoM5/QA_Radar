@@ -908,7 +908,7 @@ for(const aba of document.querySelectorAll('[data-oas-filter]')){
 export const WEBHOOK_SCRIPT =
   TOOLBOX_UI +
   String.raw`
-import { prettyBody, formatWebhookRequest } from '/assets/toolbox/webhook.js';
+import { bodyPreview, formatWebhookRequest } from '/assets/toolbox/webhook.js';
 
 const errorBox=$('webhook-error'),bloco=$('webhook-bin'),urlBox=$('webhook-url'),expiry=$('webhook-expiry');
 const panel=$('webhook-result-panel'),listaBox=$('webhook-list'),summary=$('webhook-summary'),vazio=$('webhook-empty');
@@ -921,7 +921,14 @@ function pintar(){
   listaBox.innerHTML=chamadas.map((c,i)=>{
     const cabecalhos=c.headers.map(h=>'<div><dt>'+esc(h.name)+'</dt><dd'+(h.redacted?' class="tool-secret"':'')+'>'+esc(h.value)+'</dd></div>').join('');
     const query=c.query.length?'<h4 class="tool-subtitle">Query</h4><dl class="tool-facts">'+c.query.map(q=>'<div><dt>'+esc(q.name)+'</dt><dd>'+esc(q.value)+'</dd></div>').join('')+'</dl>':'';
-    const corpo=c.body?'<h4 class="tool-subtitle">Corpo</h4><pre class="tool-code" tabindex="0">'+esc(prettyBody(c.body))+'</pre>'+(c.bodyTruncated?'<p class="hint">Corpo cortado no limite da caixa.</p>':''):'<p class="hint">Sem corpo.</p>';
+    let corpo='<p class="hint">Sem corpo.</p>';
+    if(c.body){
+      const previa=bodyPreview(c.body);
+      const avisos=[];
+      if(previa.clipped)avisos.push('Exibindo os primeiros '+previa.text.length.toLocaleString('pt-BR')+' de '+previa.storedLength.toLocaleString('pt-BR')+' caracteres. Use "Copiar a última" para levar o corpo guardado inteiro.');
+      if(c.bodyTruncated)avisos.push('O corpo chegou acima do limite da caixa e foi cortado na gravação.');
+      corpo='<h4 class="tool-subtitle">Corpo</h4><pre class="tool-code webhook-body" tabindex="0">'+esc(previa.text)+'</pre>'+avisos.map(a=>'<p class="hint">'+esc(a)+'</p>').join('');
+    }
     return '<details class="webhook-item"'+(i===0?' open':'')+'><summary><b>'+esc(c.method)+'</b><code>'+esc(c.path||'/')+'</code><span>'+new Date(c.receivedAt).toLocaleTimeString('pt-BR')+'</span><em>'+esc(c.origin)+'</em></summary>'
       +'<h4 class="tool-subtitle">Cabeçalhos</h4><dl class="tool-facts">'+cabecalhos+'</dl>'+query+corpo+'</details>';
   }).join('');

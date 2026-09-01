@@ -541,6 +541,8 @@ const TOOLBOX_STYLES = `
 .webhook-item>summary em{color:var(--muted);font-size:.72rem;font-style:normal}
 .webhook-item>*:not(summary){margin-left:14px;margin-right:14px}
 .webhook-item>*:last-child{margin-bottom:14px}
+/* Corpo de webhook não é código: quebrar linha evita a linha de 64 mil caracteres que congelava a aba. */
+.webhook-body{white-space:pre-wrap;word-break:break-all;max-height:340px}
 #webhook-auto.active{border-color:#1f5d4f;color:#a9e8d5}
 .status-1xx{border-left-color:#8ba0b3}.status-2xx{border-left-color:#2fd3b0}.status-3xx{border-left-color:#60a5fa}.status-4xx{border-left-color:#f4ae38}.status-5xx{border-left-color:#f0708a}
 @media(max-width:900px){

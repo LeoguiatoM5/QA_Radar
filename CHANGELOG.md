@@ -194,6 +194,15 @@ do endpoint de saúde.
 
 ### Corrigido
 
+- **O Webhook Inspector expunha o IP completo de quem chamou.** O campo
+  `origin` já saía reduzido ao prefixo da rede, mas o Cloudflare e o Render
+  escrevem o endereço real em `x-forwarded-for`, `cf-connecting-ip` e
+  `true-client-ip` — e numa caixa **pública** qualquer pessoa com a URL lia o
+  endereço inteiro. Esses cabeçalhos passam pelo mesmo mascaramento.
+- **Corpo grande de webhook congelava a aba.** 64 mil caracteres numa linha só,
+  dentro de um `<pre>` com `white-space: pre`, travavam o renderizador por
+  dezenas de segundos. A exibição agora quebra linha e é cortada em 8.000
+  caracteres, com aviso; o "Copiar" continua levando o corpo guardado.
 - **Boundary Value Generator marcava como válido um valor fora da faixa.** A
   validade vinha da posição de origem do ponto, não do valor: numa faixa `5..5`
   o "primeiro valor acima do mínimo" (6) saía como `VALID` e o caso "acima do

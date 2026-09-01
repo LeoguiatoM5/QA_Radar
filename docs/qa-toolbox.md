@@ -201,7 +201,11 @@ regra, não detalhe:
   registrar**, não na hora de mostrar: numa caixa pública o valor seria gravado
   no servidor e devolvido a quem abrisse a URL;
 - a origem fica no prefixo da rede (`203.0.x.x`), o bastante para distinguir
-  chamadas sem virar registro de endereço;
+  chamadas sem virar registro de endereço — e o mesmo vale para os cabeçalhos em
+  que o proxy escreve o IP (`x-forwarded-for`, `cf-connecting-ip`,
+  `true-client-ip` e afins), senão o endereço completo vazaria por ali;
+- a exibição do corpo é cortada em 8.000 caracteres, com aviso e o "Copiar"
+  levando o que foi guardado: 64 mil caracteres numa linha congelam a aba;
 - nada vai para banco — um reinício leva tudo junto, que é o comportamento
   correto para conteúdo que terceiros mandam para uma URL pública.
 

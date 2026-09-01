@@ -55,6 +55,28 @@ export function isSensitiveWebhookHeader(name: string): boolean {
 }
 
 /**
+ * Cabeçalhos em que o proxy escreve o endereço de quem chamou.
+ *
+ * Reduzir só o campo `origin` não bastava: o Cloudflare e o Render injetam o IP
+ * real aqui, e numa caixa pública qualquer pessoa com a URL leria o endereço
+ * completo de quem disparou o webhook — exatamente o que `maskAddress` existe
+ * para impedir.
+ */
+const ADDRESS_HEADERS = /^(x-forwarded-for|x-real-ip|x-client-ip|cf-connecting-ip|cf-connecting-ipv6|true-client-ip|fastly-client-ip|forwarded)$/i;
+
+export function isAddressWebhookHeader(name: string): boolean {
+  return ADDRESS_HEADERS.test(name.trim());
+}
+
+/** Aplica `maskAddress` a cada endereço de uma cadeia como a do `x-forwarded-for`. */
+export function maskAddressHeader(value: string): string {
+  return value
+    .split(",")
+    .map((entry) => maskAddress(entry.trim()))
+    .join(", ");
+}
+
+/**
  * Guarda o IP só até o prefixo da rede.
  *
  * Serve para distinguir uma origem da outra durante um teste, que é o que o QA
@@ -83,8 +105,11 @@ export interface IncomingWebhook {
 
 export function recordFrom(incoming: IncomingWebhook, id: string, receivedAt: number): WebhookRequestRecord {
   const headers = incoming.headers.map(([name, value]) => {
-    const redacted = isSensitiveWebhookHeader(name);
-    return { name, value: redacted ? "[redigido pelo QA Radar]" : value, redacted };
+    if (isSensitiveWebhookHeader(name)) return { name, value: "[redigido pelo QA Radar]", redacted: true };
+    // Endereço não é segredo, mas também não pode ficar inteiro: vira o mesmo
+    // prefixo de rede do campo `origin`, e é marcado como alterado.
+    if (isAddressWebhookHeader(name)) return { name, value: maskAddressHeader(value), redacted: true };
+    return { name, value, redacted: false };
   });
   return {
     id,
@@ -98,6 +123,29 @@ export function recordFrom(incoming: IncomingWebhook, id: string, receivedAt: nu
     contentType: incoming.headers.find(([name]) => name.toLowerCase() === "content-type")?.[1],
     origin: maskAddress(incoming.address),
   };
+}
+
+/**
+ * Quanto do corpo é desenhado na tela.
+ *
+ * O teto de gravação é 64 KB, mas 64 mil caracteres numa linha só travam o
+ * renderizador — foi o que aconteceu na primeira caixa real, com a aba
+ * congelando por dezenas de segundos. Quem precisa do corpo inteiro usa o
+ * "Copiar", que leva o que foi guardado.
+ */
+export const MAX_WEBHOOK_BODY_PREVIEW = 8000;
+
+export interface WebhookBodyPreview {
+  text: string;
+  /** A exibição foi cortada; o conteúdo guardado é maior. */
+  clipped: boolean;
+  storedLength: number;
+}
+
+export function bodyPreview(body: string): WebhookBodyPreview {
+  const pretty = prettyBody(body);
+  if (pretty.length <= MAX_WEBHOOK_BODY_PREVIEW) return { text: pretty, clipped: false, storedLength: body.length };
+  return { text: pretty.slice(0, MAX_WEBHOOK_BODY_PREVIEW), clipped: true, storedLength: body.length };
 }
 
 /** Formata o corpo quando ele é JSON; devolve o original quando não é. */

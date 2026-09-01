@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { MAX_REQUESTS_PER_BIN, formatWebhookRequest, isSensitiveWebhookHeader, maskAddress, prettyBody, recordFrom, type IncomingWebhook } from "../src/toolbox/webhook.js";
+import {
+  MAX_REQUESTS_PER_BIN,
+  MAX_WEBHOOK_BODY_PREVIEW,
+  bodyPreview,
+  formatWebhookRequest,
+  isSensitiveWebhookHeader,
+  maskAddress,
+  prettyBody,
+  recordFrom,
+  type IncomingWebhook,
+} from "../src/toolbox/webhook.js";
 import { WebhookBinStore } from "../src/webhook-bin-store.js";
 
 function chegada(overrides: Partial<IncomingWebhook> = {}): IncomingWebhook {
@@ -59,6 +69,65 @@ describe("toolbox · webhook · registro", () => {
     }
     assert.equal(isSensitiveWebhookHeader("content-type"), false);
     assert.equal(isSensitiveWebhookHeader("x-signature"), false);
+  });
+
+  it("reduz o endereço também nos cabeçalhos que o proxy injeta", () => {
+    // Regressão encontrada em produção: `origin` vinha mascarado, mas o
+    // Cloudflare e o Render escrevem o IP real em cabeçalho próprio — e numa
+    // caixa pública qualquer um com a URL lia o endereço completo.
+    const record = recordFrom(
+      chegada({
+        headers: [
+          ["cf-connecting-ip", "45.227.249.203"],
+          ["true-client-ip", "45.227.249.203"],
+          ["x-forwarded-for", "45.227.249.203, 172.68.11.132, 10.193.30.5"],
+          ["x-real-ip", "2001:db8:85a3::8a2e"],
+          ["cf-ipcountry", "BR"],
+        ],
+      }),
+      "id-4",
+      1,
+    );
+
+    const porNome = Object.fromEntries(record.headers.map((header) => [header.name, header]));
+    assert.equal(porNome["cf-connecting-ip"]?.value, "45.227.x.x");
+    assert.equal(porNome["true-client-ip"]?.value, "45.227.x.x");
+    assert.equal(porNome["x-forwarded-for"]?.value, "45.227.x.x, 172.68.x.x, 10.193.x.x");
+    assert.equal(porNome["x-real-ip"]?.value, "2001:db8::");
+    // O país não é endereço e continua visível.
+    assert.equal(porNome["cf-ipcountry"]?.value, "BR");
+    assert.equal(JSON.stringify(record).includes("45.227.249.203"), false, "o IP completo não pode sobrar em lugar nenhum");
+  });
+
+  it("marca como alterado tudo que não é o valor original", () => {
+    const record = recordFrom(
+      chegada({
+        headers: [
+          ["x-forwarded-for", "203.0.113.42"],
+          ["accept", "*/*"],
+        ],
+      }),
+      "id-5",
+      1,
+    );
+
+    assert.equal(record.headers.find((header) => header.name === "x-forwarded-for")?.redacted, true);
+    assert.equal(record.headers.find((header) => header.name === "accept")?.redacted, false);
+  });
+
+  it("corta o corpo na exibição sem mexer no que foi guardado", () => {
+    // Regressão encontrada em produção: 64 mil caracteres numa linha só
+    // congelavam a aba por dezenas de segundos.
+    const grande = "x".repeat(60_000);
+    const previa = bodyPreview(grande);
+
+    assert.equal(previa.clipped, true);
+    assert.equal(previa.text.length, MAX_WEBHOOK_BODY_PREVIEW);
+    assert.equal(previa.storedLength, 60_000);
+
+    const pequeno = bodyPreview('{"a":1}');
+    assert.equal(pequeno.clipped, false);
+    assert.equal(pequeno.text, '{\n  "a": 1\n}', "corpo curto continua sendo formatado");
   });
 
   it("guarda a origem só até o prefixo da rede", () => {

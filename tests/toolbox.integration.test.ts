@@ -675,6 +675,15 @@ describe("toolbox integration · navegador", () => {
     // O ponto central: a credencial não pode existir na página, nem escondida.
     assert.equal((await page.content()).includes("token-de-producao"), false);
 
+    // E o endereço tampouco: o proxy escreve o IP real em cabeçalho próprio.
+    const comEndereco = await page.request.post(`${binUrl}/proxy`, { headers: { "x-forwarded-for": "45.227.249.203, 172.68.11.132" }, data: {} });
+    assert.equal(comEndereco.status(), 200);
+    await page.locator("#webhook-refresh").click();
+    await page.locator(".webhook-item").first().waitFor({ state: "visible" });
+    const conteudo = await page.content();
+    assert.equal(conteudo.includes("45.227.249.203"), false, "o IP completo não pode aparecer na página");
+    assert.ok(conteudo.includes("45.227.x.x"), "o prefixo da rede é o que fica visível");
+
     await page.locator("#webhook-clear").click();
     await page.locator("#webhook-empty").waitFor({ state: "visible" });
   });
