@@ -15,6 +15,28 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   `src/toolbox/catalog.ts` alimenta home, busca, categorias e rotas, de modo que
   uma ferramenta nova aparece sozinha nos quatro lugares — ver
   [`docs/qa-toolbox.md`](docs/qa-toolbox.md).
+- **QA Toolbox 1.2: as três últimas promessas do catálogo.** **JSON Schema
+  Validator** — cobre o núcleo do draft 2020-12 e o `nullable` do OpenAPI 3.0, e
+  aponta caminho do campo, palavra-chave e trecho do schema em cada violação;
+  palavra-chave que ele não avalia é listada em vez de passar em silêncio.
+  **OpenAPI Diff** — aceita YAML ou JSON e classifica cada mudança pelo lado do
+  contrato: exigir campo novo na requisição quebra quem chama, deixar de
+  garantir campo na resposta quebra quem lê, e o mesmo vale, invertido, para
+  valores de enum. **Webhook Inspector** — abre uma URL descartável e mostra
+  corpo, cabeçalhos e query de cada chamada. Com o 1.2 o catálogo não tem mais
+  nenhum card "em breve".
+- **Leitor de YAML próprio** (`src/toolbox/yaml.ts`) para o subconjunto que
+  contrato OpenAPI usa, porque contrato quase nunca vem em JSON e converter em
+  outro site é justamente o hábito que o Toolbox existe para evitar. Âncoras,
+  aliases, tags e múltiplos documentos falham com mensagem explícita.
+- **`POST /api/v1/toolbox/webhooks`** abre uma caixa; qualquer método em
+  `/api/v1/toolbox/webhooks/:id` é registrado como chegada. A caixa é uma URL
+  pública, então os limites são parte da regra: 60 minutos de vida, 50 chamadas
+  guardadas, corpo cortado em 64 KB (mas aceito com 200, porque provedor de
+  webhook desativa assinatura que recebe erro), 200 caixas por processo,
+  cabeçalho de credencial redigido **no momento de registrar** e origem reduzida
+  ao prefixo da rede. Nada vai para banco: um reinício leva tudo junto, que é o
+  correto para conteúdo que terceiros mandam.
 - **QA Toolbox 1.1: quatro ferramentas novas.** **Pairwise Generator** (IPOG de
   força 2, determinístico, sem caso redundante), **Regex Tester** (posição,
   grupos nomeados e linhas atingidas), **Timestamp Converter** (diz em que

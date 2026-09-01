@@ -28,10 +28,10 @@ navegação lateral.
 3. **Fluxo curto.** Entrada → ação → resultado → copiar/exportar. Nenhuma
    ferramenta pede mais de uma tela.
 4. **Sem login obrigatório.** Navegar e usar as ferramentas locais não exige
-   conta. Só o API Health, que sai para a rede pelo servidor, respeita
-   `QA_RADAR_REQUIRE_ACCOUNT` como o resto do produto.
+   conta. Só as duas que saem para a rede pelo servidor — API Health e Webhook
+   Inspector — respeitam `QA_RADAR_REQUIRE_ACCOUNT` como o resto do produto.
 
-## Ferramentas do MVP
+## As ferramentas
 
 | Ferramenta                   | Categoria   | Onde roda | O que faz                                                             |
 | ---------------------------- | ----------- | --------- | --------------------------------------------------------------------- |
@@ -45,6 +45,9 @@ navegação lateral.
 | **Regex Tester**             | Utilities   | Navegador | Mostra onde a expressão casa, os grupos e as linhas atingidas         |
 | **Timestamp Converter**      | Utilities   | Navegador | Converte epoch e ISO 8601 dizendo em que unidade leu                  |
 | **HTTP Status Explorer**     | Utilities   | Navegador | O que cada código significa e o que checar quando ele aparece         |
+| **JSON Schema Validator**    | API & JSON  | Navegador | Aponta qual regra do schema falhou, campo a campo                     |
+| **OpenAPI Diff**             | API & JSON  | Navegador | Compara dois contratos e separa quebra de adição                      |
+| **Webhook Inspector**        | Utilities   | Servidor  | URL descartável que mostra o que cada webhook mandou                  |
 
 ### JSON Diff
 
@@ -151,6 +154,57 @@ ela vira instantes diferentes em máquinas diferentes.
 Cada código traz o significado e **o que checar quando ele aparece**. Digitar
 `40` traz a família 40x inteira, que é o que quem está investigando quer.
 
+### JSON Schema Validator
+
+Cobre o núcleo do draft 2020-12 e as formas equivalentes dos drafts anteriores,
+mais o `nullable` do OpenAPI 3.0 — que não é JSON Schema, mas aparece o tempo
+todo em contrato real e ignorá-lo produziria falso positivo em massa. Cada
+violação traz o caminho do campo (`$.data[0].email`), a palavra-chave que
+reprovou e o caminho da regra dentro do schema.
+
+Palavra-chave que o validador não avalia é **listada no resultado**, em vez de
+passar em silêncio: aprovar por omissão é pior que não validar.
+
+### OpenAPI Diff
+
+Aceita YAML ou JSON — o leitor de YAML é próprio, cobre o subconjunto que
+contrato OpenAPI usa e recusa em voz alta o que não suporta (âncoras, aliases,
+tags, múltiplos documentos).
+
+O veredicto **não é simétrico**, e é aí que um diff textual erra:
+
+| Edição no schema       | Na requisição | Na resposta  |
+| ---------------------- | ------------- | ------------ |
+| Campo novo obrigatório | **BREAKING**  | ADDITION     |
+| Campo removido         | NOTE          | **BREAKING** |
+| Deixou de ser exigido  | NOTE          | **BREAKING** |
+| Valor a menos no enum  | **BREAKING**  | NOTE         |
+| Valor a mais no enum   | ADDITION      | **BREAKING** |
+
+A mesma edição, veredictos opostos: exigir campo novo quebra quem chama; deixar
+de garantir campo quebra quem lê.
+
+### Webhook Inspector
+
+Abre uma URL pública e descartável e mostra o corpo, os cabeçalhos e a query de
+cada chamada que chegar. É a única ferramenta do Toolbox, junto com a API
+Health, que usa o servidor.
+
+Como **qualquer um que descubra a URL escreve nela**, os limites são parte da
+regra, não detalhe:
+
+- a caixa vive 60 minutos e guarda as 50 últimas chamadas;
+- o corpo é cortado em 64 KB, mas a chamada é aceita com 200 — provedor de
+  webhook desativa a assinatura depois de algumas respostas de erro;
+- no máximo 200 caixas por processo, a mais antiga sai primeiro;
+- `Authorization`, `Cookie`, `x-api-key` e afins são **redigidos no momento de
+  registrar**, não na hora de mostrar: numa caixa pública o valor seria gravado
+  no servidor e devolvido a quem abrisse a URL;
+- a origem fica no prefixo da rede (`203.0.x.x`), o bastante para distinguir
+  chamadas sem virar registro de endereço;
+- nada vai para banco — um reinício leva tudo junto, que é o comportamento
+  correto para conteúdo que terceiros mandam para uma URL pública.
+
 ## Favoritas
 
 A estrela em cada card guarda a preferência em `localStorage`
@@ -178,6 +232,10 @@ src/toolbox/            regra de negócio, TypeScript puro, sem DOM e sem Node
   regex-tester.ts       casamentos, grupos e linhas atingidas
   timestamp.ts          leitura de epoch/ISO e conversões
   http-status.ts        catálogo de status HTTP e a busca dele
+  json-schema.ts        validação contra JSON Schema
+  yaml.ts               leitor do YAML usado em contrato OpenAPI
+  openapi-diff.ts       comparação de contratos e classificação de quebra
+  webhook.ts            registro e redação de uma chamada recebida
 
 src/web-toolbox.ts      HTML das páginas (só marcação)
 src/toolbox-client.ts   scripts de navegador (só DOM: lê campo, chama, desenha)
@@ -294,11 +352,12 @@ verificando também:
 | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **1.0** | JSON Diff, Test Data, JWT Inspector, cURL Converter, API Health, Boundary Values                                             |
 | **1.1** | Pairwise Generator, HTTP Status Explorer, Timestamp Converter, Regex Tester, favoritas                                       |
-| 1.2     | OpenAPI Diff, Webhook Inspector, JSON Schema Validator                                                                       |
+| **1.2** | OpenAPI Diff, Webhook Inspector, JSON Schema Validator                                                                       |
 | Futuro  | Flaky Test Analyzer, SQL Test Data Builder, GraphQL Tester, Test Case Generator, API Contract Analyzer, Release Quality Gate |
 
-As anunciadas no catálogo (`status: "soon"`) já aparecem na home como card sem
-link — o compromisso é público, a página é que ainda não existe.
+Com o 1.2 o catálogo não tem mais nenhum card `soon`: tudo que estava anunciado
+ganhou página. As ideias de "Futuro" ficam nesta tabela de propósito — anunciar
+card sem data cria expectativa que ninguém se comprometeu a cumprir.
 
 ### Limitações conhecidas
 

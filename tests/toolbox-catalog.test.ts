@@ -33,9 +33,10 @@ describe("toolbox · catálogo", () => {
   it("só marca 'roda local' a ferramenta que de fato não usa o servidor", () => {
     // O selo é uma promessa de privacidade. O health check é a única que sai
     // para a rede pelo servidor, e por isso é a única sem o selo.
-    assert.equal(findTool("api-health")?.runsLocally, false);
+    const usamServidor = new Set(["api-health", "webhook-inspector"]);
+    for (const id of usamServidor) assert.equal(findTool(id)?.runsLocally, false, `${id} usa o servidor e não pode exibir o selo`);
     for (const tool of AVAILABLE_TOOLS) {
-      if (tool.id === "api-health") continue;
+      if (usamServidor.has(tool.id)) continue;
       assert.equal(tool.runsLocally, true, `${tool.id} deveria rodar no navegador`);
     }
   });
@@ -51,7 +52,8 @@ describe("toolbox · catálogo", () => {
         assert.ok(TOOLBOX_SCRIPTS[tool.id], `${tool.id} não tem script`);
       }
     }
-    assert.equal(AVAILABLE_TOOLS.length, 10, "seis do MVP mais as quatro do 1.1");
+    assert.equal(AVAILABLE_TOOLS.length, QA_TOOLS.length, "no 1.2 todas as ferramentas anunciadas ganharam página");
+    assert.equal(AVAILABLE_TOOLS.length, 13, "seis do MVP, quatro do 1.1 e três do 1.2");
   });
 });
 
@@ -81,6 +83,8 @@ describe("toolbox · busca", () => {
     assert.ok(searchTools("all pairs").some((tool) => tool.id === "pairwise"));
     assert.ok(searchTools("epoch").some((tool) => tool.id === "timestamp"));
     assert.ok(searchTools("expressao regular").some((tool) => tool.id === "regex-tester"));
+    assert.ok(searchTools("breaking change").some((tool) => tool.id === "openapi-diff"));
+    assert.ok(searchTools("callback").some((tool) => tool.id === "webhook-inspector"));
   });
 
   it("mostra a estrela de favoritar só no que tem página", () => {

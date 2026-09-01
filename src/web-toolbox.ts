@@ -15,6 +15,7 @@ import { DEFAULT_EXPECTED_STATUS, DEFAULT_MAX_RESPONSE_TIME_MS, MAX_HEALTH_CHECK
 import { MAX_PAIRWISE_PARAMETERS } from "./toolbox/pairwise.js";
 import { REGEX_FLAGS } from "./toolbox/regex-tester.js";
 import { HTTP_STATUS_CLASSES } from "./toolbox/http-status.js";
+import { MAX_REQUESTS_PER_BIN, MAX_WEBHOOK_BODY_BYTES, WEBHOOK_TTL_MS } from "./toolbox/webhook.js";
 import { categoryLabel, QA_TOOLS, TOOL_CATEGORIES, type QaToolDefinition } from "./toolbox/catalog.js";
 
 export function escapeHtml(value: string): string {
@@ -407,6 +408,103 @@ function renderHttpStatus(tool: QaToolDefinition): string {
   );
 }
 
+function renderJsonSchema(tool: QaToolDefinition): string {
+  return renderToolShell(
+    tool,
+    `<section class="tool-panel panel">
+    <div class="tool-io">
+      <div class="tool-field">
+        <label for="schema-input">Schema</label>
+        <textarea id="schema-input" spellcheck="false" rows="14" placeholder='{ "type": "object", "required": ["email"] }'></textarea>
+      </div>
+      <div class="tool-field">
+        <label for="schema-payload">Payload</label>
+        <textarea id="schema-payload" spellcheck="false" rows="14" placeholder='{ "email": "ana@exemplo.com" }'></textarea>
+      </div>
+    </div>
+    <small class="hint">Cobre o núcleo do draft 2020-12 e as formas equivalentes dos drafts anteriores, mais <code>nullable</code> do OpenAPI 3.0. Palavra-chave não suportada é listada no resultado em vez de passar em silêncio.</small>
+    ${renderToolActions([
+      { id: "schema-run", label: "Validar", primary: true },
+      { id: "schema-format", label: "Formatar" },
+      { id: "schema-clear", label: "Limpar" },
+    ])}
+    <div class="error-box" id="schema-error" role="alert"></div>
+    ${LOCAL_NOTE}
+  </section>
+  <section class="tool-panel panel" id="schema-result-panel" hidden aria-live="polite">
+    <div class="tool-result-head"><h2>Resultado</h2><div class="tool-result-actions"><button class="secondary" id="schema-copy" type="button">Copiar resultado</button></div></div>
+    <div class="tool-summary" id="schema-summary"></div>
+    <ul class="tool-warning tool-warning-list" id="schema-unsupported" hidden></ul>
+    <div class="tool-table-scroll"><table class="tool-table"><thead><tr><th scope="col">Campo</th><th scope="col">Regra</th><th scope="col">O que falhou</th></tr></thead><tbody id="schema-violations"></tbody></table></div>
+  </section>`,
+  );
+}
+
+function renderOpenApiDiff(tool: QaToolDefinition): string {
+  return renderToolShell(
+    tool,
+    `<section class="tool-panel panel">
+    <div class="tool-io">
+      <div class="tool-field">
+        <label for="oas-left">Contrato atual</label>
+        <textarea id="oas-left" spellcheck="false" rows="14" placeholder="openapi: 3.0.3&#10;info:&#10;  version: '1.0.0'"></textarea>
+      </div>
+      <div class="tool-field">
+        <label for="oas-right">Contrato novo</label>
+        <textarea id="oas-right" spellcheck="false" rows="14" placeholder="openapi: 3.0.3&#10;info:&#10;  version: '1.1.0'"></textarea>
+      </div>
+    </div>
+    <small class="hint">Aceita YAML ou JSON. O veredicto depende do lado: exigir campo novo na <strong>requisição</strong> quebra quem chama; deixar de garantir campo na <strong>resposta</strong> quebra quem lê.</small>
+    ${renderToolActions([
+      { id: "oas-run", label: "Comparar", primary: true },
+      { id: "oas-swap", label: "Inverter" },
+      { id: "oas-clear", label: "Limpar" },
+    ])}
+    <div class="error-box" id="oas-error" role="alert"></div>
+    ${LOCAL_NOTE}
+  </section>
+  <section class="tool-panel panel" id="oas-result-panel" hidden aria-live="polite">
+    <div class="tool-result-head"><h2>Mudanças</h2><div class="tool-result-actions"><button class="secondary" id="oas-copy" type="button">Copiar relatório</button></div></div>
+    <div class="tool-summary" id="oas-summary"></div>
+    <div class="tool-tabs" role="tablist" aria-label="Filtrar por impacto">
+      <button class="tool-tab active" type="button" role="tab" aria-selected="true" data-oas-filter="todas">Todas</button>
+      <button class="tool-tab" type="button" role="tab" aria-selected="false" data-oas-filter="breaking">Breaking</button>
+      <button class="tool-tab" type="button" role="tab" aria-selected="false" data-oas-filter="note">Note</button>
+      <button class="tool-tab" type="button" role="tab" aria-selected="false" data-oas-filter="addition">Addition</button>
+    </div>
+    <div class="tool-diff-list" id="oas-changes"></div>
+    <p class="toolbox-empty" id="oas-empty" hidden>Nenhuma mudança neste filtro.</p>
+  </section>`,
+  );
+}
+
+function renderWebhookInspector(tool: QaToolDefinition): string {
+  return renderToolShell(
+    tool,
+    `<section class="tool-panel panel">
+    <p class="tool-note tool-note-server">A caixa é uma <strong>URL pública</strong>: qualquer um que a descubra pode escrever nela. Ela vive ${Math.round(WEBHOOK_TTL_MS / 60000)} minutos, guarda as ${MAX_REQUESTS_PER_BIN} últimas chamadas e corta o corpo em ${Math.round(MAX_WEBHOOK_BODY_BYTES / 1024)} KB. Cabeçalho de credencial é redigido antes de virar registro, e nada é gravado em banco — um reinício leva tudo junto. Não use com dado real de produção.</p>
+    ${renderToolActions([{ id: "webhook-create", label: "Abrir uma caixa", primary: true }])}
+    <div class="error-box" id="webhook-error" role="alert"></div>
+    <div id="webhook-bin" hidden>
+      <label for="webhook-url">URL da sua caixa</label>
+      <div class="webhook-url-row"><input id="webhook-url" readonly spellcheck="false"><button class="secondary" id="webhook-copy-url" type="button">Copiar</button></div>
+      <small class="hint" id="webhook-expiry"></small>
+      <div class="tool-actions">
+        <button id="webhook-refresh" type="button">Atualizar</button>
+        <button class="secondary" id="webhook-auto" type="button" aria-pressed="false">Atualizar sozinho</button>
+        <button class="secondary" id="webhook-clear" type="button">Limpar chamadas</button>
+      </div>
+    </div>
+  </section>
+  <section class="tool-panel panel" id="webhook-result-panel" hidden aria-live="polite">
+    <div class="tool-result-head"><h2>Chamadas recebidas</h2><div class="tool-result-actions"><button class="secondary" id="webhook-copy" type="button">Copiar a última</button></div></div>
+    <div class="tool-summary" id="webhook-summary"></div>
+    <div class="webhook-list" id="webhook-list"></div>
+    <p class="toolbox-empty" id="webhook-empty" hidden>Nada chegou ainda. Aponte o webhook do seu sistema para a URL acima.</p>
+  </section>`,
+  );
+}
+
 const RENDERERS: Record<string, (tool: QaToolDefinition) => string> = {
   "json-diff": renderJsonDiff,
   "boundary-values": renderBoundaryValues,
@@ -418,6 +516,9 @@ const RENDERERS: Record<string, (tool: QaToolDefinition) => string> = {
   "regex-tester": renderRegexTester,
   timestamp: renderTimestamp,
   "http-status": renderHttpStatus,
+  "json-schema": renderJsonSchema,
+  "openapi-diff": renderOpenApiDiff,
+  "webhook-inspector": renderWebhookInspector,
 };
 
 /** Marcação da ferramenta, ou `undefined` quando ela ainda não tem página. */

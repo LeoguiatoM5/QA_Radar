@@ -104,6 +104,9 @@ performance.
 - Teste de regex com grupos nomeados e linhas atingidas.
 - Conversão de timestamp que diz em que unidade leu o número.
 - Referência de status HTTP com o que checar em cada código.
+- Validação de payload contra JSON Schema, apontando a regra que falhou.
+- Comparação de contratos OpenAPI que distingue quebra de adição.
+- Caixa de webhook descartável para ver o que o sistema de terceiro mandou.
 
 ## Requisitos
 
@@ -378,6 +381,9 @@ projeto, sem configuração e sem esperar um job rodar.
 | **Regex Tester**             | Utilities   | Navegador | Mostra onde a expressão casa, os grupos e as linhas atingidas         |
 | **Timestamp Converter**      | Utilities   | Navegador | Converte epoch e ISO 8601 dizendo em que unidade leu                  |
 | **HTTP Status Explorer**     | Utilities   | Navegador | O que cada código significa e o que checar quando ele aparece         |
+| **JSON Schema Validator**    | API & JSON  | Navegador | Aponta qual regra do schema falhou, campo a campo                     |
+| **OpenAPI Diff**             | API & JSON  | Navegador | Compara dois contratos (YAML ou JSON) e separa quebra de adição       |
+| **Webhook Inspector**        | Utilities   | Servidor  | URL descartável que mostra o que cada webhook mandou                  |
 
 ### JSON Diff
 
@@ -411,6 +417,15 @@ casos, com todos os pares cobertos.
 
 ![Pairwise Generator](docs/screenshots/pairwise.png)
 
+### OpenAPI Diff
+
+Aceita YAML ou JSON. O veredicto depende do lado do contrato: exigir um campo
+novo na **requisição** quebra quem chama; deixar de garantir um campo na
+**resposta** quebra quem lê. É a mesma edição de schema com resultados opostos —
+e é aí que um diff textual erra.
+
+![OpenAPI Diff](docs/screenshots/openapi-diff.png)
+
 - **Privacidade primeiro.** Toda ferramenta que consegue rodar no navegador
   roda no navegador. O selo 🔒 **Roda local** só aparece quando nada digitado
   sai da sua máquina, e o catálogo é testado para que essa promessa não minta.
@@ -418,10 +433,13 @@ casos, com todos os pares cobertos.
   persistidos, não vão para log e não vão para telemetria. No cURL Converter
   eles aparecem mascarados na tela e viram variável de ambiente no código
   gerado.
-- **API Health é a única que usa o servidor**, porque o navegador não consegue
-  medir um endpoint de terceiro (CORS). A chamada sai do QA Radar apenas com
-  `GET` ou `HEAD`, sem cabeçalhos vindos do cliente, em até 10 endpoints por
-  vez, e com a mesma proteção contra redes privadas (SSRF) usada na Inspeção.
+- **Só duas usam o servidor.** O API Health, porque o navegador não consegue
+  medir um endpoint de terceiro (CORS) — a chamada sai do QA Radar apenas com
+  `GET` ou `HEAD`, sem cabeçalhos vindos do cliente, em até 10 endpoints por vez
+  e com a mesma proteção contra redes privadas (SSRF) usada na Inspeção. E o
+  Webhook Inspector, que por natureza precisa de uma URL pública: a caixa vive
+  60 minutos, guarda as 50 últimas chamadas, redige cabeçalho de credencial
+  antes de gravar e não vai para banco nenhum.
 - **Busca** por nome, descrição, tag e categoria; `/` leva direto ao campo.
 - **Favoritas** ficam no topo do catálogo. A preferência mora só no seu
   navegador (`localStorage`): o servidor não sabe quais ferramentas você usa.

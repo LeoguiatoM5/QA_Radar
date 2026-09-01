@@ -124,9 +124,47 @@ describe("toolbox integration · rotas", () => {
   });
 
   it("serve todo o grafo de módulos que o navegador vai importar", async () => {
-    for (const name of ["catalog", "json-value", "json-diff", "boundary-values", "test-data", "jwt", "curl", "health"]) {
+    for (const name of [
+      "catalog",
+      "json-value",
+      "json-diff",
+      "boundary-values",
+      "test-data",
+      "jwt",
+      "curl",
+      "health",
+      "pairwise",
+      "regex-tester",
+      "timestamp",
+      "http-status",
+      "json-schema",
+      "yaml",
+      "openapi-diff",
+      "webhook",
+    ]) {
       assert.equal((await fetch(`${appUrl}/assets/toolbox/${name}.js`)).status, 200, `módulo ausente: ${name}`);
     }
+  });
+
+  it("aplica os limites da caixa de webhook", async () => {
+    const criada = await fetch(`${appUrl}/api/v1/toolbox/webhooks`, { method: "POST" });
+    const bin = (await criada.json()) as { id: string; maxRequests: number; maxBodyBytes: number };
+    assert.equal(criada.status, 201);
+
+    // Corpo acima do teto é cortado, mas a chamada é aceita: um provedor de
+    // webhook desativa a assinatura depois de algumas respostas de erro.
+    const grande = await fetch(`${appUrl}/api/v1/toolbox/webhooks/${bin.id}`, { method: "POST", body: "x".repeat(bin.maxBodyBytes + 5000) });
+    assert.equal(grande.status, 200);
+
+    const lida = await fetch(`${appUrl}/api/v1/toolbox/webhooks/${bin.id}`);
+    const conteudo = (await lida.json()) as { requests: Array<{ body: string; bodyTruncated: boolean; origin: string }> };
+    assert.equal(conteudo.requests[0]?.bodyTruncated, true);
+    assert.ok((conteudo.requests[0]?.body.length ?? 0) <= bin.maxBodyBytes);
+    // A origem fica no prefixo da rede, não no endereço inteiro.
+    assert.match(conteudo.requests[0]?.origin ?? "", /x\.x$|::$|desconhecida/);
+
+    assert.equal((await fetch(`${appUrl}/api/v1/toolbox/webhooks/nao-existe`)).status, 404);
+    assert.equal((await fetch(`${appUrl}/api/v1/toolbox/webhooks/nao-existe`, { method: "POST" })).status, 404);
   });
 
   it("classifica 200, 404, 500 e resposta lenta", async () => {
@@ -545,6 +583,100 @@ describe("toolbox integration · navegador", () => {
 
     await page.locator("#status-search").fill("nao existe isso");
     await page.locator("#status-empty").waitFor({ state: "visible" });
+  });
+
+  it("valida um payload contra o schema apontando o campo que falhou", async () => {
+    await page.goto(`${appUrl}/toolbox/json-schema`, { waitUntil: "networkidle" });
+    await page.locator("#schema-input").fill(JSON.stringify({ type: "object", required: ["email"], properties: { email: { type: "string", format: "email" }, idade: { type: "integer" } } }));
+    await page.locator("#schema-payload").fill(JSON.stringify({ idade: "31" }));
+    await page.locator("#schema-run").click();
+    await page.locator("#schema-result-panel").waitFor({ state: "visible" });
+
+    const linhas = (await page.locator("#schema-violations").textContent()) ?? "";
+    assert.match((await page.locator("#schema-summary").textContent()) ?? "", /2 VIOLAÇÃO/);
+    assert.match(linhas, /\$\.email/);
+    assert.match(linhas, /\$\.idade/);
+    assert.match(linhas, /Esperado número inteiro, recebido texto/);
+
+    await page.locator("#schema-payload").fill(JSON.stringify({ email: "ana@exemplo.com", idade: 31 }));
+    await page.locator("#schema-run").click();
+    assert.match((await page.locator("#schema-summary").textContent()) ?? "", /VÁLIDO/);
+  });
+
+  it("compara contratos OpenAPI em YAML e separa quebra de adição", async () => {
+    const contrato = (versao: string, obrigatorio: string) =>
+      [
+        "openapi: 3.0.3",
+        "info:",
+        `  version: '${versao}'`,
+        "paths:",
+        "  /pedidos:",
+        "    post:",
+        "      requestBody:",
+        "        content:",
+        "          application/json:",
+        "            schema:",
+        "              type: object",
+        "              required:",
+        `                - ${obrigatorio}`,
+        "              properties:",
+        "                item:",
+        "                  type: string",
+        "                cupom:",
+        "                  type: string",
+        "      responses:",
+        "        '201':",
+        "          description: criado",
+      ].join("\n");
+
+    await page.goto(`${appUrl}/toolbox/openapi-diff`, { waitUntil: "networkidle" });
+    await page.locator("#oas-left").fill(contrato("1.0.0", "item"));
+    await page.locator("#oas-right").fill(contrato("1.1.0", "cupom"));
+    await page.locator("#oas-run").click();
+    await page.locator("#oas-result-panel").waitFor({ state: "visible" });
+
+    assert.match((await page.locator("#oas-summary").textContent()) ?? "", /HÁ QUEBRA/);
+    assert.match((await page.locator("#oas-summary").textContent()) ?? "", /1\.0\.0 → 1\.1\.0/);
+    assert.match((await page.locator("#oas-changes").textContent()) ?? "", /cupom: passou a ser obrigatório na requisição/);
+
+    await page.locator('[data-oas-filter="addition"]').click();
+    await page.locator("#oas-empty").waitFor({ state: "visible" });
+
+    await page.locator("#oas-left").fill("a: [1,");
+    await page.locator('[data-oas-filter="todas"]').click();
+    await page.locator("#oas-run").click();
+    await page.locator("#oas-error").waitFor({ state: "visible" });
+    assert.match((await page.locator("#oas-error").textContent()) ?? "", /Contrato atual:/);
+  });
+
+  it("abre uma caixa de webhook, recebe uma chamada e redige a credencial", async () => {
+    await page.goto(`${appUrl}/toolbox/webhook-inspector`, { waitUntil: "networkidle" });
+    await page.locator("#webhook-create").click();
+    await page.locator("#webhook-bin").waitFor({ state: "visible" });
+
+    const binUrl = await page.locator("#webhook-url").inputValue();
+    assert.match(binUrl, /\/api\/v1\/toolbox\/webhooks\/[A-Za-z0-9_-]+$/);
+
+    const entrega = await page.request.post(`${binUrl}/pedido?ref=42`, {
+      headers: { authorization: "Bearer token-de-producao", "content-type": "application/json", "x-signature": "abc" },
+      data: { evento: "pedido.pago", total: 149.9 },
+    });
+    assert.equal(entrega.status(), 200);
+
+    await page.locator("#webhook-refresh").click();
+    await page.locator(".webhook-item").first().waitFor({ state: "visible" });
+
+    const chamada = (await page.locator(".webhook-item").first().textContent()) ?? "";
+    assert.match(chamada, /POST/);
+    assert.match(chamada, /\/pedido/);
+    assert.match(chamada, /"evento": "pedido\.pago"/);
+    assert.match(chamada, /redigido pelo QA Radar/);
+    assert.match(chamada, /x-signature/, "cabeçalho comum continua visível");
+    // O ponto central: a credencial não pode existir na página, nem escondida.
+    assert.equal((await page.content()).includes("token-de-producao"), false);
+
+    await page.locator("#webhook-clear").click();
+    await page.locator("#webhook-empty").waitFor({ state: "visible" });
   });
 
   it("favorita uma ferramenta e a mantém no topo entre visitas", async () => {

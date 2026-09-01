@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -8,6 +9,8 @@ import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import { createToolPage, createToolboxHomePage } from "../web-page.js";
 import { findTool } from "../toolbox/catalog.js";
 import { DEFAULT_EXPECTED_STATUS, DEFAULT_MAX_RESPONSE_TIME_MS, MAX_ALLOWED_RESPONSE_TIME_MS, MAX_HEALTH_CHECKS, evaluateHealth, summarizeHealth, type HealthCheckOutcome } from "../toolbox/health.js";
+import { MAX_REQUESTS_PER_BIN, MAX_WEBHOOK_BODY_BYTES, WEBHOOK_TTL_MS, recordFrom } from "../toolbox/webhook.js";
+import { WebhookBinStore } from "../webhook-bin-store.js";
 import { guardedFetch } from "./http-request.js";
 import type { RouteHandler } from "./context.js";
 
@@ -40,7 +43,52 @@ const TOOLBOX_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "toolbox
  * URL é como se serve o disco inteiro por engano, e um módulo que só o servidor
  * deveria conhecer não pode virar download por ter caído na pasta certa.
  */
-const BROWSER_MODULES = new Set(["catalog", "json-value", "json-diff", "boundary-values", "test-data", "jwt", "curl", "health", "pairwise", "regex-tester", "timestamp", "http-status"]);
+const BROWSER_MODULES = new Set([
+  "catalog",
+  "json-value",
+  "json-diff",
+  "boundary-values",
+  "test-data",
+  "jwt",
+  "curl",
+  "health",
+  "pairwise",
+  "regex-tester",
+  "timestamp",
+  "http-status",
+  "json-schema",
+  "yaml",
+  "openapi-diff",
+  "webhook",
+]);
+
+/**
+ * Caixas de webhook do processo.
+ *
+ * Uma instância por servidor, criada aqui e não injetada por configuração: o
+ * recurso é efêmero por definição e não tem variação de implementação que
+ * justifique a indireção.
+ */
+const webhookBins = new WebhookBinStore();
+
+/** Lê o corpo cru de uma chamada de webhook, cortando no teto. */
+async function readWebhookBody(request: Parameters<RouteHandler>[1]): Promise<{ body: string; truncated: boolean }> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  let truncated = false;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+    size += buffer.length;
+    if (size > MAX_WEBHOOK_BODY_BYTES) {
+      truncated = true;
+      // Continua drenando: cortar a leitura no meio faz o cliente ver a conexão
+      // cair em vez de receber o 200 que ele espera de um webhook aceito.
+      continue;
+    }
+    chunks.push(buffer);
+  }
+  return { body: Buffer.concat(chunks).subarray(0, MAX_WEBHOOK_BODY_BYTES).toString("utf8"), truncated };
+}
 
 const assetCache = new Map<string, string>();
 
@@ -130,6 +178,60 @@ export const tryHandleToolbox: RouteHandler = async (context, request, response,
       "referrer-policy": "no-referrer",
     });
     response.end(code);
+    return true;
+  }
+
+  // A caixa recebe qualquer método e qualquer corpo, porque é isso que um
+  // provedor de webhook manda. Fica antes das demais rotas da API para que um
+  // POST em /api/toolbox/webhooks/<id> não seja confundido com um comando.
+  const webhookMatch = /^\/api\/toolbox\/webhooks\/([A-Za-z0-9_-]{1,64})(\/.*)?$/.exec(url.pathname);
+  if (webhookMatch) {
+    const binId = webhookMatch[1] as string;
+    const subPath = webhookMatch[2] ?? "";
+
+    if (request.method === "GET" && subPath === "") {
+      const bin = webhookBins.get(binId);
+      if (!bin) throw new ApiError("not_found", "Esta caixa não existe ou já expirou.");
+      json(response, 200, { id: bin.id, createdAt: bin.createdAt, expiresAt: bin.expiresAt, received: bin.received, requests: bin.requests });
+      return true;
+    }
+
+    if (request.method === "DELETE" && subPath === "") {
+      if (!webhookBins.clear(binId)) throw new ApiError("not_found", "Esta caixa não existe ou já expirou.");
+      json(response, 200, { cleared: true });
+      return true;
+    }
+
+    // Qualquer outra combinação é uma chegada de webhook.
+    const { body, truncated } = await readWebhookBody(request);
+    const headers = Object.entries(request.headers).map(([name, value]): [string, string] => [name, Array.isArray(value) ? value.join(", ") : (value ?? "")]);
+    const record = recordFrom(
+      {
+        method: request.method ?? "POST",
+        path: subPath,
+        query: [...url.searchParams.entries()],
+        headers,
+        body,
+        bodyTruncated: truncated,
+        address: context.clientAddress(request),
+      },
+      randomUUID(),
+      Date.now(),
+    );
+    if (!webhookBins.push(binId, record)) throw new ApiError("not_found", "Esta caixa não existe ou já expirou.");
+    // 200 e corpo mínimo: provedor de webhook costuma desativar a assinatura
+    // depois de algumas respostas de erro.
+    json(response, 200, { received: true, id: record.id });
+    return true;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/toolbox/webhooks") {
+    if (config.requireAccount && !(await context.currentUser(request))) {
+      throw new ApiError("unauthorized", "Entre ou crie uma conta para abrir uma caixa de webhook.");
+    }
+    if (!context.consumeRateLimit(request, response)) return true;
+    const bin = webhookBins.create();
+    json(response, 201, { id: bin.id, createdAt: bin.createdAt, expiresAt: bin.expiresAt, ttlMs: WEBHOOK_TTL_MS, maxRequests: MAX_REQUESTS_PER_BIN, maxBodyBytes: MAX_WEBHOOK_BODY_BYTES });
     return true;
   }
 

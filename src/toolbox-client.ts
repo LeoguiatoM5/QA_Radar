@@ -787,6 +787,207 @@ document.addEventListener('keydown',event=>{
 render();
 `;
 
+export const JSON_SCHEMA_SCRIPT =
+  TOOLBOX_UI +
+  String.raw`
+import { parseJsonInput } from '/assets/toolbox/json-value.js';
+import { formatJsonText } from '/assets/toolbox/json-diff.js';
+import { validateJsonSchema, formatSchemaValidation } from '/assets/toolbox/json-schema.js';
+
+const schemaBox=$('schema-input'),payloadBox=$('schema-payload'),errorBox=$('schema-error');
+const panel=$('schema-result-panel'),summary=$('schema-summary'),tabela=$('schema-violations'),naoSuportado=$('schema-unsupported');
+let last=null;
+
+function run(){
+  clearError(errorBox);
+  try{
+    const schema=parseJsonInput(schemaBox.value,'Schema');
+    const payload=parseJsonInput(payloadBox.value,'Payload');
+    last=validateJsonSchema(schema,payload);
+    summary.innerHTML=last.valid
+      ?'<span class="tool-status tool-status-ok">VÁLIDO</span><span class="tool-summary-text">O payload atende ao schema.</span>'
+      :'<span class="tool-status tool-status-fail">'+last.violations.length+' VIOLAÇÃO(ÕES)</span><span class="tool-summary-text">O payload não atende ao schema.</span>';
+    tabela.innerHTML=last.violations.map(v=>'<tr><th scope="row"><code>'+esc(v.instancePath)+'</code></th><td><code>'+esc(v.keyword)+'</code><small class="schema-pointer">'+esc(v.schemaPath)+'</small></td><td>'+esc(v.message)+'</td></tr>').join('');
+    naoSuportado.innerHTML=last.unsupported.map(k=>'<li>Palavra-chave não avaliada por este validador: <code>'+esc(k)+'</code></li>').join('');
+    naoSuportado.hidden=last.unsupported.length===0;
+    show(panel,true);
+  }catch(error){
+    last=null;
+    show(panel,false);
+    showError(errorBox,error instanceof Error?error.message:'Não foi possível validar.');
+  }
+}
+
+$('schema-run')?.addEventListener('click',run);
+$('schema-format')?.addEventListener('click',()=>{
+  clearError(errorBox);
+  try{
+    if(schemaBox.value.trim())schemaBox.value=formatJsonText(schemaBox.value,'Schema');
+    if(payloadBox.value.trim())payloadBox.value=formatJsonText(payloadBox.value,'Payload');
+  }catch(error){showError(errorBox,error instanceof Error?error.message:'JSON inválido.')}
+});
+$('schema-clear')?.addEventListener('click',()=>{
+  schemaBox.value='';payloadBox.value='';last=null;
+  tabela.innerHTML='';summary.innerHTML='';naoSuportado.innerHTML='';naoSuportado.hidden=true;
+  clearError(errorBox);show(panel,false);
+  schemaBox.focus();
+});
+$('schema-copy')?.addEventListener('click',event=>{if(last)copyText(event.currentTarget,formatSchemaValidation(last))});
+for(const campo of [schemaBox,payloadBox]){
+  campo?.addEventListener('keydown',event=>{
+    if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();run()}
+  });
+}
+`;
+
+export const OPENAPI_DIFF_SCRIPT =
+  TOOLBOX_UI +
+  String.raw`
+import { parseYaml } from '/assets/toolbox/yaml.js';
+import { diffOpenApi, formatOpenApiDiff, API_CHANGE_LABELS } from '/assets/toolbox/openapi-diff.js';
+
+const left=$('oas-left'),right=$('oas-right'),errorBox=$('oas-error');
+const panel=$('oas-result-panel'),summary=$('oas-summary'),listaBox=$('oas-changes'),vazio=$('oas-empty');
+let last=null;
+let filtro='todas';
+
+const CLASSE={breaking:'diff-removed',note:'diff-changed',addition:'diff-added'};
+
+function paint(){
+  if(!last)return;
+  const visiveis=last.changes.filter(c=>filtro==='todas'||c.impact===filtro);
+  listaBox.innerHTML=visiveis.map(c=>'<div class="diff-entry '+CLASSE[c.impact]+'"><span class="diff-kind">'+API_CHANGE_LABELS[c.impact]+'</span><div class="diff-body"><code class="diff-path">'+esc(c.location)+'</code><div class="diff-values">'+esc(c.message)+'</div><small class="diff-types">'+esc(c.pointer)+'</small></div></div>').join('');
+  show(vazio,visiveis.length===0);
+}
+
+function ler(campo,rotulo){
+  try{return parseYaml(campo.value)}
+  catch(error){throw new Error(rotulo+': '+(error instanceof Error?error.message:'documento inválido.'))}
+}
+
+function run(){
+  clearError(errorBox);
+  try{
+    last=diffOpenApi(ler(left,'Contrato atual'),ler(right,'Contrato novo'));
+    summary.innerHTML='<span class="tool-status '+(last.breaking?'tool-status-fail':'tool-status-ok')+'">'+(last.breaking?'HÁ QUEBRA':'COMPATÍVEL')+'</span>'
+      +'<span class="tool-summary-text">'+esc(last.from)+' → '+esc(last.to)+' · '+last.counts.breaking+' breaking · '+last.counts.note+' note · '+last.counts.addition+' addition</span>';
+    paint();
+    show(panel,true);
+  }catch(error){
+    last=null;
+    show(panel,false);
+    showError(errorBox,error instanceof Error?error.message:'Não foi possível comparar.');
+  }
+}
+
+$('oas-run')?.addEventListener('click',run);
+$('oas-swap')?.addEventListener('click',()=>{
+  const buffer=left.value;left.value=right.value;right.value=buffer;
+  if(last)run();
+});
+$('oas-clear')?.addEventListener('click',()=>{
+  left.value='';right.value='';last=null;
+  listaBox.innerHTML='';summary.innerHTML='';
+  clearError(errorBox);show(panel,false);
+  left.focus();
+});
+$('oas-copy')?.addEventListener('click',event=>{if(last)copyText(event.currentTarget,formatOpenApiDiff(last))});
+for(const aba of document.querySelectorAll('[data-oas-filter]')){
+  aba.addEventListener('click',()=>{
+    filtro=aba.dataset.oasFilter;
+    for(const outra of document.querySelectorAll('[data-oas-filter]')){
+      const ativa=outra===aba;
+      outra.classList.toggle('active',ativa);
+      outra.setAttribute('aria-selected',String(ativa));
+    }
+    paint();
+  });
+}
+`;
+
+export const WEBHOOK_SCRIPT =
+  TOOLBOX_UI +
+  String.raw`
+import { prettyBody, formatWebhookRequest } from '/assets/toolbox/webhook.js';
+
+const errorBox=$('webhook-error'),bloco=$('webhook-bin'),urlBox=$('webhook-url'),expiry=$('webhook-expiry');
+const panel=$('webhook-result-panel'),listaBox=$('webhook-list'),summary=$('webhook-summary'),vazio=$('webhook-empty');
+let binId=null;
+let chamadas=[];
+let timer=null;
+
+function pintar(){
+  summary.innerHTML='<span class="tool-status '+(chamadas.length?'tool-status-ok':'tool-status-warning')+'">'+chamadas.length+' CHAMADA(S)</span><span class="tool-summary-text">As mais recentes primeiro.</span>';
+  listaBox.innerHTML=chamadas.map((c,i)=>{
+    const cabecalhos=c.headers.map(h=>'<div><dt>'+esc(h.name)+'</dt><dd'+(h.redacted?' class="tool-secret"':'')+'>'+esc(h.value)+'</dd></div>').join('');
+    const query=c.query.length?'<h4 class="tool-subtitle">Query</h4><dl class="tool-facts">'+c.query.map(q=>'<div><dt>'+esc(q.name)+'</dt><dd>'+esc(q.value)+'</dd></div>').join('')+'</dl>':'';
+    const corpo=c.body?'<h4 class="tool-subtitle">Corpo</h4><pre class="tool-code" tabindex="0">'+esc(prettyBody(c.body))+'</pre>'+(c.bodyTruncated?'<p class="hint">Corpo cortado no limite da caixa.</p>':''):'<p class="hint">Sem corpo.</p>';
+    return '<details class="webhook-item"'+(i===0?' open':'')+'><summary><b>'+esc(c.method)+'</b><code>'+esc(c.path||'/')+'</code><span>'+new Date(c.receivedAt).toLocaleTimeString('pt-BR')+'</span><em>'+esc(c.origin)+'</em></summary>'
+      +'<h4 class="tool-subtitle">Cabeçalhos</h4><dl class="tool-facts">'+cabecalhos+'</dl>'+query+corpo+'</details>';
+  }).join('');
+  show(vazio,chamadas.length===0);
+  show(panel,true);
+}
+
+async function atualizar(){
+  if(!binId)return;
+  try{
+    const resposta=await fetch('/api/v1/toolbox/webhooks/'+binId);
+    if(resposta.status===404){pararAuto();showError(errorBox,'A caixa expirou. Abra uma nova.');return}
+    const corpo=await resposta.json();
+    chamadas=corpo.requests||[];
+    pintar();
+  }catch{showError(errorBox,'Não foi possível falar com o servidor do QA Radar.')}
+}
+
+function pararAuto(){
+  if(timer){clearInterval(timer);timer=null}
+  const botao=$('webhook-auto');
+  if(botao){botao.setAttribute('aria-pressed','false');botao.classList.remove('active');botao.textContent='Atualizar sozinho'}
+}
+
+$('webhook-create')?.addEventListener('click',async event=>{
+  const botao=event.currentTarget;
+  botao.disabled=true;clearError(errorBox);
+  try{
+    const resposta=await fetch('/api/v1/toolbox/webhooks',{method:'POST'});
+    const corpo=await resposta.json().catch(()=>({}));
+    if(!resposta.ok){showError(errorBox,corpo.error||'Não foi possível abrir a caixa.');return}
+    binId=corpo.id;
+    chamadas=[];
+    urlBox.value=location.origin+'/api/v1/toolbox/webhooks/'+binId;
+    expiry.textContent='Esta caixa expira em '+new Date(corpo.expiresAt).toLocaleTimeString('pt-BR')+'. Guarda as '+corpo.maxRequests+' últimas chamadas.';
+    bloco.hidden=false;
+    // O rótulo muda para deixar claro que clicar de novo abandona esta caixa —
+    // a anterior não é recuperável, o id era a única forma de chegar nela.
+    botao.textContent='Abrir outra caixa';
+    pararAuto();
+    pintar();
+  }catch{showError(errorBox,'Não foi possível falar com o servidor do QA Radar.')}
+  finally{botao.disabled=false}
+});
+$('webhook-copy-url')?.addEventListener('click',event=>copyText(event.currentTarget,urlBox.value));
+$('webhook-refresh')?.addEventListener('click',atualizar);
+$('webhook-auto')?.addEventListener('click',event=>{
+  const botao=event.currentTarget;
+  if(timer){pararAuto();return}
+  timer=setInterval(atualizar,3000);
+  botao.setAttribute('aria-pressed','true');
+  botao.classList.add('active');
+  botao.textContent='Parar de atualizar';
+  atualizar();
+});
+$('webhook-clear')?.addEventListener('click',async()=>{
+  if(!binId)return;
+  await fetch('/api/v1/toolbox/webhooks/'+binId,{method:'DELETE'}).catch(()=>{});
+  atualizar();
+});
+$('webhook-copy')?.addEventListener('click',event=>{if(chamadas.length)copyText(event.currentTarget,formatWebhookRequest(chamadas[0]))});
+// Sair da página com um intervalo rodando deixaria a aba consultando o servidor
+// para sempre em segundo plano.
+window.addEventListener('pagehide',pararAuto);
+`;
+
 /** Script de cada ferramenta, pelo id do catálogo. */
 export const TOOLBOX_SCRIPTS: Record<string, string> = {
   "json-diff": JSON_DIFF_SCRIPT,
@@ -799,4 +1000,7 @@ export const TOOLBOX_SCRIPTS: Record<string, string> = {
   "regex-tester": REGEX_SCRIPT,
   timestamp: TIMESTAMP_SCRIPT,
   "http-status": HTTP_STATUS_SCRIPT,
+  "json-schema": JSON_SCHEMA_SCRIPT,
+  "openapi-diff": OPENAPI_DIFF_SCRIPT,
+  "webhook-inspector": WEBHOOK_SCRIPT,
 };
