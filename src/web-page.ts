@@ -497,8 +497,43 @@ const TOOLBOX_STYLES = `
 .health-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) 130px 40px;gap:10px;align-items:end;margin-bottom:11px}
 .health-row .health-remove{width:40px;margin:0;padding:11px 0;font-size:1rem;line-height:1}
 .health-reason{display:block;margin-top:5px;color:var(--muted);font-size:.7rem}
+.tool-card-slot{position:relative;display:flex}
+.tool-card-slot[hidden]{display:none}
+.tool-card-slot>.tool-card{flex:1}
+.tool-favorite{position:absolute;top:11px;right:11px;width:30px;height:30px;margin:0;padding:0;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);box-shadow:none;font-size:.95rem;line-height:1;opacity:0;transition:opacity .18s,color .18s,border-color .18s}
+.tool-card-slot:hover .tool-favorite,.tool-favorite:focus-visible,.tool-favorite.active{opacity:1}
+.tool-favorite:hover{transform:none;border-color:#2a4d66;color:#f4ae38}
+.tool-favorite:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.tool-favorite.active{color:#f4ae38}
+.tool-category-favorites .tool-category-head h2{color:#f4ae38}
+.pairwise-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) 40px;gap:10px;align-items:end;margin-bottom:11px}
+.pairwise-row .pairwise-remove{width:40px;margin:0;padding:11px 0;font-size:1rem;line-height:1}
+.tool-note-plain{margin:0 0 18px;padding:0;border:0}
+.tool-table-scroll{overflow-x:auto}
+.regex-line{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:12px}
+.regex-lines{display:grid;gap:3px;margin-bottom:6px;max-height:260px;overflow:auto}
+.regex-line-row{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;padding:5px 9px;border-radius:6px;background:#07101d;font:12.5px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+.regex-line-row code{color:#8fa6bb;word-break:break-all}
+.regex-line-row.matched{background:#0c2620;border-left:2px solid #2fd3b0}
+.regex-line-row.matched code{color:#a9e8d5}
+.regex-line-number{color:var(--muted);text-align:right}
+.status-list{display:grid;gap:10px}
+.status-item{padding:13px 15px;border:1px solid var(--line);border-left-width:3px;border-radius:10px;background:#07101d}
+.status-item header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.status-item header b{color:var(--cyan);font:800 1.05rem/1 ui-monospace,SFMono-Regular,Consolas,monospace}
+.status-item header strong{color:#e9f3ff;font-size:.92rem}
+.status-item header span{margin-left:auto;color:var(--muted);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase}
+.status-item p{margin:8px 0 0;color:var(--muted);font-size:.82rem;line-height:1.6}
+.status-testing b{color:#cfdeee}
+.status-1xx{border-left-color:#8ba0b3}.status-2xx{border-left-color:#2fd3b0}.status-3xx{border-left-color:#60a5fa}.status-4xx{border-left-color:#f4ae38}.status-5xx{border-left-color:#f0708a}
 @media(max-width:900px){
   .tool-io{grid-template-columns:1fr}
+  .pairwise-row{grid-template-columns:minmax(0,1fr) 40px;grid-template-areas:"nome nome" "valores remover"}
+  .pairwise-row .tool-field:nth-child(1){grid-area:nome}
+  .pairwise-row .tool-field:nth-child(2){grid-area:valores}
+  .pairwise-row .pairwise-remove{grid-area:remover}
+  .regex-line{grid-template-columns:1fr}
+  .tool-favorite{opacity:1}
   .health-row{grid-template-columns:minmax(0,1fr) 110px;grid-template-areas:"name name" "url url" "method remove"}
   .health-row .tool-field:nth-child(1){grid-area:name}
   .health-row .tool-field:nth-child(2){grid-area:url}

@@ -41,6 +41,10 @@ navegação lateral.
 | **Test Data Generator**      | Test Data   | Navegador | Gera massa sintética válida ou propositalmente inválida               |
 | **cURL Converter**           | Automation  | Navegador | Converte um cURL em Playwright, Cypress, Fetch, Axios, Python ou Java |
 | **Boundary Value Generator** | Test Design | Navegador | Deriva os casos de fronteira de um campo                              |
+| **Pairwise Generator**       | Test Design | Navegador | Reduz a combinação de parâmetros ao mínimo que cobre todos os pares   |
+| **Regex Tester**             | Utilities   | Navegador | Mostra onde a expressão casa, os grupos e as linhas atingidas         |
+| **Timestamp Converter**      | Utilities   | Navegador | Converte epoch e ISO 8601 dizendo em que unidade leu                  |
+| **HTTP Status Explorer**     | Utilities   | Navegador | O que cada código significa e o que checar quando ele aparece         |
 
 ### JSON Diff
 
@@ -121,6 +125,40 @@ abaixo do máximo, máximo, acima do máximo — para inteiro, decimal, tamanho 
 texto e data. Faixas curtas colapsam pontos repetidos em vez de inflar a suíte.
 Exporta como plano de teste (`TC001 - ...`) ou CSV.
 
+### Pairwise Generator
+
+Cobre todos os pares de valores usando IPOG de força 2, e é determinístico de
+propósito: a mesma entrada precisa dar a mesma suíte, senão o resultado não pode
+ser versionado nem comparado entre execuções. Casos que não cobrem par nenhum
+são descartados — entregar caso inútil é o oposto do que a técnica promete.
+
+### Regex Tester
+
+Além de casar ou não, mostra a posição, os grupos (inclusive nomeados) e quais
+linhas do texto foram atingidas — a leitura mais útil quando o alvo é um log.
+Tetos de 200 mil caracteres e 500 casamentos evitam travar a aba; expressão que
+casa com vazio recebe aviso em vez de encher a tela.
+
+### Timestamp Converter
+
+A dificuldade real não é converter, é saber **o que** foi colado: até 11 dígitos
+é segundo, de 12 a 14 milissegundo, acima disso microssegundo. A unidade
+escolhida é sempre dita em voz alta, e uma data ISO sem fuso recebe aviso, porque
+ela vira instantes diferentes em máquinas diferentes.
+
+### HTTP Status Explorer
+
+Cada código traz o significado e **o que checar quando ele aparece**. Digitar
+`40` traz a família 40x inteira, que é o que quem está investigando quer.
+
+## Favoritas
+
+A estrela em cada card guarda a preferência em `localStorage`
+(`qa-radar-toolbox-favorites`) e a faixa "Favoritas" sobe ao topo do catálogo.
+Fica só no navegador de propósito: é preferência de uso, não dado de conta, e
+mandá-la para o servidor criaria um histórico de quem usa o quê sem nenhum ganho
+para quem usa.
+
 ## Arquitetura
 
 O Toolbox segue a arquitetura do QA Radar, sem framework e sem bundler. O que
@@ -136,6 +174,10 @@ src/toolbox/            regra de negócio, TypeScript puro, sem DOM e sem Node
   jwt.ts                decodificação de JWT
   curl.ts               leitura do cURL e geradores de código
   health.ts             classificação e relatório do ambiente
+  pairwise.ts           IPOG de força 2 (all-pairs)
+  regex-tester.ts       casamentos, grupos e linhas atingidas
+  timestamp.ts          leitura de epoch/ISO e conversões
+  http-status.ts        catálogo de status HTTP e a busca dele
 
 src/web-toolbox.ts      HTML das páginas (só marcação)
 src/toolbox-client.ts   scripts de navegador (só DOM: lê campo, chama, desenha)
@@ -251,9 +293,24 @@ verificando também:
 | Versão  | Ferramentas                                                                                                                  |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **1.0** | JSON Diff, Test Data, JWT Inspector, cURL Converter, API Health, Boundary Values                                             |
-| 1.1     | Pairwise Generator, HTTP Status Explorer, Timestamp Converter, Regex Tester                                                  |
+| **1.1** | Pairwise Generator, HTTP Status Explorer, Timestamp Converter, Regex Tester, favoritas                                       |
 | 1.2     | OpenAPI Diff, Webhook Inspector, JSON Schema Validator                                                                       |
 | Futuro  | Flaky Test Analyzer, SQL Test Data Builder, GraphQL Tester, Test Case Generator, API Contract Analyzer, Release Quality Gate |
 
-As três anunciadas no catálogo (`status: "soon"`) já aparecem na home como card
-sem link — o compromisso é público, a página é que ainda não existe.
+As anunciadas no catálogo (`status: "soon"`) já aparecem na home como card sem
+link — o compromisso é público, a página é que ainda não existe.
+
+### Limitações conhecidas
+
+Duas coisas que o Toolbox **não** faz hoje, encontradas em teste exploratório e
+mantidas de propósito, porque corrigi-las custa mais do que o problema pesa. Não
+são bug esquecido: estão aqui para virarem decisão quando aparecer o caso real.
+
+**JSON Diff · inteiro acima de 2^53.** `9007199254740993` e `9007199254740992`
+aparecem como iguais, porque o `JSON.parse` do próprio motor colapsa os dois no
+mesmo `double`. Resolver exige um parser que preserve o texto do número. Vale a
+pena quando alguém trouxer um contrato com id snowflake ou bigint.
+
+**API Health · `expectedStatus` fora de 100–599** cai para 200 em silêncio. O
+valor efetivamente usado volta na resposta da API, mas a interface poderia
+recusar em vez de corrigir por conta própria.

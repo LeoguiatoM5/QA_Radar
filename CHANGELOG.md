@@ -15,6 +15,14 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   `src/toolbox/catalog.ts` alimenta home, busca, categorias e rotas, de modo que
   uma ferramenta nova aparece sozinha nos quatro lugares — ver
   [`docs/qa-toolbox.md`](docs/qa-toolbox.md).
+- **QA Toolbox 1.1: quatro ferramentas novas.** **Pairwise Generator** (IPOG de
+  força 2, determinístico, sem caso redundante), **Regex Tester** (posição,
+  grupos nomeados e linhas atingidas), **Timestamp Converter** (diz em que
+  unidade leu o número e avisa data ISO sem fuso) e **HTTP Status Explorer** (o
+  que checar em cada código, busca por prefixo). Todas rodam no navegador.
+- **Favoritas no catálogo do Toolbox.** A estrela em cada card sobe a ferramenta
+  para uma faixa no topo. A preferência vive em `localStorage`: é uso, não dado
+  de conta, e o servidor não precisa saber quais ferramentas alguém abre.
 - **`POST /api/v1/toolbox/health-checks`**: verifica até 10 endpoints e devolve
   status, tempo, content-type e a classificação `HEALTHY`/`DEGRADED`/`FAILED` de
   cada um, mais o resumo do ambiente. Aceita apenas `GET` e `HEAD`, não repassa

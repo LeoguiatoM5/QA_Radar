@@ -12,6 +12,9 @@ import { CURL_TARGETS } from "./toolbox/curl.js";
 import { TEST_DATA_FIELDS } from "./toolbox/test-data.js";
 import { BOUNDARY_FIELD_LABELS } from "./toolbox/boundary-values.js";
 import { DEFAULT_EXPECTED_STATUS, DEFAULT_MAX_RESPONSE_TIME_MS, MAX_HEALTH_CHECKS } from "./toolbox/health.js";
+import { MAX_PAIRWISE_PARAMETERS } from "./toolbox/pairwise.js";
+import { REGEX_FLAGS } from "./toolbox/regex-tester.js";
+import { HTTP_STATUS_CLASSES } from "./toolbox/http-status.js";
 import { categoryLabel, QA_TOOLS, TOOL_CATEGORIES, type QaToolDefinition } from "./toolbox/catalog.js";
 
 export function escapeHtml(value: string): string {
@@ -46,8 +49,24 @@ function renderToolCard(tool: QaToolDefinition): string {
         <small>${escapeHtml(tool.description)}</small>
       </span>
       <span class="tool-card-foot">${tool.status === "soon" ? "<span></span>" : renderPrivacyBadge(tool)}<b class="tool-card-action">${tool.status === "soon" ? "Em breve" : "Abrir"}</b></span>`;
-  const attributes = `class="tool-card" data-tool-card data-tool-id="${escapeHtml(tool.id)}" data-tool-category="${escapeHtml(tool.category)}" data-tool-search="${escapeHtml([tool.name, tool.description, tool.tags.join(" "), tool.id].join(" "))}"`;
-  return tool.status === "soon" ? `<div ${attributes} data-tool-soon="true" aria-disabled="true">${inner}</div>` : `<a ${attributes} href="${escapeHtml(tool.route)}">${inner}</a>`;
+  const attributes = `class="tool-card" data-tool-card data-tool-id="${escapeHtml(tool.id)}" data-tool-category="${escapeHtml(tool.category)}"`;
+  if (tool.status === "soon") return `<div ${attributes} data-tool-soon="true" aria-disabled="true">${inner}</div>`;
+  // O botão de favoritar fica fora do <a>: um botão dentro de um link não pode
+  // ser acionado pelo teclado sem também navegar.
+  // O invólucro guarda o id em `data-tool-slot`, não em `data-tool-id`: repetir
+  // o mesmo atributo no pai e no filho faz todo seletor por id casar duas vezes.
+  return `<div class="tool-card-slot" data-tool-slot="${escapeHtml(tool.id)}"><a ${attributes} href="${escapeHtml(tool.route)}">${inner}</a>${renderFavoriteButton(tool)}</div>`;
+}
+
+/**
+ * Estrela de favoritar.
+ *
+ * Nasce apagada e sem estado: quem decide é o cliente, a partir do
+ * `localStorage`. O servidor não sabe — nem precisa saber — quais ferramentas
+ * alguém usa mais.
+ */
+function renderFavoriteButton(tool: QaToolDefinition): string {
+  return `<button type="button" class="tool-favorite" data-tool-favorite="${escapeHtml(tool.id)}" aria-pressed="false" aria-label="Favoritar ${escapeHtml(tool.name)}" title="Favoritar"><span aria-hidden="true">★</span></button>`;
 }
 
 function renderCategorySection(categoryId: string, label: string, description: string): string {
@@ -56,6 +75,20 @@ function renderCategorySection(categoryId: string, label: string, description: s
   return `<section class="tool-category" data-tool-category-section="${escapeHtml(categoryId)}">
     <div class="tool-category-head"><h2>${escapeHtml(label)}</h2><p>${escapeHtml(description)}</p></div>
     <div class="tool-grid">${tools.map(renderToolCard).join("")}</div>
+  </section>`;
+}
+
+/**
+ * Faixa das favoritas.
+ *
+ * Sai vazia do servidor e é preenchida pelo cliente com cópias dos cards. Fica
+ * escondida enquanto ninguém favoritou nada, para não ocupar o topo da página
+ * com uma seção vazia.
+ */
+function renderFavoritesSection(): string {
+  return `<section class="tool-category tool-category-favorites" id="toolbox-favorites" hidden>
+    <div class="tool-category-head"><h2>Favoritas</h2><p>As que você mais usa, sempre no topo. Ficam só neste navegador.</p></div>
+    <div class="tool-grid" id="toolbox-favorites-grid"></div>
   </section>`;
 }
 
@@ -68,6 +101,7 @@ export function renderToolboxHome(): string {
       <input id="toolbox-search-input" type="search" placeholder="Buscar ferramenta..." autocomplete="off" aria-describedby="toolbox-search-count">
       <p class="hint" id="toolbox-search-count" role="status" aria-live="polite">${QA_TOOLS.length} ferramentas disponíveis.</p>
     </div>
+    ${renderFavoritesSection()}
     ${TOOL_CATEGORIES.map((category) => renderCategorySection(category.id, category.label, category.description)).join("")}
     <p class="toolbox-empty" id="toolbox-empty" hidden>Nenhuma ferramenta corresponde à busca. Tente outro termo, como <code>json</code>, <code>token</code> ou <code>massa</code>.</p>
   </section>
@@ -269,6 +303,110 @@ function renderApiHealth(tool: QaToolDefinition): string {
   );
 }
 
+function renderPairwise(tool: QaToolDefinition): string {
+  const linhas = Array.from(
+    { length: 4 },
+    (_unused, index) => `<div class="pairwise-row">
+      <div class="tool-field"><label for="pairwise-name-${index}">Parâmetro</label><input id="pairwise-name-${index}" class="pairwise-name" maxlength="40" placeholder="navegador"></div>
+      <div class="tool-field"><label for="pairwise-values-${index}">Valores</label><input id="pairwise-values-${index}" class="pairwise-values" placeholder="chromium, firefox, webkit"></div>
+      <button type="button" class="secondary pairwise-remove" aria-label="Remover parâmetro">×</button>
+    </div>`,
+  ).join("");
+  return renderToolShell(
+    tool,
+    `<form class="tool-panel panel" id="pairwise-form" novalidate>
+    <p class="tool-note tool-note-plain">A maioria dos defeitos de combinação aparece na interação de <strong>dois</strong> parâmetros. Cobrir todos os pares custa uma fração do produto cartesiano e ainda pega essa classe de defeito.</p>
+    <div id="pairwise-rows">${linhas}</div>
+    <div class="tool-actions tool-actions-inline"><button class="secondary" id="pairwise-add" type="button">+ Parâmetro</button><span class="hint">Valores separados por vírgula. Até ${MAX_PAIRWISE_PARAMETERS} parâmetros.</span></div>
+    ${renderToolActions([
+      { id: "pairwise-run", label: "Gerar combinações", primary: true, type: "submit" },
+      { id: "pairwise-clear", label: "Limpar" },
+    ])}
+    <div class="error-box" id="pairwise-error" role="alert"></div>
+    ${LOCAL_NOTE}
+  </form>
+  <section class="tool-panel panel" id="pairwise-result-panel" hidden aria-live="polite">
+    <div class="tool-result-head"><h2>Combinações</h2><div class="tool-result-actions"><button class="secondary" id="pairwise-copy" type="button">Copiar casos</button><button class="secondary" id="pairwise-download" type="button">Baixar CSV</button></div></div>
+    <div class="tool-summary" id="pairwise-summary"></div>
+    <div class="tool-table-scroll"><table class="tool-table" id="pairwise-table"><thead id="pairwise-head"></thead><tbody id="pairwise-body"></tbody></table></div>
+  </section>`,
+  );
+}
+
+function renderRegexTester(tool: QaToolDefinition): string {
+  return renderToolShell(
+    tool,
+    `<section class="tool-panel panel">
+    <div class="regex-line">
+      <div class="tool-field"><label for="regex-pattern">Expressão regular</label><input id="regex-pattern" spellcheck="false" autocomplete="off" placeholder="(\\d{3})\\.(\\d{3})\\.(\\d{3})-(\\d{2})"></div>
+      <div class="tool-field"><label for="regex-flags">Flags</label><input id="regex-flags" spellcheck="false" autocomplete="off" maxlength="8" value="gm" placeholder="gim"></div>
+    </div>
+    <small class="hint">Flags aceitas: <code>${REGEX_FLAGS.split("").join("</code>, <code>")}</code>. O <code>g</code> é acrescentado sozinho, para que todos os casamentos apareçam.</small>
+    <label for="regex-subject">Texto de teste</label>
+    <textarea id="regex-subject" spellcheck="false" rows="10" placeholder="Uma linha por caso de teste."></textarea>
+    ${renderToolActions([
+      { id: "regex-run", label: "Testar", primary: true },
+      { id: "regex-clear", label: "Limpar" },
+    ])}
+    <div class="error-box" id="regex-error" role="alert"></div>
+    ${LOCAL_NOTE}
+  </section>
+  <section class="tool-panel panel" id="regex-result-panel" hidden aria-live="polite">
+    <div class="tool-result-head"><h2>Resultado</h2><div class="tool-result-actions"><button class="secondary" id="regex-copy" type="button">Copiar resultado</button></div></div>
+    <div class="tool-summary" id="regex-summary"></div>
+    <ul class="tool-warning tool-warning-list" id="regex-warnings" hidden></ul>
+    <h3 class="tool-subtitle">Linhas</h3>
+    <div class="regex-lines" id="regex-lines"></div>
+    <h3 class="tool-subtitle">Casamentos</h3>
+    <div class="tool-table-scroll"><table class="tool-table"><thead><tr><th scope="col">#</th><th scope="col">Linha</th><th scope="col">Posição</th><th scope="col">Casamento</th><th scope="col">Grupos</th></tr></thead><tbody id="regex-matches"></tbody></table></div>
+  </section>`,
+  );
+}
+
+function renderTimestamp(tool: QaToolDefinition): string {
+  return renderToolShell(
+    tool,
+    `<section class="tool-panel panel">
+    <label for="timestamp-input">Epoch ou data ISO 8601</label>
+    <input id="timestamp-input" spellcheck="false" autocomplete="off" placeholder="1788279562, 1788279562000 ou 2026-09-01T15:19:22Z">
+    <small class="hint">Até 11 dígitos é lido como segundos, de 12 a 14 como milissegundos, acima disso como microssegundos. Deixe vazio ou escreva <code>agora</code> para o instante atual.</small>
+    ${renderToolActions([
+      { id: "timestamp-run", label: "Converter", primary: true },
+      { id: "timestamp-now", label: "Agora" },
+      { id: "timestamp-clear", label: "Limpar" },
+    ])}
+    <div class="error-box" id="timestamp-error" role="alert"></div>
+    ${LOCAL_NOTE}
+  </section>
+  <section class="tool-panel panel" id="timestamp-result-panel" hidden aria-live="polite">
+    <div class="tool-result-head"><h2>Conversão</h2><div class="tool-result-actions"><button class="secondary" id="timestamp-copy" type="button">Copiar</button></div></div>
+    <div class="tool-summary" id="timestamp-summary"></div>
+    <ul class="tool-warning tool-warning-list" id="timestamp-warnings" hidden></ul>
+    <dl class="tool-facts" id="timestamp-facts"></dl>
+  </section>`,
+  );
+}
+
+function renderHttpStatus(tool: QaToolDefinition): string {
+  const classes = HTTP_STATUS_CLASSES.map(
+    (entry) => `<button class="tool-tab" type="button" role="tab" aria-selected="false" data-status-class="${escapeHtml(entry.id)}">${escapeHtml(entry.label)}</button>`,
+  ).join("");
+  return renderToolShell(
+    tool,
+    `<section class="tool-panel panel">
+    <label for="status-search">Buscar código ou situação</label>
+    <input id="status-search" type="search" autocomplete="off" placeholder="404, timeout, cache, autenticação..." aria-describedby="status-count">
+    <p class="hint" id="status-count" role="status" aria-live="polite"></p>
+    <div class="tool-tabs" role="tablist" aria-label="Classe do status"><button class="tool-tab active" type="button" role="tab" aria-selected="true" data-status-class="todas">Todas</button>${classes}</div>
+    ${LOCAL_NOTE}
+  </section>
+  <section class="tool-panel panel" aria-live="polite">
+    <div class="status-list" id="status-list"></div>
+    <p class="toolbox-empty" id="status-empty" hidden>Nenhum código corresponde à busca.</p>
+  </section>`,
+  );
+}
+
 const RENDERERS: Record<string, (tool: QaToolDefinition) => string> = {
   "json-diff": renderJsonDiff,
   "boundary-values": renderBoundaryValues,
@@ -276,6 +414,10 @@ const RENDERERS: Record<string, (tool: QaToolDefinition) => string> = {
   "jwt-inspector": renderJwtInspector,
   "curl-converter": renderCurlConverter,
   "api-health": renderApiHealth,
+  pairwise: renderPairwise,
+  "regex-tester": renderRegexTester,
+  timestamp: renderTimestamp,
+  "http-status": renderHttpStatus,
 };
 
 /** Marcação da ferramenta, ou `undefined` quando ela ainda não tem página. */

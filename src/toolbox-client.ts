@@ -59,23 +59,81 @@ import { QA_TOOLS, searchTools } from '/assets/toolbox/catalog.js';
 const input=$('toolbox-search-input');
 const count=$('toolbox-search-count');
 const empty=$('toolbox-empty');
-const cards=[...document.querySelectorAll('[data-tool-card]')];
-const sections=[...document.querySelectorAll('[data-tool-category-section]')];
+const favoritesSection=$('toolbox-favorites');
+const favoritesGrid=$('toolbox-favorites-grid');
+const sections=[...document.querySelectorAll('[data-tool-category-section]:not(.tool-category-favorites)')];
+
+// As favoritas ficam só neste navegador: são preferência de uso, não dado de
+// conta, e mandá-las para o servidor criaria um histórico de quem usa o quê sem
+// nenhum ganho para quem usa.
+const FAVORITES_KEY='qa-radar-toolbox-favorites';
+function readFavorites(){
+  try{const raw=JSON.parse(localStorage.getItem(FAVORITES_KEY)||'[]');return Array.isArray(raw)?raw.filter(id=>typeof id==='string'):[]}
+  catch{return []}
+}
+function writeFavorites(ids){
+  try{localStorage.setItem(FAVORITES_KEY,JSON.stringify(ids))}catch{}
+}
+let favorites=readFavorites();
+
+function slots(){return [...document.querySelectorAll('[data-tool-slot]')]}
+function cards(){return [...document.querySelectorAll('[data-tool-card]')]}
+
+function paintFavorites(){
+  if(!favoritesGrid)return;
+  favoritesGrid.innerHTML='';
+  for(const id of favorites){
+    const origem=document.querySelector('.tool-category:not(.tool-category-favorites) [data-tool-slot="'+id+'"]');
+    if(!origem)continue;
+    const copia=origem.cloneNode(true);
+    copia.dataset.toolClone='true';
+    favoritesGrid.appendChild(copia);
+  }
+  for(const botao of document.querySelectorAll('[data-tool-favorite]')){
+    const marcada=favorites.includes(botao.dataset.toolFavorite);
+    botao.setAttribute('aria-pressed',String(marcada));
+    botao.classList.toggle('active',marcada);
+    botao.title=marcada?'Remover dos favoritos':'Favoritar';
+  }
+}
+
+function toggleFavorite(id){
+  favorites=favorites.includes(id)?favorites.filter(other=>other!==id):[...favorites,id];
+  writeFavorites(favorites);
+  paintFavorites();
+  apply(input?input.value:'');
+}
+
+document.addEventListener('click',event=>{
+  const botao=event.target.closest?event.target.closest('[data-tool-favorite]'):null;
+  if(!botao)return;
+  event.preventDefault();
+  toggleFavorite(botao.dataset.toolFavorite);
+});
 
 function apply(query){
   const matches=new Set(searchTools(query,QA_TOOLS).map(tool=>tool.id));
+  const todos=cards();
   let visible=0;
-  for(const card of cards){
+  for(const slot of slots()){
+    slot.hidden=!matches.has(slot.dataset.toolSlot);
+  }
+  for(const card of todos){
     const hit=matches.has(card.dataset.toolId);
     card.hidden=!hit;
-    if(hit)visible+=1;
+    // Um card clonado na faixa de favoritas não conta duas vezes no total.
+    if(hit&&!card.closest('.tool-category-favorites'))visible+=1;
   }
   for(const section of sections){
     const any=[...section.querySelectorAll('[data-tool-card]')].some(card=>!card.hidden);
     section.hidden=!any;
   }
+  if(favoritesSection){
+    const any=[...favoritesSection.querySelectorAll('[data-tool-card]')].some(card=>!card.hidden);
+    favoritesSection.hidden=!any;
+  }
   show(empty,visible===0);
-  if(count)count.textContent=visible===0?'Nenhuma ferramenta encontrada.':visible+' de '+cards.length+' ferramentas.';
+  if(count)count.textContent=visible===0?'Nenhuma ferramenta encontrada.':visible+' de '+todos.filter(card=>!card.closest('.tool-category-favorites')).length+' ferramentas.';
 }
 
 input?.addEventListener('input',()=>apply(input.value));
@@ -87,6 +145,7 @@ document.addEventListener('keydown',event=>{
   event.preventDefault();
   input?.focus();
 });
+paintFavorites();
 apply('');
 `;
 
@@ -519,6 +578,215 @@ $('health-copy')?.addEventListener('click',event=>{if(outcomes.length)copyText(e
 addRow('','');
 `;
 
+export const PAIRWISE_SCRIPT =
+  TOOLBOX_UI +
+  String.raw`
+import { generatePairwise, pairwiseToCsv, formatPairwiseCases, MAX_PAIRWISE_PARAMETERS } from '/assets/toolbox/pairwise.js';
+
+const form=$('pairwise-form'),rowsBox=$('pairwise-rows'),errorBox=$('pairwise-error'),panel=$('pairwise-result-panel');
+const head=$('pairwise-head'),body=$('pairwise-body'),summary=$('pairwise-summary');
+let last=null;
+let sequence=100;
+
+function addRow(nome,valores){
+  if(rowsBox.children.length>=MAX_PAIRWISE_PARAMETERS)return;
+  sequence+=1;
+  const id='pairwise-'+sequence;
+  const row=document.createElement('div');
+  row.className='pairwise-row';
+  row.innerHTML='<div class="tool-field"><label for="'+id+'-name">Parâmetro</label><input id="'+id+'-name" class="pairwise-name" maxlength="40" value="'+esc(nome||'')+'" placeholder="navegador"></div>'
+    +'<div class="tool-field"><label for="'+id+'-values">Valores</label><input id="'+id+'-values" class="pairwise-values" value="'+esc(valores||'')+'" placeholder="chromium, firefox, webkit"></div>'
+    +'<button type="button" class="secondary pairwise-remove" aria-label="Remover parâmetro">×</button>';
+  rowsBox.appendChild(row);
+}
+
+function parametros(){
+  return [...rowsBox.querySelectorAll('.pairwise-row')].map(row=>({
+    name:row.querySelector('.pairwise-name').value,
+    values:row.querySelector('.pairwise-values').value.split(',').map(v=>v.trim()).filter(Boolean),
+  }));
+}
+
+function render(result){
+  const colunas=result.rows.length?Object.keys(result.rows[0]):[];
+  head.innerHTML='<tr><th scope="col">Caso</th>'+colunas.map(c=>'<th scope="col">'+esc(c)+'</th>').join('')+'</tr>';
+  body.innerHTML=result.rows.map((row,i)=>'<tr><th scope="row">TC'+String(i+1).padStart(3,'0')+'</th>'+colunas.map(c=>'<td>'+esc(row[c])+'</td>').join('')+'</tr>').join('');
+  summary.innerHTML='<span class="tool-status tool-status-ok">'+result.rows.length+' CASO(S)</span>'
+    +'<span class="tool-summary-text">'+result.exhaustive+' combinações completas · '+result.pairs+' pares cobertos · '+result.reduction+'% de redução</span>';
+  show(panel,true);
+}
+
+function run(event){
+  event?.preventDefault();
+  clearError(errorBox);
+  try{
+    last=generatePairwise(parametros());
+    render(last);
+  }catch(error){
+    last=null;
+    show(panel,false);
+    showError(errorBox,error instanceof Error?error.message:'Não foi possível gerar as combinações.');
+  }
+}
+
+rowsBox?.addEventListener('click',event=>{
+  const botao=event.target.closest('.pairwise-remove');
+  if(!botao)return;
+  botao.closest('.pairwise-row').remove();
+  if(!rowsBox.children.length)addRow('','');
+});
+form?.addEventListener('submit',run);
+$('pairwise-add')?.addEventListener('click',()=>addRow('',''));
+$('pairwise-clear')?.addEventListener('click',()=>{
+  rowsBox.innerHTML='';for(let i=0;i<2;i++)addRow('','');
+  last=null;head.innerHTML='';body.innerHTML='';summary.innerHTML='';
+  clearError(errorBox);show(panel,false);
+});
+$('pairwise-copy')?.addEventListener('click',event=>{if(last)copyText(event.currentTarget,formatPairwiseCases(last.rows))});
+$('pairwise-download')?.addEventListener('click',()=>{if(last)downloadFile('pairwise-'+stamp()+'.csv',pairwiseToCsv(last.rows),'text/csv')});
+`;
+
+export const REGEX_SCRIPT =
+  TOOLBOX_UI +
+  String.raw`
+import { testRegex, formatRegexResult } from '/assets/toolbox/regex-tester.js';
+
+const pattern=$('regex-pattern'),flags=$('regex-flags'),subject=$('regex-subject'),errorBox=$('regex-error');
+const panel=$('regex-result-panel'),summary=$('regex-summary'),warnings=$('regex-warnings'),linesBox=$('regex-lines'),matchesBox=$('regex-matches');
+let last=null;
+
+function grupos(match){
+  const uteis=match.groups.filter(g=>g.value!==undefined);
+  return uteis.length?uteis.map(g=>'<code>'+esc(g.name)+'</code>: '+esc(g.value)).join('<br>'):'—';
+}
+
+function run(){
+  clearError(errorBox);
+  try{
+    last=testRegex(pattern.value,flags.value,subject.value);
+    const linhasComCasamento=new Set(last.matches.map(m=>m.line)).size;
+    summary.innerHTML=last.matches.length===0
+      ?'<span class="tool-status tool-status-warning">SEM CASAMENTO</span><span class="tool-summary-text">A expressão é válida, mas não casou com nada do texto.</span>'
+      :'<span class="tool-status tool-status-ok">'+last.matches.length+' CASAMENTO(S)</span><span class="tool-summary-text">em '+linhasComCasamento+' de '+last.lines.length+' linha(s)</span>';
+    warnings.innerHTML=last.warnings.map(a=>'<li>'+esc(a)+'</li>').join('');
+    warnings.hidden=last.warnings.length===0;
+    linesBox.innerHTML=last.lines.map(l=>'<div class="regex-line-row '+(l.matched?'matched':'')+'"><span class="regex-line-number">'+l.number+'</span><code>'+(l.text===''?'<i>(vazia)</i>':esc(l.text))+'</code></div>').join('');
+    matchesBox.innerHTML=last.matches.map((m,i)=>'<tr><th scope="row">'+(i+1)+'</th><td>'+m.line+'</td><td>'+m.index+'</td><td><code>'+(m.value===''?'<i>(vazio)</i>':esc(m.value))+'</code></td><td>'+grupos(m)+'</td></tr>').join('');
+    show(panel,true);
+  }catch(error){
+    last=null;
+    show(panel,false);
+    showError(errorBox,error instanceof Error?error.message:'Não foi possível testar a expressão.');
+  }
+}
+
+$('regex-run')?.addEventListener('click',run);
+$('regex-clear')?.addEventListener('click',()=>{
+  pattern.value='';subject.value='';last=null;
+  summary.innerHTML='';linesBox.innerHTML='';matchesBox.innerHTML='';
+  warnings.innerHTML='';warnings.hidden=true;
+  clearError(errorBox);show(panel,false);
+  pattern.focus();
+});
+$('regex-copy')?.addEventListener('click',event=>{if(last)copyText(event.currentTarget,formatRegexResult(last))});
+for(const campo of [pattern,flags,subject]){
+  campo?.addEventListener('keydown',event=>{
+    if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();run()}
+  });
+}
+`;
+
+export const TIMESTAMP_SCRIPT =
+  TOOLBOX_UI +
+  String.raw`
+import { parseTimestampInput, describeTimestamp, TIMESTAMP_SOURCE_LABELS } from '/assets/toolbox/timestamp.js';
+
+const input=$('timestamp-input'),errorBox=$('timestamp-error'),panel=$('timestamp-result-panel');
+const summary=$('timestamp-summary'),warnings=$('timestamp-warnings'),facts=$('timestamp-facts');
+let last=null;
+
+function fact(termo,valor){return '<div><dt>'+esc(termo)+'</dt><dd>'+esc(valor)+'</dd></div>'}
+
+function run(){
+  clearError(errorBox);
+  try{
+    const leitura=parseTimestampInput(input.value);
+    const d=describeTimestamp(leitura.epochMs);
+    last=[
+      ['Interpretado como',TIMESTAMP_SOURCE_LABELS[leitura.source]],
+      ['Epoch (segundos)',String(d.epochSeconds)],
+      ['Epoch (milissegundos)',String(d.epochMilliseconds)],
+      ['ISO 8601 (UTC)',d.iso],
+      ['UTC por extenso',d.utc],
+      ['Fuso local ('+d.timeZone+')',d.local],
+      ['Dia da semana',d.weekday],
+      ['Relativo a agora',d.relative],
+    ];
+    summary.innerHTML='<span class="tool-status tool-status-ok">'+TIMESTAMP_SOURCE_LABELS[leitura.source].toUpperCase()+'</span><span class="tool-summary-text">'+esc(d.relative)+'</span>';
+    warnings.innerHTML=leitura.warnings.map(a=>'<li>'+esc(a)+'</li>').join('');
+    warnings.hidden=leitura.warnings.length===0;
+    facts.innerHTML=last.map(par=>fact(par[0],par[1])).join('');
+    show(panel,true);
+  }catch(error){
+    last=null;
+    show(panel,false);
+    showError(errorBox,error instanceof Error?error.message:'Não foi possível converter.');
+  }
+}
+
+$('timestamp-run')?.addEventListener('click',run);
+$('timestamp-now')?.addEventListener('click',()=>{input.value='';run()});
+$('timestamp-clear')?.addEventListener('click',()=>{
+  input.value='';last=null;facts.innerHTML='';summary.innerHTML='';
+  warnings.innerHTML='';warnings.hidden=true;
+  clearError(errorBox);show(panel,false);
+  input.focus();
+});
+$('timestamp-copy')?.addEventListener('click',event=>{if(last)copyText(event.currentTarget,last.map(par=>par[0]+': '+par[1]).join('\n'))});
+input?.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();run()}});
+`;
+
+export const HTTP_STATUS_SCRIPT =
+  TOOLBOX_UI +
+  String.raw`
+import { searchHttpStatuses, HTTP_STATUSES } from '/assets/toolbox/http-status.js';
+
+const busca=$('status-search'),lista=$('status-list'),vazio=$('status-empty'),contador=$('status-count');
+let classe='todas';
+
+function render(){
+  const encontrados=searchHttpStatuses(busca.value).filter(s=>classe==='todas'||s.group===classe);
+  lista.innerHTML=encontrados.map(s=>'<article class="status-item status-'+s.group+'">'
+    +'<header><b>'+s.code+'</b><strong>'+esc(s.name)+'</strong><span>'+esc(s.group)+'</span></header>'
+    +'<p>'+esc(s.summary)+'</p>'
+    +'<p class="status-testing"><b>O que checar:</b> '+esc(s.testing)+'</p>'
+    +'</article>').join('');
+  show(vazio,encontrados.length===0);
+  contador.textContent=encontrados.length+' de '+HTTP_STATUSES.length+' códigos.';
+}
+
+busca?.addEventListener('input',render);
+for(const aba of document.querySelectorAll('[data-status-class]')){
+  aba.addEventListener('click',()=>{
+    classe=aba.dataset.statusClass;
+    for(const outra of document.querySelectorAll('[data-status-class]')){
+      const ativa=outra===aba;
+      outra.classList.toggle('active',ativa);
+      outra.setAttribute('aria-selected',String(ativa));
+    }
+    render();
+  });
+}
+document.addEventListener('keydown',event=>{
+  if(event.key!=='/'||event.ctrlKey||event.metaKey||event.altKey)return;
+  const ativo=document.activeElement;
+  if(ativo&&/^(INPUT|TEXTAREA|SELECT)$/.test(ativo.tagName))return;
+  event.preventDefault();
+  busca?.focus();
+});
+render();
+`;
+
 /** Script de cada ferramenta, pelo id do catálogo. */
 export const TOOLBOX_SCRIPTS: Record<string, string> = {
   "json-diff": JSON_DIFF_SCRIPT,
@@ -527,4 +795,8 @@ export const TOOLBOX_SCRIPTS: Record<string, string> = {
   "jwt-inspector": JWT_SCRIPT,
   "curl-converter": CURL_SCRIPT,
   "api-health": HEALTH_SCRIPT,
+  pairwise: PAIRWISE_SCRIPT,
+  "regex-tester": REGEX_SCRIPT,
+  timestamp: TIMESTAMP_SCRIPT,
+  "http-status": HTTP_STATUS_SCRIPT,
 };

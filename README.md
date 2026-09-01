@@ -100,6 +100,10 @@ performance.
 - cURL convertido em Playwright, Cypress, Fetch, Axios, Python ou Rest Assured.
 - Verificação de saúde de vários endpoints com relatório do ambiente colável.
 - Análise de valor limite para inteiro, decimal, tamanho de texto e data.
+- Combinação de pares (all-pairs) para reduzir a matriz de teste.
+- Teste de regex com grupos nomeados e linhas atingidas.
+- Conversão de timestamp que diz em que unidade leu o número.
+- Referência de status HTTP com o que checar em cada código.
 
 ## Requisitos
 
@@ -360,6 +364,8 @@ nada: a Inspeção, a Jornada, os Testes de API e o histórico continuam onde
 estavam. O Toolbox é o complemento que resolve o pequeno em segundos, sem
 projeto, sem configuração e sem esperar um job rodar.
 
+![Catálogo do QA Toolbox](docs/screenshots/toolbox-home.png)
+
 | Ferramenta                   | Categoria   | Onde roda | O que faz                                                             |
 | ---------------------------- | ----------- | --------- | --------------------------------------------------------------------- |
 | **JSON Diff**                | API & JSON  | Navegador | Compara dois JSON ignorando campos dinâmicos                          |
@@ -368,6 +374,42 @@ projeto, sem configuração e sem esperar um job rodar.
 | **Test Data Generator**      | Test Data   | Navegador | Gera massa sintética válida ou propositalmente inválida               |
 | **cURL Converter**           | Automation  | Navegador | Converte um cURL em Playwright, Cypress, Fetch, Axios, Python ou Java |
 | **Boundary Value Generator** | Test Design | Navegador | Deriva os casos de fronteira de um campo                              |
+| **Pairwise Generator**       | Test Design | Navegador | Reduz a combinação de parâmetros ao mínimo que cobre todos os pares   |
+| **Regex Tester**             | Utilities   | Navegador | Mostra onde a expressão casa, os grupos e as linhas atingidas         |
+| **Timestamp Converter**      | Utilities   | Navegador | Converte epoch e ISO 8601 dizendo em que unidade leu                  |
+| **HTTP Status Explorer**     | Utilities   | Navegador | O que cada código significa e o que checar quando ele aparece         |
+
+### JSON Diff
+
+Compara ignorando os campos que mudam a cada chamada, e separa mudança de
+**tipo** de mudança de valor — `"3000"` no lugar de `3000` quebra cliente
+tipado, e `5000` virar `3000` não.
+
+![JSON Diff](docs/screenshots/json-diff.png)
+
+### cURL Converter
+
+Cole o "Copy as cURL" do DevTools e receba o teste pronto. O token aparece
+mascarado na tela e vira `process.env.API_TOKEN` no código — que é feito para
+ser commitado.
+
+![cURL Converter](docs/screenshots/curl-converter.png)
+
+### API Health
+
+Mede vários endpoints de uma vez e resume o ambiente pelo pior deles.
+**Copiar relatório do ambiente** gera texto puro, que sobrevive igual no Slack,
+Teams, Jira, Azure DevOps e GitHub.
+
+![API Health](docs/screenshots/api-health.png)
+
+### Pairwise Generator
+
+A maioria dos defeitos de combinação aparece na interação de **dois**
+parâmetros. Quatro parâmetros que dariam 36 combinações completas viram 10
+casos, com todos os pares cobertos.
+
+![Pairwise Generator](docs/screenshots/pairwise.png)
 
 - **Privacidade primeiro.** Toda ferramenta que consegue rodar no navegador
   roda no navegador. O selo 🔒 **Roda local** só aparece quando nada digitado
@@ -381,6 +423,8 @@ projeto, sem configuração e sem esperar um job rodar.
   `GET` ou `HEAD`, sem cabeçalhos vindos do cliente, em até 10 endpoints por
   vez, e com a mesma proteção contra redes privadas (SSRF) usada na Inspeção.
 - **Busca** por nome, descrição, tag e categoria; `/` leva direto ao campo.
+- **Favoritas** ficam no topo do catálogo. A preferência mora só no seu
+  navegador (`localStorage`): o servidor não sabe quais ferramentas você usa.
 
 Documentação completa, arquitetura e o passo a passo para adicionar uma
 ferramenta: [`docs/qa-toolbox.md`](docs/qa-toolbox.md).

@@ -23,9 +23,14 @@ async function close(server: Server): Promise<void> {
 /**
  * Alvo controlado dos health checks.
  *
- * `/lento` responde depois de 120 ms para exercitar a degradação sem depender
- * do relógio da máquina de CI, que é o que tornaria o teste instável.
+ * A folga entre `SLOW_TARGET_MS` e `SLOW_THRESHOLD_MS` é grande de propósito: o
+ * CI roda oito arquivos de Playwright ao mesmo tempo, e um limiar apertado
+ * transforma disputa de CPU em falha de teste — foi exatamente o que aconteceu
+ * com 120 ms de atraso contra um limite de 50 ms.
  */
+const SLOW_TARGET_MS = 600;
+const SLOW_THRESHOLD_MS = 250;
+
 function createTargetServer(): Server {
   return createServer((request, response) => {
     const path = request.url ?? "/";
@@ -38,7 +43,7 @@ function createTargetServer(): Server {
       setTimeout(() => {
         response.writeHead(200, { "content-type": "application/json" });
         response.end("{}");
-      }, 120);
+      }, SLOW_TARGET_MS);
       return;
     }
     if (path === "/erro") {
@@ -136,7 +141,7 @@ describe("toolbox integration · rotas", () => {
           { name: "Lento", url: `${targetUrl}/lento` },
         ],
         expectedStatus: 200,
-        maxResponseTimeMs: 50,
+        maxResponseTimeMs: SLOW_THRESHOLD_MS,
       }),
     });
     const body = (await response.json()) as { outcomes: Array<{ name: string; state: string; status?: number; contentType?: string }>; summary: { state: string; failed: number } };
@@ -467,6 +472,99 @@ describe("toolbox integration · navegador", () => {
     assert.match(rows, /Users/);
     assert.match(rows, /HEALTHY/);
     assert.match(rows, /FAILED/);
+  });
+
+  it("gera as combinações de pares e mostra a redução", async () => {
+    await page.goto(`${appUrl}/toolbox/pairwise`, { waitUntil: "networkidle" });
+    await page.locator(".pairwise-name").nth(0).fill("navegador");
+    await page.locator(".pairwise-values").nth(0).fill("chromium, firefox, webkit");
+    await page.locator(".pairwise-name").nth(1).fill("perfil");
+    await page.locator(".pairwise-values").nth(1).fill("admin, comum, visitante");
+    await page.locator(".pairwise-name").nth(2).fill("idioma");
+    await page.locator(".pairwise-values").nth(2).fill("pt-BR, en-US");
+    await page.locator("#pairwise-run").click();
+    await page.locator("#pairwise-result-panel").waitFor({ state: "visible" });
+
+    const linhas = await page.locator("#pairwise-body tr").count();
+    assert.ok(linhas >= 9 && linhas < 18, `esperava uma matriz reduzida, veio ${linhas}`);
+    assert.match((await page.locator("#pairwise-summary").textContent()) ?? "", /18 combinações completas/);
+    assert.match((await page.locator("#pairwise-head").textContent()) ?? "", /navegador/);
+
+    await page.locator("#pairwise-clear").click();
+    assert.equal(await page.locator("#pairwise-result-panel").isVisible(), false);
+    assert.equal(await page.locator("#pairwise-body").textContent(), "");
+  });
+
+  it("testa uma expressão regular e mostra grupos e linhas atingidas", async () => {
+    await page.goto(`${appUrl}/toolbox/regex-tester`, { waitUntil: "networkidle" });
+    await page.locator("#regex-pattern").fill("(?<usuario>\\w+)@(?<dominio>[\\w.]+)");
+    await page.locator("#regex-subject").fill("ana@exemplo.com\nsem email aqui\nbruno@teste.com.br");
+    await page.locator("#regex-run").click();
+    await page.locator("#regex-result-panel").waitFor({ state: "visible" });
+
+    assert.match((await page.locator("#regex-summary").textContent()) ?? "", /2 CASAMENTO\(S\)/);
+    assert.equal(await page.locator(".regex-line-row.matched").count(), 2);
+    assert.match((await page.locator("#regex-matches").textContent()) ?? "", /usuario/);
+
+    await page.locator("#regex-pattern").fill("(");
+    await page.locator("#regex-run").click();
+    await page.locator("#regex-error").waitFor({ state: "visible" });
+    assert.match((await page.locator("#regex-error").textContent()) ?? "", /Expressão inválida/);
+  });
+
+  it("converte epoch dizendo em que unidade leu", async () => {
+    await page.goto(`${appUrl}/toolbox/timestamp`, { waitUntil: "networkidle" });
+    await page.locator("#timestamp-input").fill("1788274800");
+    await page.locator("#timestamp-run").click();
+    await page.locator("#timestamp-result-panel").waitFor({ state: "visible" });
+
+    assert.match((await page.locator("#timestamp-summary").textContent()) ?? "", /EPOCH EM SEGUNDOS/);
+    assert.match((await page.locator("#timestamp-facts").textContent()) ?? "", /2026-09-01T15:00:00\.000Z/);
+
+    await page.locator("#timestamp-input").fill("2026-09-01T15:00:00");
+    await page.locator("#timestamp-run").click();
+    await page.locator("#timestamp-warnings").waitFor({ state: "visible" });
+    assert.match((await page.locator("#timestamp-warnings").textContent()) ?? "", /não declara fuso/);
+  });
+
+  it("busca no explorador de status por código e por texto", async () => {
+    await page.goto(`${appUrl}/toolbox/http-status`, { waitUntil: "networkidle" });
+    const total = await page.locator(".status-item").count();
+    assert.ok(total > 30);
+
+    await page.locator("#status-search").fill("429");
+    await page.locator(".status-item").first().waitFor();
+    assert.equal(await page.locator(".status-item").count(), 1);
+    assert.match((await page.locator(".status-item").textContent()) ?? "", /Too Many Requests/);
+
+    await page.locator("#status-search").fill("");
+    await page.locator('[data-status-class="5xx"]').click();
+    const cincos = await page.locator(".status-item").allTextContents();
+    assert.ok(cincos.length > 0);
+    assert.ok(cincos.every((texto) => /^\s*5\d\d/.test(texto)));
+
+    await page.locator("#status-search").fill("nao existe isso");
+    await page.locator("#status-empty").waitFor({ state: "visible" });
+  });
+
+  it("favorita uma ferramenta e a mantém no topo entre visitas", async () => {
+    await page.goto(`${appUrl}/toolbox`, { waitUntil: "networkidle" });
+    assert.equal(await page.locator("#toolbox-favorites").isVisible(), false);
+
+    await page.locator('[data-tool-favorite="jwt-inspector"]').first().click();
+    await page.locator("#toolbox-favorites").waitFor({ state: "visible" });
+    assert.equal(await page.locator('#toolbox-favorites-grid [data-tool-id="jwt-inspector"]').count(), 1);
+
+    // A preferência é do navegador: precisa sobreviver a um recarregamento.
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator("#toolbox-favorites").waitFor({ state: "visible" });
+    assert.equal(await page.locator('[data-tool-favorite="jwt-inspector"]').first().getAttribute("aria-pressed"), "true");
+
+    // E o clone não pode inflar a contagem da busca.
+    assert.match((await page.locator("#toolbox-search-count").textContent()) ?? "", new RegExp(`de ${QA_TOOLS.length} ferramentas`));
+
+    await page.locator('#toolbox-favorites-grid [data-tool-favorite="jwt-inspector"]').click();
+    assert.equal(await page.locator("#toolbox-favorites").isVisible(), false);
   });
 
   it("não deixa nenhum erro de console nem violação de CSP nas ferramentas", async () => {

@@ -51,7 +51,7 @@ describe("toolbox · catálogo", () => {
         assert.ok(TOOLBOX_SCRIPTS[tool.id], `${tool.id} não tem script`);
       }
     }
-    assert.equal(AVAILABLE_TOOLS.length, 6, "o MVP entrega seis ferramentas");
+    assert.equal(AVAILABLE_TOOLS.length, 10, "seis do MVP mais as quatro do 1.1");
   });
 });
 
@@ -78,6 +78,19 @@ describe("toolbox · busca", () => {
     assert.ok(searchTools("bearer").some((tool) => tool.id === "jwt-inspector"));
     assert.ok(searchTools("massa").some((tool) => tool.id === "test-data"));
     assert.ok(searchTools("swagger").some((tool) => tool.id === "openapi-diff"));
+    assert.ok(searchTools("all pairs").some((tool) => tool.id === "pairwise"));
+    assert.ok(searchTools("epoch").some((tool) => tool.id === "timestamp"));
+    assert.ok(searchTools("expressao regular").some((tool) => tool.id === "regex-tester"));
+  });
+
+  it("mostra a estrela de favoritar só no que tem página", () => {
+    const html = createToolboxHomePage();
+
+    for (const tool of QA_TOOLS) {
+      const temEstrela = html.includes(`data-tool-favorite="${tool.id}"`);
+      assert.equal(temEstrela, tool.status !== "soon", `${tool.id}: estrela e disponibilidade não batem`);
+    }
+    assert.match(html, /id="toolbox-favorites"[^>]*hidden/, "a faixa de favoritas nasce escondida");
   });
 
   it("busca por API traz as ferramentas de API", () => {

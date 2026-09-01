@@ -40,7 +40,7 @@ const TOOLBOX_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "toolbox
  * URL é como se serve o disco inteiro por engano, e um módulo que só o servidor
  * deveria conhecer não pode virar download por ter caído na pasta certa.
  */
-const BROWSER_MODULES = new Set(["catalog", "json-value", "json-diff", "boundary-values", "test-data", "jwt", "curl", "health"]);
+const BROWSER_MODULES = new Set(["catalog", "json-value", "json-diff", "boundary-values", "test-data", "jwt", "curl", "health", "pairwise", "regex-tester", "timestamp", "http-status"]);
 
 const assetCache = new Map<string, string>();
 
