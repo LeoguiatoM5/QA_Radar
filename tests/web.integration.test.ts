@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { createQaRadarServer } from "../src/server.js";
 
 async function listen(server: Server): Promise<string> {
@@ -16,6 +16,20 @@ async function listen(server: Server): Promise<string> {
 
 async function close(server: Server): Promise<void> {
   await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+}
+
+/**
+ * Espera o relatório embutido terminar de carregar.
+ *
+ * O cliente marca a análise como concluída e só então preenche o `srcdoc` do
+ * iframe, que carrega de forma assíncrona. Ler o `innerText` logo depois do
+ * status virar `pass` é uma corrida: numa máquina ocupada — o CI roda oito
+ * arquivos de Playwright ao mesmo tempo — o texto volta vazio.
+ */
+async function embeddedReportOf(page: Page, expected: string): Promise<string> {
+  const frame = page.frameLocator("#report-frame");
+  await frame.getByText(expected).first().waitFor({ timeout: 20_000 });
+  return frame.locator("body").innerText();
 }
 
 describe("web scan integration", () => {
@@ -131,8 +145,9 @@ describe("web scan integration", () => {
       const htmlLink = page.getByRole("link", { name: /Abrir relatório HTML/ });
       assert.match((await htmlLink.getAttribute("href")) ?? "", /^blob:/);
       const embeddedReport = page.frameLocator("#report-frame");
-      assert.match(await embeddedReport.locator("body").innerText(), /Alvo Web/);
-      assert.match(await embeddedReport.locator("body").innerText(), /503/);
+      const reportText = await embeddedReportOf(page, "Alvo Web");
+      assert.match(reportText, /Alvo Web/);
+      assert.match(reportText, /503/);
       const evidenceImage = embeddedReport.getByRole("img", { name: /Screenshot anotado/ });
       await evidenceImage.waitFor();
       assert.equal(await evidenceImage.evaluate((image) => (image as HTMLImageElement).naturalWidth > 0), true);
@@ -193,7 +208,7 @@ describe("web scan integration", () => {
       assert.equal(await page.locator("#pages").textContent(), "2");
       assert.notEqual(await page.locator("#ttfb").textContent(), "N/A");
       const embeddedReport = page.frameLocator("#report-frame");
-      assert.match(await embeddedReport.locator("body").innerText(), /Cobertura do sitemap/);
+      assert.match(await embeddedReportOf(page, "Cobertura do sitemap"), /Cobertura do sitemap/);
       const href = await embeddedReport.getByRole("link", { name: "Catálogo" }).getAttribute("href");
       assert.match(href ?? "", /^\/api\/scans\/[0-9a-f-]+\/pages\//);
       const childResponse = await page.request.get(new URL(href ?? "", appUrl).toString());
