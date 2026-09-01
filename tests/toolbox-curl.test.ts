@@ -55,6 +55,29 @@ describe("toolbox · curl converter · leitura do comando", () => {
     assert.equal(parseCurl("curl -u qa:secreta 'https://api.example.com/'").basicAuth, "qa:secreta");
   });
 
+  it("move os dados de -G para a query string, como o próprio cURL faz", () => {
+    // Regressão: os `-d` eram descartados junto com o corpo, e o teste gerado
+    // batia no mesmo caminho sem os parâmetros da busca.
+    const request = parseCurl("curl -G 'https://api.example.com/search' -d 'q=nota fiscal' -d 'lang=pt-BR'");
+
+    assert.equal(request.method, "GET");
+    assert.equal(request.body, undefined);
+    assert.deepEqual(request.query, [
+      { name: "q", value: "nota fiscal" },
+      { name: "lang", value: "pt-BR" },
+    ]);
+    assert.match(convertCurl(request, "playwright"), /search\?q=nota%20fiscal&lang=pt-BR/);
+  });
+
+  it("soma os dados de -G aos parâmetros que já estavam na URL", () => {
+    const request = parseCurl("curl -G 'https://api.example.com/search?page=2' -d 'q=teste'");
+
+    assert.deepEqual(
+      request.query.map((param) => param.name),
+      ["page", "q"],
+    );
+  });
+
   it("ignora opções que não mudam a requisição", () => {
     const request = parseCurl("curl -s -L -k --compressed 'https://api.example.com/users'");
 

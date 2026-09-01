@@ -33,6 +33,13 @@ export interface JwtInspection {
   timestamps: JwtTimestamps;
   /** Quanto falta para expirar; negativo quando já expirou. */
   timeRemainingMs: number | undefined;
+  /**
+   * Desvios do RFC 7519 que o token foi lido apesar de ter.
+   *
+   * Vazio na esmagadora maioria dos tokens. Quando não está, é aqui que mora a
+   * explicação de por que a expiração parece estranha.
+   */
+  warnings: string[];
   algorithm: string | undefined;
   /** A terceira parte existe e não está vazia. */
   signaturePresent: boolean;
@@ -72,11 +79,30 @@ function parseSegment(segment: string, label: string): JsonValue {
   }
 }
 
-function numericClaim(payload: JsonValue | undefined, claim: string): number | undefined {
+/**
+ * Lê `iat`, `exp` ou `nbf`.
+ *
+ * O RFC 7519 exige NumericDate — um número. Emissor que serializa como texto
+ * existe, e simplesmente ignorar o claim faria a ferramenta anunciar "o token
+ * não declara expiração" para um token expirado. Aqui o valor é aproveitado e o
+ * desvio é registrado, para que a tela possa dizer as duas coisas.
+ */
+function numericClaim(payload: JsonValue | undefined, claim: string, warnings: string[]): number | undefined {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return undefined;
   const value = payload[claim];
   // As datas do JWT são segundos desde a epoch (RFC 7519), não milissegundos.
-  return typeof value === "number" && Number.isFinite(value) ? value * 1000 : undefined;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    // Um emissor que confunde segundos com milissegundos joga a expiração para
+    // o ano 58000; sem o aviso, a tela mostra a data absurda sem explicação.
+    if (Math.abs(value) > 100_000_000_000) warnings.push(`O claim ${claim} parece estar em milissegundos: o RFC 7519 usa segundos desde a epoch.`);
+    return value * 1000;
+  }
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
+    warnings.push(`O claim ${claim} veio como texto; o RFC 7519 exige um número. O valor foi interpretado mesmo assim.`);
+    return Number(value) * 1000;
+  }
+  if (value !== undefined) warnings.push(`O claim ${claim} não é uma data numérica e foi ignorado.`);
+  return undefined;
 }
 
 function textClaim(header: JsonValue | undefined, claim: string): string | undefined {
@@ -96,6 +122,7 @@ function failure(message: string): JwtInspection {
     payload: undefined,
     timestamps: EMPTY_TIMESTAMPS,
     timeRemainingMs: undefined,
+    warnings: [],
     algorithm: undefined,
     signaturePresent: false,
     signatureVerified: false,
@@ -103,7 +130,13 @@ function failure(message: string): JwtInspection {
 }
 
 export function inspectJwt(token: string, now: number = Date.now()): JwtInspection {
-  const trimmed = token.trim().replace(/^Bearer\s+/i, "");
+  // Espaço em branco no meio some antes de qualquer validação: token copiado de
+  // terminal, de log ou de um header quebrado por wrap chega com quebras de
+  // linha, e recusá-lo por isso é rejeitar o jeito mais comum de colar um JWT.
+  const trimmed = token
+    .trim()
+    .replace(/^Bearer\s+/i, "")
+    .replace(/\s+/g, "");
   if (!trimmed) return failure("Cole um JWT para inspecionar.");
   const parts = trimmed.split(".");
   if (parts.length !== 3) return failure("Um JWT tem três partes separadas por ponto: header, payload e assinatura.");
@@ -117,11 +150,18 @@ export function inspectJwt(token: string, now: number = Date.now()): JwtInspecti
   } catch (error) {
     return failure(error instanceof Error ? error.message : "Não foi possível decodificar o token.");
   }
+  // O RFC 7519 define o payload como um objeto JSON. Um array ou uma string
+  // decodificam, mas não são um JWT — e chamar isso de "estrutura válida"
+  // esconderia o defeito de quem emitiu.
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return failure("O payload de um JWT precisa ser um objeto JSON.");
+  }
 
+  const warnings: string[] = [];
   const timestamps: JwtTimestamps = {
-    issuedAt: numericClaim(payload, "iat"),
-    expiresAt: numericClaim(payload, "exp"),
-    notBefore: numericClaim(payload, "nbf"),
+    issuedAt: numericClaim(payload, "iat", warnings),
+    expiresAt: numericClaim(payload, "exp", warnings),
+    notBefore: numericClaim(payload, "nbf", warnings),
   };
   const timeRemainingMs = timestamps.expiresAt === undefined ? undefined : timestamps.expiresAt - now;
 
@@ -137,6 +177,7 @@ export function inspectJwt(token: string, now: number = Date.now()): JwtInspecti
     payload,
     timestamps,
     timeRemainingMs,
+    warnings,
     algorithm: textClaim(header, "alg"),
     signaturePresent: signatureSegment.length > 0,
     signatureVerified: false,

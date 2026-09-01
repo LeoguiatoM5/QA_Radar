@@ -42,6 +42,65 @@ describe("toolbox · boundary value generator", () => {
       cases.map((testCase) => testCase.input),
       ["0", "1", "2", "3"],
     );
+    // O 2 chega como "acima do mínimo" e precisa ser rotulado como o máximo.
+    assert.equal(cases[2]?.position, "maximum");
+  });
+
+  it("não marca como válido um valor fora da faixa quando mínimo e máximo são iguais", () => {
+    // Regressão: a validade vinha da posição de origem do ponto, então numa
+    // faixa 5..5 o "primeiro valor acima do mínimo" (6) saía como VALID e o
+    // caso "acima do máximo" desaparecia — a ferramenta ensinava exatamente o
+    // contrário do que a técnica existe para descobrir.
+    const cases = generateBoundaryCases({ field: "idade", type: "integer", minimum: "5", maximum: "5" });
+
+    assert.deepEqual(
+      cases.map((testCase) => [testCase.input, testCase.valid, testCase.position]),
+      [
+        ["4", false, "below-minimum"],
+        ["5", true, "minimum"],
+        ["6", false, "above-maximum"],
+      ],
+    );
+  });
+
+  it("aplica a mesma regra a texto, data e decimal de faixa mínima", () => {
+    const texto = generateBoundaryCases({ field: "sigla", type: "string-length", minimum: "3", maximum: "3" });
+    const data = generateBoundaryCases({ field: "dia", type: "date", minimum: "2026-01-01", maximum: "2026-01-01" });
+    const decimal = generateBoundaryCases({ field: "taxa", type: "decimal", minimum: "10", maximum: "10", step: 0.01 });
+
+    assert.deepEqual(
+      texto.map((testCase) => [testCase.display, testCase.valid]),
+      [
+        ["2 caractere(s)", false],
+        ["3 caractere(s)", true],
+        ["4 caractere(s)", false],
+      ],
+    );
+    assert.deepEqual(
+      data.map((testCase) => [testCase.input, testCase.valid]),
+      [
+        ["2025-12-31", false],
+        ["2026-01-01", true],
+        ["2026-01-02", false],
+      ],
+    );
+    assert.deepEqual(
+      decimal.map((testCase) => [testCase.input, testCase.valid]),
+      [
+        ["9.99", false],
+        ["10", true],
+        ["10.01", false],
+      ],
+    );
+  });
+
+  it("recusa dia que não existe no mês em vez de rolar para o mês seguinte", () => {
+    // Regressão: Date.parse("2026-02-30") não dá NaN, rola para 2026-03-02 —
+    // e os casos saíam para uma faixa que ninguém pediu.
+    assert.throws(() => generateBoundaryCases({ field: "vigencia", type: "date", minimum: "2026-02-30", maximum: "2026-12-31" }), /não é uma data existente/);
+    assert.throws(() => generateBoundaryCases({ field: "vigencia", type: "date", minimum: "2025-02-29", maximum: "2025-12-31" }), /não é uma data existente/);
+    // 2028 é bissexto: 29/02 existe e continua passando.
+    assert.equal(generateBoundaryCases({ field: "vigencia", type: "date", minimum: "2028-02-29", maximum: "2028-12-31" })[1]?.input, "2028-02-29");
   });
 
   it("usa o passo informado no tipo decimal", () => {

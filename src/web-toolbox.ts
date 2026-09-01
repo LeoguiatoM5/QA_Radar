@@ -206,6 +206,7 @@ function renderJwtInspector(tool: QaToolDefinition): string {
     <div class="tool-result-head"><h2>Token decodificado</h2><div class="tool-result-actions"><button class="secondary" id="jwt-copy" type="button">Copiar payload</button></div></div>
     <div class="tool-status-row"><span class="tool-status" id="jwt-status"></span><span class="tool-status tool-status-warning" id="jwt-signature">Assinatura não verificada</span></div>
     <p class="tool-note" id="jwt-signature-note">Decodificado não é verificado. O QA Radar lê o conteúdo do token, mas não tem a chave do emissor e por isso <strong>não</strong> confere a assinatura — um token forjado seria decodificado do mesmo jeito.</p>
+    <ul class="tool-warning tool-warning-list" id="jwt-warnings" hidden></ul>
     <dl class="tool-facts" id="jwt-claims"></dl>
     <h3 class="tool-subtitle">Header</h3>
     <pre class="tool-code" id="jwt-header" tabindex="0"></pre>

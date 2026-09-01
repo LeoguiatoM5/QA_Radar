@@ -91,6 +91,30 @@ describe("toolbox · json diff", () => {
     );
   });
 
+  it("não confunde uma chave com ponto no nome com um caminho aninhado", () => {
+    // Regressão: os dois documentos abaixo produziam o mesmo `$.a.b`, e uma
+    // regra de ignorar escrita para um calava o outro.
+    const chaveComPonto = diffJson({ "a.b": 1 }, { "a.b": 2 });
+    const aninhado = diffJson({ a: { b: 1 } }, { a: { b: 2 } });
+
+    assert.equal(chaveComPonto.entries[0]?.path, '$["a.b"]');
+    assert.equal(aninhado.entries[0]?.path, "$.a.b");
+    assert.notEqual(chaveComPonto.entries[0]?.path, aninhado.entries[0]?.path);
+  });
+
+  it("usa colchetes também para chave com colchete, que colidiria com índice de array", () => {
+    assert.equal(diffJson({ "x[0]": 1 }, { "x[0]": 2 }).entries[0]?.path, '$["x[0]"]');
+    assert.equal(diffJson({ x: [1] }, { x: [2] }).entries[0]?.path, "$.x[0]");
+  });
+
+  it("continua ignorando pelo nome mesmo quando a chave não é um identificador simples", () => {
+    // A regra por nome compara a chave, não o caminho: quem escreve
+    // `content-type` continua sendo atendido.
+    const result = diffJson({ "content-type": "a", v: 1 }, { "content-type": "b", v: 1 }, { ignore: ["content-type"] });
+
+    assert.equal(result.equal, true);
+  });
+
   it("recusa JSON inválido com mensagem que diz qual dos dois lados falhou", () => {
     assert.throws(() => parseJsonInput("{ nao json", "Original"), /Original: JSON inválido/);
     assert.throws(() => parseJsonInput("   ", "Comparar com"), /Comparar com: informe um JSON/);

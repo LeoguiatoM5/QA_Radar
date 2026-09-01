@@ -76,8 +76,18 @@ function createIgnoreMatcher(rules: readonly string[]): (path: string, key: stri
   return (path, key) => matchers.some((matches) => matches(path, key));
 }
 
+/** Chave que pode ser escrita depois de um ponto sem virar outra coisa. */
+const SIMPLE_KEY = /^[A-Za-z_$][\w$]*$/;
+
+/**
+ * Caminho da propriedade.
+ *
+ * Chave com ponto ou colchete no nome sai entre aspas: `{"a.b": 1}` e
+ * `{"a": {"b": 1}}` produziriam o mesmo `$.a.b`, e quem lê o diff não teria
+ * como saber qual dos dois mudou.
+ */
 function childPath(parent: string, key: string): string {
-  return `${parent}.${key}`;
+  return SIMPLE_KEY.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
 }
 
 function indexPath(parent: string, index: number): string {

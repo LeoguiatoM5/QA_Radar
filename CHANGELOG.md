@@ -164,6 +164,35 @@ do endpoint de saúde.
 
 ### Corrigido
 
+- **Boundary Value Generator marcava como válido um valor fora da faixa.** A
+  validade vinha da posição de origem do ponto, não do valor: numa faixa `5..5`
+  o "primeiro valor acima do mínimo" (6) saía como `VALID` e o caso "acima do
+  máximo" sumia — a ferramenta ensinava o oposto do que a técnica existe para
+  descobrir. Vale para inteiro, decimal, tamanho de texto e data.
+- **Boundary Value Generator aceitava dia que não existe no mês.**
+  `2026-02-30` não dá `NaN`: rolava para `2026-03-02` em silêncio e os casos
+  saíam para uma faixa que ninguém pediu.
+- **cURL Converter descartava os dados de `-G`.** O cURL move os `-d` para a
+  query string; o conversor os jogava fora, e o teste gerado batia no mesmo
+  caminho sem os parâmetros da busca.
+- **JWT Inspector ignorava `exp`, `iat` e `nbf` enviados como texto.** Um token
+  expirado aparecia como "não declara expiração". Agora o valor é interpretado e
+  o desvio do RFC 7519 é mostrado na tela, junto com o aviso de `exp` que parece
+  estar em milissegundos.
+- **JWT Inspector recusava token colado com quebra de linha**, que é como ele
+  sai de um terminal, de um log ou de um header quebrado por wrap. Também passou
+  a recusar payload que decodifica mas não é um objeto JSON, em vez de chamá-lo
+  de estrutura válida.
+- **Test Data Generator não validava o nome do campo**, que vira identificador
+  no `INSERT` gerado: `nome'); DROP TABLE users;--` saía como coluna crua num SQL
+  feito para ser colado num banco. O nome da tabela já era protegido; agora o do
+  campo também.
+- **"Limpar" do JSON Diff e do Test Data escondia o painel sem apagar o
+  conteúdo.** O payload comparado continuava no DOM, visível no inspetor e em
+  qualquer captura de tela — numa área que promete não mandar nada para fora.
+- **JSON Diff produzia caminho ambíguo** para chave com `.` ou `[]` no nome:
+  `{"a.b":1}` e `{"a":{"b":1}}` davam o mesmo `$.a.b`, e uma regra de ignorar
+  escrita para um calava o outro. Essas chaves agora saem como `$["a.b"]`.
 - Contraste do nome da página na barra de contexto (4.28:1) e do rodapé
   (4.03:1) — os dois reprovavam no axe-core em **todas** as páginas do
   dashboard. Agora passam no critério AA da WCAG.

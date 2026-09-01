@@ -265,6 +265,13 @@ export function parseCurl(command: string): ParsedCurlRequest {
   const query = [...url.searchParams.entries()].map(([name, value]) => ({ name, value }));
   url.search = "";
 
+  // `-G` não descarta os `-d`: o cURL os move para a query string. Descartá-los
+  // faria o teste gerado bater num endpoint sem os parâmetros da busca — o
+  // mesmo caminho, resultado diferente, e sem nada na tela dizendo por quê.
+  if (forceGet && body !== undefined) {
+    for (const [name, value] of new URLSearchParams(body).entries()) query.push({ name, value });
+  }
+
   const resolvedMethod = method ?? (body !== undefined && !forceGet ? "POST" : "GET");
 
   return {

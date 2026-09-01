@@ -156,6 +156,10 @@ $('diff-swap')?.addEventListener('click',()=>{
 });
 $('diff-clear')?.addEventListener('click',()=>{
   left.value='';right.value='';ignore.value='';lastResult=null;
+  // Esconder o painel não basta: o payload comparado continuaria no DOM,
+  // visível no inspetor e em qualquer captura de tela. Numa ferramenta que
+  // promete não mandar nada para fora, "Limpar" tem de apagar de verdade.
+  list.innerHTML='';summary.innerHTML='';ignored.textContent='';ignored.hidden=true;
   clearError(errorBox);show(panel,false);
   left.focus();
 });
@@ -266,7 +270,8 @@ function run(){
 $('data-generate')?.addEventListener('click',run);
 $('data-regenerate')?.addEventListener('click',run);
 $('data-clear')?.addEventListener('click',()=>{
-  rows=[];clearError(errorBox);show(panel,false);
+  rows=[];output.textContent='';
+  clearError(errorBox);show(panel,false);
   for(const box of document.querySelectorAll('[data-field-type]'))box.checked=false;
 });
 for(const tab of document.querySelectorAll('[data-data-format]')){
@@ -300,7 +305,7 @@ export const JWT_SCRIPT =
 import { inspectJwt, JWT_STATUS_LABELS, formatDuration } from '/assets/toolbox/jwt.js';
 
 const input=$('jwt-input'),errorBox=$('jwt-error'),panel=$('jwt-result-panel');
-const statusBox=$('jwt-status'),claims=$('jwt-claims'),headerBox=$('jwt-header'),payloadBox=$('jwt-payload');
+const statusBox=$('jwt-status'),claims=$('jwt-claims'),headerBox=$('jwt-header'),payloadBox=$('jwt-payload'),warnings=$('jwt-warnings');
 let lastPayload='';
 
 const STATUS_CLASS={valid_structure:'tool-status-ok',expired:'tool-status-fail',not_active_yet:'tool-status-warning',invalid:'tool-status-fail'};
@@ -324,6 +329,10 @@ function decode(){
   }
   statusBox.className='tool-status '+STATUS_CLASS[result.status];
   statusBox.textContent=JWT_STATUS_LABELS[result.status];
+  // Desvio do RFC aparece antes dos claims: é o que explica uma expiração que
+  // parece errada, e sem isso o QA acredita no número sem saber de onde veio.
+  warnings.innerHTML=result.warnings.map(aviso=>'<li>'+esc(aviso)+'</li>').join('');
+  warnings.hidden=result.warnings.length===0;
   const remaining=result.timeRemainingMs===undefined
     ?'Sem exp: o token não declara expiração.'
     :result.timeRemainingMs>0?'Expira em '+formatDuration(result.timeRemainingMs):'Expirado há '+formatDuration(result.timeRemainingMs);
@@ -347,6 +356,7 @@ $('jwt-clear')?.addEventListener('click',()=>{
   // esperando o próximo "copiar".
   input.value='';lastPayload='';
   headerBox.textContent='';payloadBox.textContent='';claims.innerHTML='';
+  warnings.innerHTML='';warnings.hidden=true;
   clearError(errorBox);show(panel,false);
   input.focus();
 });

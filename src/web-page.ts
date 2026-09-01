@@ -446,6 +446,7 @@ const TOOLBOX_STYLES = `
 .tool-note{margin:16px 0 0;padding-top:13px;border-top:1px solid var(--line);color:var(--muted);font-size:.76rem;line-height:1.6}
 .tool-note-server{margin:0 0 18px;padding:12px 14px;border:1px solid #2a4d66;border-top:1px solid #2a4d66;border-radius:9px;background:#0c1d2c;color:#a8c4d8}
 .tool-warning{margin:0 0 18px;padding:12px 14px;border:1px solid #6b5619;border-radius:9px;background:#201a06;color:#f0dca4;font-size:.79rem;line-height:1.55}
+.tool-warning-list{padding:12px 14px 12px 32px}.tool-warning-list li+li{margin-top:6px}.tool-warning-list[hidden]{display:none}
 .tool-result-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
 .tool-result-head h2{margin:0;font-size:1.1rem}
 .tool-result-actions{display:flex;gap:8px;flex-wrap:wrap}

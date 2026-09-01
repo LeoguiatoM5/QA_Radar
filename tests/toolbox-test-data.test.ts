@@ -101,6 +101,13 @@ describe("toolbox · test data generator", () => {
     assert.throws(() => generateTestData({ fields: [{ key: "a", type: "name", mode: "valid" }], count: 0 }, random), /maior que zero/);
     assert.throws(() => generateTestData({ fields: [{ key: "a", type: "name", mode: "valid" }], count: 5000 }, random), /quantidade máxima/);
     assert.throws(() => generateTestData({ fields: [{ key: " ", type: "name", mode: "valid" }], count: 1 }, random), /precisa de um nome/);
+    // O nome vira identificador no INSERT: um nome com aspas sairia como
+    // coluna crua num SQL que alguém vai colar num banco.
+    for (const key of ["nome'); DROP TABLE users;--", "nome completo", "data-nascimento", "1campo", "coluna;"]) {
+      assert.throws(() => generateTestData({ fields: [{ key, type: "name", mode: "valid" }], count: 1 }, random), /Nome de campo inválido/, `aceitou o nome perigoso: ${key}`);
+    }
+    // E o que é identificador de verdade continua passando.
+    assert.doesNotThrow(() => generateTestData({ fields: [{ key: "data_nascimento", type: "birthdate", mode: "valid" }], count: 1 }, random));
     assert.throws(
       () =>
         generateTestData(
@@ -129,6 +136,15 @@ describe("toolbox · test data generator", () => {
 
     assert.equal(testDataToSql(rows, "clientes"), "INSERT INTO clientes (nome, ativo, valor) VALUES ('O''Brien', FALSE, 3.5);");
     assert.match(testDataToSql(rows, "clientes; DROP TABLE users"), /^INSERT INTO test_data /);
+  });
+
+  it("mantém no catálogo apenas nomes que servem aos três formatos", () => {
+    for (const field of TEST_DATA_FIELDS) {
+      assert.doesNotThrow(
+        () => generateTestData({ fields: [{ key: field.defaultKey, type: field.type, mode: "valid" }], count: 1 }, random),
+        `o nome sugerido para ${field.type} não é um identificador válido`,
+      );
+    }
   });
 
   it("cobre no catálogo todos os tipos que sabe gerar", () => {

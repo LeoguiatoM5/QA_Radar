@@ -241,6 +241,9 @@ export interface TestDataRequest {
 
 export const MAX_TEST_DATA_ROWS = 1000;
 
+/** Identificador aceito nos três formatos de saída ao mesmo tempo. */
+const SAFE_FIELD_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export function generateTestData(request: TestDataRequest, random: RandomSource = Math.random): TestDataRow[] {
   const { fields, count } = request;
   if (fields.length === 0) throw new Error("Escolha ao menos um campo.");
@@ -250,6 +253,10 @@ export function generateTestData(request: TestDataRequest, random: RandomSource 
   for (const field of fields) {
     const key = field.key.trim();
     if (!key) throw new Error("Todo campo precisa de um nome.");
+    // O mesmo nome vira propriedade no JSON, coluna no CSV e **identificador no
+    // INSERT**. Sem esta trava, `nome'); DROP TABLE users;--` sai como coluna
+    // crua num SQL que alguém vai colar num banco.
+    if (!SAFE_FIELD_KEY.test(key)) throw new Error(`Nome de campo inválido: ${key}. Use letras, números e _, começando por letra ou _.`);
     if (keys.has(key)) throw new Error(`Nome de campo repetido: ${key}.`);
     keys.add(key);
   }

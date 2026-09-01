@@ -81,6 +81,57 @@ describe("toolbox · jwt inspector", () => {
     assert.match(result.error ?? "", /payload não contém um JSON válido/);
   });
 
+  it("aproveita exp como texto e avisa que o emissor fugiu do RFC", () => {
+    // Regressão: o claim era ignorado em silêncio, e um token expirado
+    // aparecia como "não declara expiração".
+    const result = inspectJwt(token({ exp: String(Math.floor(NOW / 1000) - 10) }), NOW);
+
+    assert.equal(result.status, "expired");
+    assert.equal(result.timestamps.expiresAt, (Math.floor(NOW / 1000) - 10) * 1000);
+    assert.match(result.warnings.join(" "), /exp veio como texto/);
+  });
+
+  it("avisa quando exp parece estar em milissegundos", () => {
+    const result = inspectJwt(token({ exp: (Math.floor(NOW / 1000) + 3600) * 1000 }), NOW);
+
+    assert.match(result.warnings.join(" "), /parece estar em milissegundos/);
+  });
+
+  it("avisa quando um claim de data não é interpretável e não inventa expiração", () => {
+    const result = inspectJwt(token({ exp: { quando: "amanhã" } }), NOW);
+
+    assert.equal(result.timestamps.expiresAt, undefined);
+    assert.match(result.warnings.join(" "), /não é uma data numérica/);
+  });
+
+  it("não emite aviso nenhum para um token bem formado", () => {
+    assert.deepEqual(inspectJwt(token({ sub: "1", exp: Math.floor(NOW / 1000) + 60 }), NOW).warnings, []);
+  });
+
+  it("aceita token colado com quebras de linha, como sai de um terminal ou log", () => {
+    // Regressão: o token quebrado por wrap era recusado com "não está em
+    // base64url", que é o jeito mais comum de colar um JWT.
+    const inteiro = token({ sub: "1", exp: Math.floor(NOW / 1000) + 60 });
+    const quebrado = inteiro.replace(/(.{24})/g, "$1\n");
+
+    const result = inspectJwt(quebrado, NOW);
+
+    assert.equal(result.decoded, true);
+    assert.equal(result.status, "valid_structure");
+    assert.equal(inspectJwt(`  Bearer ${inteiro.slice(0, 10)}\n${inteiro.slice(10)}  `, NOW).decoded, true);
+  });
+
+  it("recusa payload que decodifica mas não é um objeto JSON", () => {
+    const array = `${segment({ alg: "HS256" })}.${segment([1, 2, 3])}.sig`;
+    const texto = `${segment({ alg: "HS256" })}.${segment("so uma string")}.sig`;
+
+    for (const invalid of [array, texto]) {
+      const result = inspectJwt(invalid, NOW);
+      assert.equal(result.decoded, false);
+      assert.match(result.error ?? "", /objeto JSON/);
+    }
+  });
+
   it("recusa segmento fora do alfabeto base64url", () => {
     const result = inspectJwt("cabeç@lho.payload.sig", NOW);
 

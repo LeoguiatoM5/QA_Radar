@@ -56,12 +56,21 @@ Campos ignorados aceitam três formas:
 | `metadata.timestamp` | esse caminho, na raiz ou aninhado em qualquer objeto  |
 | `data[*].requestId`  | o mesmo, com `[*]` cobrindo qualquer índice de array  |
 
+Chave cujo nome não é um identificador simples aparece entre colchetes e aspas
+(`$["content-type"]`, `$["a.b"]`), para não se confundir com um caminho aninhado
+nem com um índice de array. A regra por nome continua valendo para elas.
+
 ### JWT Inspector
 
 Decodifica e **só** decodifica. O status é `VALID STRUCTURE`, `EXPIRED` ou
 `NOT ACTIVE YET` — nunca "válido" sozinho, porque sem a chave do emissor não há
 como afirmar que a assinatura confere. A interface diz isso explicitamente:
 `signatureVerified` é sempre `false`.
+
+Token colado com quebra de linha (terminal, log, header quebrado por wrap) é
+aceito. Desvios do RFC 7519 que o token foi lido apesar de ter — `exp` como
+texto, `exp` em milissegundos, claim de data que não é número — aparecem como
+aviso em vez de sumirem: é o que explica uma expiração que parece errada.
 
 ### API Health
 
@@ -90,6 +99,10 @@ corretos) e **inválido** de propósito (verificador quebrado, e-mail sem `@`,
 `31/02`, nascimento no futuro, texto acima do tamanho aceito). Toda a massa é
 sintética e a interface avisa: _Synthetic Test Data — Do not use as real
 identity data._
+
+O nome do campo precisa ser um identificador (`[A-Za-z_][A-Za-z0-9_]*`): ele
+vira propriedade no JSON, coluna no CSV e **identificador no `INSERT`**, e um
+nome livre sairia cru num SQL feito para ser colado num banco.
 
 ### cURL Converter
 

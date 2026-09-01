@@ -74,6 +74,10 @@ function requireDate(value: string, label: string): number {
   if (!ISO_DATE.test(trimmed)) throw new Error(`${label} deve estar no formato AAAA-MM-DD.`);
   const parsed = Date.parse(`${trimmed}T00:00:00Z`);
   if (Number.isNaN(parsed)) throw new Error(`${label} não é uma data existente.`);
+  // 2026-02-30 não dá NaN: o Date rola para 2026-03-02 em silêncio, e os casos
+  // sairiam para uma faixa que ninguém pediu. Comparar a volta com o que foi
+  // digitado é o que pega o dia que não existe naquele mês.
+  if (isoDate(parsed) !== trimmed) throw new Error(`${label} não é uma data existente.`);
   return parsed;
 }
 
@@ -91,12 +95,24 @@ interface BoundaryPoint {
   position: BoundaryPosition;
   input: string;
   display: string;
+  /**
+   * O valor comparável com a faixa: o número, o comprimento do texto ou o
+   * timestamp. É por ele — e não pela posição de origem — que a validade é
+   * decidida.
+   */
+  measure: number;
+}
+
+interface BoundaryRange {
+  minimum: number;
+  maximum: number;
+  points: BoundaryPoint[];
 }
 
 function numericPoints(minimum: number, maximum: number, step: number, format: (value: number) => string): BoundaryPoint[] {
   const at = (value: number, position: BoundaryPosition): BoundaryPoint => {
     const text = format(value);
-    return { position, input: text, display: text };
+    return { position, input: text, display: text, measure: value };
   };
   return [
     at(roundToStep(minimum - step, step), "below-minimum"),
@@ -113,7 +129,7 @@ function stringLengthPoints(minimum: number, maximum: number): BoundaryPoint[] {
     // Texto com tamanho negativo não existe: quando o mínimo é 0, o caso
     // "abaixo do mínimo" não é gerado em vez de virar um valor impossível.
     if (length < 0) return undefined;
-    return { position, input: "a".repeat(length), display: `${length} caractere(s)` };
+    return { position, input: "a".repeat(length), display: `${length} caractere(s)`, measure: length };
   };
   return [
     at(minimum - 1, "below-minimum"),
@@ -128,7 +144,7 @@ function stringLengthPoints(minimum: number, maximum: number): BoundaryPoint[] {
 function datePoints(minimum: number, maximum: number): BoundaryPoint[] {
   const at = (timestamp: number, position: BoundaryPosition): BoundaryPoint => {
     const text = isoDate(timestamp);
-    return { position, input: text, display: text };
+    return { position, input: text, display: text, measure: timestamp };
   };
   return [
     at(minimum - DAY_MS, "below-minimum"),
@@ -140,12 +156,12 @@ function datePoints(minimum: number, maximum: number): BoundaryPoint[] {
   ];
 }
 
-function pointsFor(spec: BoundarySpec): BoundaryPoint[] {
+function rangeFor(spec: BoundarySpec): BoundaryRange {
   if (spec.type === "integer") {
     const minimum = requireInteger(spec.minimum, "Mínimo");
     const maximum = requireInteger(spec.maximum, "Máximo");
     if (minimum > maximum) throw new Error("O mínimo não pode ser maior que o máximo.");
-    return numericPoints(minimum, maximum, 1, (value) => String(value));
+    return { minimum, maximum, points: numericPoints(minimum, maximum, 1, (value) => String(value)) };
   }
   if (spec.type === "decimal") {
     const minimum = requireFiniteNumber(spec.minimum, "Mínimo");
@@ -153,37 +169,63 @@ function pointsFor(spec: BoundarySpec): BoundaryPoint[] {
     if (minimum > maximum) throw new Error("O mínimo não pode ser maior que o máximo.");
     const step = spec.step ?? 0.01;
     if (!Number.isFinite(step) || step <= 0) throw new Error("O passo deve ser um número maior que zero.");
-    return numericPoints(minimum, maximum, step, (value) => String(roundToStep(value, step)));
+    return { minimum, maximum, points: numericPoints(minimum, maximum, step, (value) => String(roundToStep(value, step))) };
   }
   if (spec.type === "string-length") {
     const minimum = requireInteger(spec.minimum, "Tamanho mínimo");
     const maximum = requireInteger(spec.maximum, "Tamanho máximo");
     if (minimum < 0) throw new Error("O tamanho mínimo não pode ser negativo.");
     if (minimum > maximum) throw new Error("O tamanho mínimo não pode ser maior que o máximo.");
-    return stringLengthPoints(minimum, maximum);
+    return { minimum, maximum, points: stringLengthPoints(minimum, maximum) };
   }
   const minimum = requireDate(spec.minimum, "Data mínima");
   const maximum = requireDate(spec.maximum, "Data máxima");
   if (minimum > maximum) throw new Error("A data mínima não pode ser posterior à máxima.");
-  return datePoints(minimum, maximum);
+  return { minimum, maximum, points: datePoints(minimum, maximum) };
 }
 
 /**
- * Gera os seis casos clássicos, sem repetição.
+ * Onde o valor realmente cai, ignorando de qual dos seis pontos ele veio.
  *
- * Faixas curtas fazem os pontos colidirem (com 18..19, "acima do mínimo" e "o
- * máximo" são o mesmo valor). Repetir o caso só inflaria a suíte, então o
- * primeiro a aparecer — o mais próximo do mínimo — é o que fica.
+ * Numa faixa curta os pontos colidem: com 5..5, o "primeiro valor acima do
+ * mínimo" é 6, que está **fora** da faixa. Confiar na posição de origem
+ * marcaria esse 6 como válido e ensinaria o time a esperar que um campo 5..5
+ * aceite 6 — exatamente o contrário do que a técnica existe para descobrir.
+ */
+function positionOf(measure: number, { minimum, maximum }: BoundaryRange, fallback: BoundaryPosition): BoundaryPosition {
+  if (measure < minimum) return "below-minimum";
+  if (measure > maximum) return "above-maximum";
+  if (measure === minimum) return "minimum";
+  if (measure === maximum) return "maximum";
+  return fallback;
+}
+
+/**
+ * Gera os casos clássicos, sem repetir valor.
+ *
+ * A ordem de apresentação continua sendo a da técnica (do abaixo do mínimo ao
+ * acima do máximo), mas cada caso é rotulado e classificado pelo valor que
+ * realmente carrega.
  */
 export function generateBoundaryCases(spec: BoundarySpec): BoundaryCase[] {
   const field = spec.field.trim() || "campo";
-  const points = pointsFor(spec);
+  const range = rangeFor(spec);
+  const byPosition = new Map<BoundaryPosition, BoundaryPoint>();
   const seen = new Set<string>();
+  for (const point of range.points) {
+    if (seen.has(point.input)) continue;
+    const position = positionOf(point.measure, range, point.position);
+    // Um valor só ocupa a posição que ainda estiver livre: com 1..2, o 2 chega
+    // como "acima do mínimo" e é reclassificado para "máximo", que é o rótulo
+    // correto e ainda não foi preenchido.
+    if (byPosition.has(position)) continue;
+    byPosition.set(position, point);
+    seen.add(point.input);
+  }
   const cases: BoundaryCase[] = [];
   for (const position of POSITION_ORDER) {
-    const point = points.find((candidate) => candidate.position === position);
-    if (!point || seen.has(point.input)) continue;
-    seen.add(point.input);
+    const point = byPosition.get(position);
+    if (!point) continue;
     cases.push({
       id: `TC${String(cases.length + 1).padStart(3, "0")}`,
       title: `${POSITION_TITLES[position]} de ${field}`,

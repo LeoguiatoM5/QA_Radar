@@ -308,6 +308,23 @@ describe("toolbox integration · navegador", () => {
     assert.equal(await page.locator("#diff-result-panel").isVisible(), false);
   });
 
+  it("apaga do DOM o que foi comparado quando o usuário limpa", async () => {
+    // Regressão: o painel era apenas escondido, e o payload comparado continuava
+    // no HTML — visível no inspetor e em qualquer captura de tela, numa
+    // ferramenta que promete não mandar nada para fora.
+    await page.goto(`${appUrl}/toolbox/json-diff`, { waitUntil: "networkidle" });
+    await page.locator("#diff-left").fill('{"cartao":"4111111111111111"}');
+    await page.locator("#diff-right").fill('{"cartao":"5555444433332222"}');
+    await page.locator("#diff-run").click();
+    await page.locator("#diff-result-panel").waitFor({ state: "visible" });
+    assert.ok((await page.content()).includes("4111111111111111"));
+
+    await page.locator("#diff-clear").click();
+    const html = await page.content();
+    assert.equal(html.includes("4111111111111111"), false, "o valor comparado continuou no DOM");
+    assert.equal(html.includes("5555444433332222"), false, "o valor comparado continuou no DOM");
+  });
+
   it("mostra erro legível quando o JSON é inválido", async () => {
     await page.goto(`${appUrl}/toolbox/json-diff`, { waitUntil: "networkidle" });
     await page.locator("#diff-left").fill("{ nao json");
@@ -352,6 +369,17 @@ describe("toolbox integration · navegador", () => {
     assert.match((await page.locator("#data-output").textContent()) ?? "", /^INSERT INTO test_data \(cpf, email\)/);
   });
 
+  it("apaga a massa gerada ao limpar", async () => {
+    await page.goto(`${appUrl}/toolbox/test-data`, { waitUntil: "networkidle" });
+    await page.locator('[data-field-type="cpf"]').check();
+    await page.locator("#data-generate").click();
+    await page.locator("#data-result-panel").waitFor({ state: "visible" });
+
+    await page.locator("#data-clear").click();
+    assert.equal(await page.locator("#data-output").textContent(), "");
+    assert.equal(await page.locator('[data-field-type="cpf"]').isChecked(), false);
+  });
+
   it("avisa quando nenhum campo foi escolhido", async () => {
     await page.goto(`${appUrl}/toolbox/test-data`, { waitUntil: "networkidle" });
     await page.locator("#data-generate").click();
@@ -377,6 +405,19 @@ describe("toolbox integration · navegador", () => {
     await page.locator("#jwt-clear").click();
     assert.equal(await page.locator("#jwt-input").inputValue(), "");
     assert.equal(await page.locator("#jwt-result-panel").isVisible(), false);
+  });
+
+  it("mostra na tela o desvio do RFC quando o emissor manda exp como texto", async () => {
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ sub: "1", exp: String(Math.floor(Date.now() / 1000) - 60) })).toString("base64url");
+
+    await page.goto(`${appUrl}/toolbox/jwt-inspector`, { waitUntil: "networkidle" });
+    await page.locator("#jwt-input").fill(`${header}.${payload}.assinatura`);
+    await page.locator("#jwt-decode").click();
+    await page.locator("#jwt-warnings").waitFor({ state: "visible" });
+
+    assert.equal(await page.locator("#jwt-status").textContent(), "EXPIRED");
+    assert.match((await page.locator("#jwt-warnings").textContent()) ?? "", /exp veio como texto/);
   });
 
   it("recusa um JWT malformado", async () => {
