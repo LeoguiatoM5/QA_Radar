@@ -5,13 +5,13 @@ services:
       dockerfile: Dockerfile.sandbox-runner
       args:
         DOCKER_GID: "${DOCKER_GID:?set DOCKER_GID to the host docker.sock group id}"
-    image: qa-radar-sandbox-runner:3.1.0
+    image: qa-radar-sandbox-runner:3.2.0
     env_file:
       - .env.runner
     environment:
       QA_RADAR_SANDBOX_HOST: 0.0.0.0
       QA_RADAR_SANDBOX_PORT: 4180
-      QA_RADAR_SANDBOX_JOB_IMAGE: qa-radar-sandbox-job:3.1.0
+      QA_RADAR_SANDBOX_JOB_IMAGE: qa-radar-sandbox-job:3.2.0
     # O grupo do socket é uma propriedade do host, não da imagem: um runner
     # construído numa máquina e executado noutra herdaria o GID errado e falharia
     # em todo /ready. Concedido em tempo de execução, acompanha o host.

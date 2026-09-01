@@ -52,7 +52,7 @@ smoke-reports:
     - npm ci
     - npm run build
     - node dist/index.js https://example.com --format all --fail-on none --output qa-radar-gitlab-smoke
-    - node -e "const r=require('./qa-radar-gitlab-smoke/report.json');if(r.schemaVersion!=='1.0'||r.version!=='3.1.0')process.exit(1)"
+    - node -e "const r=require('./qa-radar-gitlab-smoke/report.json');if(r.schemaVersion!=='1.0'||r.version!=='3.2.0')process.exit(1)"
   artifacts:
     when: always
     expire_in: 7 days

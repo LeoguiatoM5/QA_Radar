@@ -166,7 +166,7 @@ describe("artefatos no servidor", () => {
     const report: ScanReport = {
       tool: "QA Radar",
       schemaVersion: "1.0",
-      version: "3.1.0",
+      version: "3.2.0",
       startedAt: "2026-08-03T00:00:00.000Z",
       durationMs: 10,
       scanStatus: "completed",

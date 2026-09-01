@@ -1,6 +1,6 @@
 # QA Radar
 
-> **Beta · versão 3.1.0**
+> **Beta · versão 3.2.0**
 > O projeto está em desenvolvimento ativo. Funcionalidades, formatos de relatório e regras de classificação podem evoluir entre versões.
 
 O QA Radar é uma ferramenta de diagnóstico para aplicações web. A partir de uma URL, ele combina smoke testing, observação do navegador e inspeção segura do DOM para encontrar problemas antes que eles cheguem ao usuário.
@@ -567,7 +567,7 @@ ambiente autenticado.
 
 ## Política de compatibilidade
 
-O QA Radar ainda está em Beta (`3.1.0`), mas os três contratos abaixo já têm
+O QA Radar ainda está em Beta (`3.2.0`), mas os três contratos abaixo já têm
 regras de compatibilidade explícitas para reduzir o risco de quebrar scripts,
 pipelines de CI e integrações existentes.
 
@@ -841,7 +841,7 @@ o mesmo roteiro, manual, para quando algo falhar no meio.
 
    ```bash
    npm ci
-   npm run sandbox:image        # constrói qa-radar-sandbox-job:3.1.0
+   npm run sandbox:image        # constrói qa-radar-sandbox-job:3.2.0
    npm run sandbox:homologate   # valida isolamento, limites e egress
    ```
 
@@ -1153,8 +1153,8 @@ Para preparar uma versão, confirme que `package.json`, `package-lock.json`,
 as mudanças na branch `main`, crie e envie uma tag correspondente:
 
 ```bash
-git tag -a v3.1.0 -m "QA Radar 3.1.0"
-git push origin v3.1.0
+git tag -a v3.2.0 -m "QA Radar 3.2.0"
+git push origin v3.2.0
 ```
 
 O workflow de release rejeita tags que não correspondam ao `package.json`,

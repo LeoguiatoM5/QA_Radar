@@ -157,7 +157,7 @@ function runnerConfiguration(): {
       maxTimeoutMs,
     },
     docker: {
-      image: process.env.QA_RADAR_SANDBOX_JOB_IMAGE ?? "qa-radar-sandbox-job:3.1.0",
+      image: process.env.QA_RADAR_SANDBOX_JOB_IMAGE ?? "qa-radar-sandbox-job:3.2.0",
       cpuLimit: positiveNumber(process.env.QA_RADAR_SANDBOX_CPUS, 0.5, "QA_RADAR_SANDBOX_CPUS"),
       pidsLimit: positiveInteger(process.env.QA_RADAR_SANDBOX_PIDS, 256, "QA_RADAR_SANDBOX_PIDS"),
       maxMemoryMiB,

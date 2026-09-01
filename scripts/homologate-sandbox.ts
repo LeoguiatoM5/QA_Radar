@@ -5,7 +5,7 @@ import { createSandboxCodeRunner } from "../src/sandbox-client.js";
 import { createSandboxRunnerServer } from "../src/sandbox-runner.js";
 import { dockerSandboxArguments, runDockerSandbox, type DockerSandboxConfig, type SandboxExecutionRequest } from "../src/sandbox-runtime.js";
 
-const IMAGE = process.env.QA_RADAR_SANDBOX_JOB_IMAGE ?? "qa-radar-sandbox-job:3.1.0";
+const IMAGE = process.env.QA_RADAR_SANDBOX_JOB_IMAGE ?? "qa-radar-sandbox-job:3.2.0";
 const CONFIG: DockerSandboxConfig = {
   image: IMAGE,
   cpuLimit: 0.5,

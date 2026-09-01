@@ -4,6 +4,14 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+## [3.2.0] - 2026-09-01
+
+Esta versão acrescenta o **QA Toolbox** — uma área de ferramentas rápidas para
+o dia a dia de QA, com 13 ferramentas — e fecha o ciclo de contas, aplicações e
+persistência que vinha sendo construído desde a 3.1.0. Nada do que existia
+antes foi removido: a Inspeção, a Jornada, os Testes de API, o histórico e os
+relatórios seguem inalterados.
+
 ### Adicionado
 
 - **QA Toolbox** (`/toolbox`): nova área com ferramentas rápidas para o dia a

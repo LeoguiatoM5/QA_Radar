@@ -11,7 +11,7 @@
 set -euo pipefail
 
 DOMINIO="${1:-}"
-IMAGEM_JOB="qa-radar-sandbox-job:3.1.0"
+IMAGEM_JOB="qa-radar-sandbox-job:3.2.0"
 IMAGEM_BASE="mcr.microsoft.com/playwright:v1.61.1-noble"
 COMPOSE="docker-compose.sandbox.yml"
 
