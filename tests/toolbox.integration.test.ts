@@ -663,12 +663,16 @@ describe("toolbox integration · navegador", () => {
     });
     assert.equal(entrega.status(), 200);
 
-    await page.locator("#webhook-refresh").click();
-    await page.locator(".webhook-item").first().waitFor({ state: "visible" });
+    // Esperar pelo caminho, e não por `.webhook-item` genérico: depois da
+    // primeira chamada o seletor genérico já está satisfeito, e o `waitFor`
+    // voltaria antes de o refresh trazer a chamada nova.
+    const chamadaDe = (caminho: string) => page.locator(".webhook-item").filter({ hasText: caminho }).first();
 
-    const chamada = (await page.locator(".webhook-item").first().textContent()) ?? "";
+    await page.locator("#webhook-refresh").click();
+    await chamadaDe("/pedido").waitFor({ state: "visible" });
+
+    const chamada = (await chamadaDe("/pedido").textContent()) ?? "";
     assert.match(chamada, /POST/);
-    assert.match(chamada, /\/pedido/);
     assert.match(chamada, /"evento": "pedido\.pago"/);
     assert.match(chamada, /redigido pelo QA Radar/);
     assert.match(chamada, /x-signature/, "cabeçalho comum continua visível");
@@ -679,10 +683,12 @@ describe("toolbox integration · navegador", () => {
     const comEndereco = await page.request.post(`${binUrl}/proxy`, { headers: { "x-forwarded-for": "45.227.249.203, 172.68.11.132" }, data: {} });
     assert.equal(comEndereco.status(), 200);
     await page.locator("#webhook-refresh").click();
-    await page.locator(".webhook-item").first().waitFor({ state: "visible" });
-    const conteudo = await page.content();
-    assert.equal(conteudo.includes("45.227.249.203"), false, "o IP completo não pode aparecer na página");
-    assert.ok(conteudo.includes("45.227.x.x"), "o prefixo da rede é o que fica visível");
+    await chamadaDe("/proxy").waitFor({ state: "visible" });
+
+    const comProxy = (await chamadaDe("/proxy").textContent()) ?? "";
+    assert.match(comProxy, /x-forwarded-for/, "o cabeçalho de endereço precisa ter chegado para o teste significar algo");
+    assert.equal(comProxy.includes("45.227.249.203"), false, "o IP completo não pode aparecer");
+    assert.match(comProxy, /45\.227\.x\.x, 172\.68\.x\.x/, "cada endereço da cadeia é reduzido ao prefixo da rede");
 
     await page.locator("#webhook-clear").click();
     await page.locator("#webhook-empty").waitFor({ state: "visible" });
