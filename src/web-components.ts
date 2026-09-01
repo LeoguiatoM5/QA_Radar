@@ -1,4 +1,4 @@
-type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "docs" | "construcao";
+export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "docs" | "construcao";
 
 /** Ambientes oferecidos no seletor da barra de contexto. */
 export const ENVIRONMENTS = [
@@ -77,6 +77,7 @@ function renderAppNav(active: NavSection, area = ""): string {
         ${link("journeys", "Jornada", "/journeys", "journey")}
         ${link("api", "Testes de API", "/api-tests", "api")}
         ${link("aplicacoes", "Aplicações", "/aplicacoes", "environments")}
+        ${link("toolbox", "QA Toolbox", "/toolbox", "toolbox")}
         ${supportingLink("relatorios", "Relatórios", "reports")}
         ${supportingLink("central-de-qualidade", "Central de qualidade", "quality")}
       </div>
@@ -113,7 +114,7 @@ function renderVerifyBanner(): string {
   return `<div class="verify-banner" id="verify-banner" hidden><span>Confirme seu e-mail para poder recuperar a senha depois.</span><button type="button" id="verify-resend">Reenviar</button><span class="verify-state" id="verify-state" hidden></span></div>`;
 }
 
-function renderWorkspaceStart(active: NavSection, section: string, area = ""): string {
+export function renderWorkspaceStart(active: NavSection, section: string, area = ""): string {
   return `<main class="shell ${active === "home" ? "home-shell" : ""}">
   ${renderAppNav(active, area)}
   <div class="app-main">
@@ -126,14 +127,14 @@ function renderWorkspaceStart(active: NavSection, section: string, area = ""): s
     <div class="app-page app-page-${active}">`;
 }
 
-function renderWorkspaceEnd(): string {
+export function renderWorkspaceEnd(): string {
   return `<footer>&copy; 2026 QA Radar · Qualidade visível, decisões mais rápidas.</footer>
     </div>
   </div>
 </main>`;
 }
 
-function renderToolHeader(eyebrow: string, title: string, description: string): string {
+export function renderToolHeader(eyebrow: string, title: string, description: string): string {
   return `<header class="tool-header"><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></header>`;
 }
 

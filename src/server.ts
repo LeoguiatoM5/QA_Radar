@@ -27,6 +27,7 @@ import { tryHandleCodeExecution } from "./routes/code-execution.js";
 import { tryHandleLegacyJourneys } from "./routes/journeys-legacy.js";
 import { tryHandleScans } from "./routes/scans.js";
 import { tryHandleHttpRequest } from "./routes/http-request.js";
+import { tryHandleToolbox } from "./routes/toolbox.js";
 import { tryHandleDashboardActivity } from "./routes/dashboard-activity.js";
 import type { SpawnProcess } from "./code-execution.js";
 import { SERVER_OPTION_DEFAULTS } from "./env.js";
@@ -184,6 +185,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   tryHandleLegacyJourneys,
   tryHandleScans,
   tryHandleHttpRequest,
+  tryHandleToolbox,
 ];
 
 /** Prefixo canônico da API. Mudanças que quebram clientes exigem `/api/v2`. */

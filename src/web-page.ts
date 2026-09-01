@@ -1,5 +1,8 @@
 import { APPLICATIONS_CLIENT_SCRIPT, AUTH_CLIENT_SCRIPT, HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
 import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
+import { renderTool, renderToolboxHome } from "./web-toolbox.js";
+import { TOOLBOX_HOME_SCRIPT, TOOLBOX_SCRIPTS } from "./toolbox-client.js";
+import type { QaToolDefinition } from "./toolbox/catalog.js";
 import { WEB_STYLES } from "./web-styles.js";
 
 /**
@@ -93,7 +96,8 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background-ima
 .app-sidebar .nav-link.active:before{content:"";position:absolute;left:0;top:-1px;bottom:-1px;width:3px;background:#35dbf4;box-shadow:0 0 10px #35dbf477}
 .nav-icon{position:relative;display:grid;place-items:center;width:22px;height:22px;flex:0 0 22px;color:#c7d6e7}
 .nav-link.active .nav-icon{color:#35dbf4}.nav-link:hover .nav-icon{color:#e4f3ff}
-.icon-overview,.icon-inspection,.icon-journey,.icon-api,.icon-docs,.icon-reports,.icon-quality,.icon-alerts,.icon-environments,.icon-settings{position:relative}
+.icon-overview,.icon-inspection,.icon-journey,.icon-api,.icon-docs,.icon-reports,.icon-quality,.icon-alerts,.icon-environments,.icon-settings,.icon-toolbox{position:relative}
+.icon-toolbox:before{content:"";position:absolute;left:2px;top:7px;width:18px;height:12px;border:1.5px solid currentColor;border-radius:2px}.icon-toolbox:after{content:"";position:absolute;left:7px;top:3px;width:8px;height:5px;border:1.5px solid currentColor;border-bottom:0;border-radius:2px 2px 0 0}.icon-toolbox i{position:absolute;left:2px;top:12px;width:18px;height:1.5px;background:currentColor}
 .icon-overview:before{content:"";position:absolute;inset:3px;border:1.5px solid currentColor;border-radius:50%}.icon-overview i{width:6px;height:6px;border:1.5px solid currentColor;border-radius:50%}.icon-overview:after{content:"";position:absolute;left:50%;top:1px;width:1px;height:4px;background:currentColor}
 .icon-inspection:before{content:"";position:absolute;left:3px;top:2px;width:10px;height:10px;border:1.5px solid currentColor;border-radius:50%}.icon-inspection:after{content:"";position:absolute;left:13px;top:13px;width:7px;height:1.5px;background:currentColor;transform:rotate(45deg);transform-origin:left center}
 .icon-journey:before{content:"";position:absolute;left:4px;bottom:3px;width:13px;height:10px;border-left:1.5px dashed currentColor;border-bottom:1.5px dashed currentColor;border-radius:0 0 0 10px;transform:rotate(-12deg)}.icon-journey i{position:absolute;right:2px;top:1px;width:7px;height:7px;border:1.5px solid currentColor;border-radius:50%}.icon-journey i:after{content:"";position:absolute;left:2px;top:6px;width:1.5px;height:6px;background:currentColor}
@@ -113,7 +117,8 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background-ima
 .context-environment[data-environment="homologacao"] .live-dot{background:#f4ae38;box-shadow:0 0 12px #f4ae3888}
 .context-environment[data-environment="producao"] .live-dot{background:#35dbf4;box-shadow:0 0 12px #35dbf488}
 .context-item small{color:#6f879e;font-size:.61rem}.context-item strong{display:flex;align-items:center;gap:7px;margin-top:4px;color:#dce9f7;font-size:.76rem;font-weight:700}
-.context-section{display:flex;align-items:center;gap:18px;margin-left:auto;padding:0 20px;color:#7890a7;font-size:.68rem}.context-page{padding-right:18px;border-right:1px solid #183047;color:#617b92;font-weight:700}.context-clock{display:flex;align-items:center;gap:9px;color:#9db0c2;font-variant-numeric:tabular-nums}.context-clock i{position:relative;width:14px;height:14px;border:1px solid #7890a7;border-radius:2px}.context-clock i:before{content:"";position:absolute;left:2px;right:2px;top:3px;height:1px;background:#7890a7}.context-clock i:after{content:"";position:absolute;left:3px;top:-3px;width:6px;height:4px;border-left:1px solid #7890a7;border-right:1px solid #7890a7}.context-period{display:inline-flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid #1d3b50;border-radius:4px;background:#091a28;color:#b9cad9;white-space:nowrap}.context-period:after{content:"⌄";margin-top:-5px;color:#8ba0b3;font-size:.8rem}
+.context-section{display:flex;align-items:center;gap:18px;margin-left:auto;padding:0 20px;color:#7890a7;font-size:.68rem}/* #617b92 ficava em 4.28:1 sobre a barra e reprovava no axe-core em toda página. */
+.context-page{padding-right:18px;border-right:1px solid #183047;color:#6d88a0;font-weight:700}.context-clock{display:flex;align-items:center;gap:9px;color:#9db0c2;font-variant-numeric:tabular-nums}.context-clock i{position:relative;width:14px;height:14px;border:1px solid #7890a7;border-radius:2px}.context-clock i:before{content:"";position:absolute;left:2px;right:2px;top:3px;height:1px;background:#7890a7}.context-clock i:after{content:"";position:absolute;left:3px;top:-3px;width:6px;height:4px;border-left:1px solid #7890a7;border-right:1px solid #7890a7}.context-period{display:inline-flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid #1d3b50;border-radius:4px;background:#091a28;color:#b9cad9;white-space:nowrap}.context-period:after{content:"⌄";margin-top:-5px;color:#8ba0b3;font-size:.8rem}
 .app-page{--page-max:1120px;padding:24px 24px 42px}.app-page-scanner,.app-page-journeys{--page-max:860px}
 .home-shell .app-page{padding-top:16px;padding-right:0;padding-bottom:0}
 .app-page>.tool-header{max-width:var(--page-max);margin:0 auto 20px;text-align:left}.app-page .results{max-width:var(--page-max);margin-left:auto;margin-right:auto}
@@ -121,7 +126,8 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background-ima
 .app-page .panel{border-color:#1a344a;border-radius:6px;background:#091724;box-shadow:none;backdrop-filter:none}
 .app-page input,.app-page select,.app-page textarea{border-radius:4px;background:#07131f}
 .app-page button{border-radius:4px}
-.app-page footer{max-width:var(--page-max);margin:28px auto 0;padding-top:18px;border-top:1px solid #163047;color:#60768b;font-size:.65rem}
+.app-page /* #60768b ficava em 4.03:1 a 10.4px e reprovava no axe-core em toda página. */
+footer{max-width:var(--page-max);margin:28px auto 0;padding-top:18px;border-top:1px solid #163047;color:#7b8ea6;font-size:.65rem}
 .home-shell footer{display:none}
 .overview-header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;max-width:none;margin:0 0 12px;padding-right:24px}
 .overview-header h1{margin:0;font-size:2.2rem}.overview-header p{margin:5px 0 0;color:#7890a7;font-size:.82rem}
@@ -379,6 +385,133 @@ openFaqFromHash();
 window.addEventListener('hashchange',openFaqFromHash);
 `;
 
+/**
+ * Estilo do QA Toolbox.
+ *
+ * Reaproveita as variáveis, o painel e os botões do produto: o Toolbox é uma
+ * área nova, não um produto novo, e uma paleta própria só faria a pessoa sentir
+ * que saiu do QA Radar. O que existe aqui são as formas que as outras páginas
+ * ainda não tinham — catálogo em cards, tabela de casos e bloco de código.
+ */
+const TOOLBOX_STYLES = `
+.toolbox-layout{max-width:var(--page-max);margin:0 auto}
+.toolbox-search{margin-bottom:28px}
+.toolbox-search label{margin-top:0}
+.toolbox-search input{max-width:520px}
+.toolbox-search .hint{margin-top:8px}
+.tool-category+.tool-category{margin-top:34px}
+.tool-category[hidden]{display:none}
+.tool-category-head h2{margin:0;font-size:.72rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#88a0b6}
+.tool-category-head p{margin:5px 0 14px;color:var(--muted);font-size:.82rem}
+.tool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px}
+.tool-card{display:flex;flex-direction:column;gap:12px;padding:16px 17px;border:1px solid var(--line);border-radius:12px;background:#0a1826;color:var(--text);text-decoration:none;transition:border-color .18s,transform .18s,background .18s}
+.tool-card[hidden]{display:none}
+.tool-card:hover{border-color:#2a6d86;background:#0c1e2f;transform:translateY(-2px)}
+.tool-card:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.tool-card[data-tool-soon]{opacity:.55;cursor:default}
+.tool-card[data-tool-soon]:hover{transform:none;border-color:var(--line);background:#0a1826}
+.tool-card-icon{display:grid;place-items:center;width:34px;height:34px;border:1px solid #1d3f56;border-radius:9px;background:#0d2436;color:var(--cyan)}
+.tool-card-icon .tool-icon{position:relative;display:block;width:22px;height:22px}
+.tool-card-body strong{display:flex;align-items:center;gap:8px;font-size:.95rem;color:#e9f3ff}
+.tool-card-body small{display:block;margin-top:5px;color:var(--muted);font-size:.79rem;line-height:1.5}
+.tool-card-status{padding:2px 7px;border-radius:999px;font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.tool-card-status-beta{border:1px solid #6b5619;background:#201a06;color:#f0dca4}
+.tool-card-status-new{border:1px solid #1f5d4f;background:#0c2620;color:#a9e8d5}
+.tool-card-status-soon{border:1px solid var(--line);background:#0d1b28;color:var(--muted)}
+.tool-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;padding-top:11px;border-top:1px solid #16293c}
+.tool-card-action{color:var(--cyan);font-size:.76rem;font-weight:800}
+.tool-card[data-tool-soon] .tool-card-action{color:var(--muted)}
+.tool-privacy{padding:3px 9px;border-radius:999px;font-size:.63rem;font-weight:700;letter-spacing:.03em}
+.tool-privacy-local:before{content:"\\1F512";margin-right:5px}
+.tool-privacy-local{border:1px solid #1f5d4f;background:#0c2620;color:#a9e8d5}
+.tool-privacy-server{border:1px solid #2a4d66;background:#0f2537;color:#9dc6dd}
+.toolbox-empty{margin:26px 0 0;padding:18px;border:1px dashed var(--line);border-radius:11px;color:var(--muted);font-size:.85rem;text-align:center}
+.toolbox-empty code{padding:2px 6px;border-radius:4px;background:#07101d;color:var(--cyan)}
+/* justify-content explícito: o seletor \`nav\` do tema espalha os filhos com space-between. */
+.tool-breadcrumb{display:flex;align-items:center;justify-content:flex-start;gap:8px;max-width:var(--page-max);margin:0 auto 14px;color:var(--muted);font-size:.76rem}
+.tool-breadcrumb a{color:var(--cyan);text-decoration:none}
+.tool-breadcrumb a:hover{text-decoration:underline}
+.tool-header-badges{display:flex;gap:8px;margin-top:12px}
+.tool-panel{max-width:var(--page-max);margin:0 auto 18px}
+.tool-panel textarea{display:block;width:100%;min-height:150px;padding:13px;border:1px solid #344964;border-radius:10px;background:#07101d;color:#d8e8f8;font:12.5px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;outline:0;resize:vertical;tab-size:2}
+.tool-panel textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px #67e8f915}
+.tool-io{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tool-field label{margin-top:0}
+.tool-grid-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:16px}
+.tool-grid-fields .tool-field[hidden]{display:none}
+.tool-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}
+.tool-actions button{width:auto;margin:0;padding:11px 18px;font-size:.83rem}
+.tool-actions-inline{align-items:center;gap:12px}
+.tool-actions-inline .hint{margin:0}
+.tool-note{margin:16px 0 0;padding-top:13px;border-top:1px solid var(--line);color:var(--muted);font-size:.76rem;line-height:1.6}
+.tool-note-server{margin:0 0 18px;padding:12px 14px;border:1px solid #2a4d66;border-top:1px solid #2a4d66;border-radius:9px;background:#0c1d2c;color:#a8c4d8}
+.tool-warning{margin:0 0 18px;padding:12px 14px;border:1px solid #6b5619;border-radius:9px;background:#201a06;color:#f0dca4;font-size:.79rem;line-height:1.55}
+.tool-result-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.tool-result-head h2{margin:0;font-size:1.1rem}
+.tool-result-actions{display:flex;gap:8px;flex-wrap:wrap}
+.tool-result-actions button{width:auto;margin:0;padding:8px 13px;font-size:.75rem}
+.tool-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.tool-summary-text{color:var(--muted);font-size:.79rem}
+.tool-status{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;font-size:.68rem;font-weight:800;letter-spacing:.05em}
+.tool-status-ok{border:1px solid #1f5d4f;background:#0c2620;color:#a9e8d5}
+.tool-status-warning{border:1px solid #6b5619;background:#201a06;color:#f0dca4}
+.tool-status-fail{border:1px solid #6d2634;background:#2a1119;color:#ffc7d1}
+.tool-status-row{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px}
+.tool-subtitle{margin:20px 0 8px;font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#88a0b6}
+.tool-code{margin:0;padding:15px;border:1px solid var(--line);border-radius:10px;background:#07101d;color:#a8d8ea;font:12.5px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-x:auto;white-space:pre;max-height:460px}
+.tool-code:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.tool-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;padding:5px;border-radius:10px;background:#07101d}
+.tool-tab{width:auto;margin:0;padding:8px 13px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:.77rem;font-weight:700;box-shadow:none}
+.tool-tab:hover{transform:none;color:var(--text)}
+.tool-tab.active{background:var(--panel2);color:var(--cyan)}
+.tool-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 18px}
+.tool-facts div{padding:11px 13px;border:1px solid var(--line);border-radius:9px;background:#07101d}
+.tool-facts dt{color:var(--muted);font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.tool-facts dd{margin:5px 0 0;color:#dbe8f6;font-size:.82rem;word-break:break-word}
+.tool-secret{color:#f0dca4;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.tool-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.tool-table th,.tool-table td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.tool-table thead th{color:var(--muted);font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.tool-table tbody th{color:var(--cyan);font-weight:800;white-space:nowrap}
+.tool-table code{color:#a8d8ea;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.tool-table-fields input,.tool-table-fields select{padding:8px 10px;font-size:.8rem}
+.tool-hint-cell{color:var(--muted);font-size:.75rem}
+.tool-check{display:flex;align-items:center;gap:9px;margin:0;font-weight:650;color:#dbe8f6;cursor:pointer}
+.tool-check input{width:16px;height:16px;flex:0 0 16px;padding:0;accent-color:#22d3ee}
+.tool-diff-list{display:grid;gap:9px}
+.diff-entry{display:grid;grid-template-columns:118px minmax(0,1fr);gap:12px;padding:13px 14px;border:1px solid var(--line);border-left-width:3px;border-radius:9px;background:#07101d}
+.diff-added{border-left-color:#2fd3b0}
+.diff-removed{border-left-color:#f0708a}
+.diff-changed{border-left-color:#f4ae38}
+.diff-type_changed{border-left-color:#a78bfa}
+.diff-kind{align-self:start;padding:4px 8px;border-radius:5px;background:#0f2537;color:#9dc6dd;font-size:.6rem;font-weight:800;letter-spacing:.05em;text-align:center}
+.diff-path{display:block;color:var(--cyan);font:12.5px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all}
+.diff-values{display:grid;gap:3px;margin-top:8px;font:12.5px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all}
+.diff-before{color:#f0a4b1}
+.diff-after{color:#a9e8d5}
+.diff-arrow{color:var(--muted)}
+.diff-types{display:block;margin-top:7px;color:var(--muted);font-size:.7rem}
+.boundary-valid th{color:#a9e8d5}
+.boundary-invalid th{color:#f0a4b1}
+.health-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) 130px 40px;gap:10px;align-items:end;margin-bottom:11px}
+.health-row .health-remove{width:40px;margin:0;padding:11px 0;font-size:1rem;line-height:1}
+.health-reason{display:block;margin-top:5px;color:var(--muted);font-size:.7rem}
+@media(max-width:900px){
+  .tool-io{grid-template-columns:1fr}
+  .health-row{grid-template-columns:minmax(0,1fr) 110px;grid-template-areas:"name name" "url url" "method remove"}
+  .health-row .tool-field:nth-child(1){grid-area:name}
+  .health-row .tool-field:nth-child(2){grid-area:url}
+  .health-row .tool-field:nth-child(3){grid-area:method}
+  .health-row .health-remove{grid-area:remove;width:100%}
+}
+@media(max-width:640px){
+  .tool-grid{grid-template-columns:1fr}
+  .diff-entry{grid-template-columns:1fr}
+  .diff-kind{width:max-content}
+  .tool-actions button,.tool-result-actions button{width:100%}
+  .tool-table{display:block;overflow-x:auto}
+}`;
+
 function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
@@ -463,4 +596,30 @@ export function createApiTestsPage(): string {
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - Testes de API"><title>QA Radar · Testes de API</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${API_TESTS_STYLES}</style></head>
 <body>${renderApiPage()}<script>${SHELL_CLIENT_SCRIPT}</script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
+}
+
+export function createToolboxHomePage(): string {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Toolbox - ferramentas rápidas para QA, automação, APIs e design de testes"><title>QA Radar · QA Toolbox</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${TOOLBOX_STYLES}</style></head>
+<body>${renderToolboxHome()}<script>${SHELL_CLIENT_SCRIPT}</script><script type="module">${TOOLBOX_HOME_SCRIPT}</script></body>
+</html>`;
+}
+
+/**
+ * Página de uma ferramenta.
+ *
+ * Devolve `undefined` quando a ferramenta ainda não tem painel — é o caso das
+ * anunciadas como "em breve", e a rota traduz isso em 404 em vez de servir uma
+ * casca vazia.
+ */
+export function createToolPage(tool: QaToolDefinition): string | undefined {
+  const body = renderTool(tool);
+  const script = TOOLBOX_SCRIPTS[tool.id];
+  if (body === undefined || script === undefined) return undefined;
+  return `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="${escapeAttribute(`QA Toolbox - ${tool.description}`)}"><title>QA Radar · ${escapeAttribute(tool.name)}</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${TOOLBOX_STYLES}</style></head>
+<body>${body}<script>${SHELL_CLIENT_SCRIPT}</script><script type="module">${script}</script></body>
+</html>`;
 }

@@ -6,6 +6,26 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **QA Toolbox** (`/toolbox`): nova área com ferramentas rápidas para o dia a
+  dia de QA — JSON Diff, JWT Inspector, API Health, Test Data Generator, cURL
+  Converter e Boundary Value Generator — com busca por nome, descrição, tag e
+  categoria. Cinco das seis rodam inteiramente no navegador e exibem o selo
+  **Roda local**; nenhum JWT, header de autorização ou chave de API é
+  persistido, registrado em log ou enviado ao servidor. O catálogo em
+  `src/toolbox/catalog.ts` alimenta home, busca, categorias e rotas, de modo que
+  uma ferramenta nova aparece sozinha nos quatro lugares — ver
+  [`docs/qa-toolbox.md`](docs/qa-toolbox.md).
+- **`POST /api/v1/toolbox/health-checks`**: verifica até 10 endpoints e devolve
+  status, tempo, content-type e a classificação `HEALTHY`/`DEGRADED`/`FAILED` de
+  cada um, mais o resumo do ambiente. Aceita apenas `GET` e `HEAD`, não repassa
+  cabeçalho nenhum do cliente e usa a mesma proteção contra redes privadas
+  (SSRF) da Inspeção. É a única ferramenta do Toolbox que sai para a rede, porque
+  o CORS impede o navegador de medir endpoint de terceiro.
+- **`GET /assets/toolbox/<módulo>.js`**: serve como módulo ES a mesma regra de
+  negócio que os testes exercitam, a partir de uma lista explícita de módulos
+  permitidos. Em produção entrega o compilado de `dist/`; em desenvolvimento
+  remove os tipos na hora. Não há segunda cópia da regra escrita para o
+  navegador.
 - **Cadastro com e-mail e senha.** A conta deixou de ser "uma conta do GitHub":
   nasce de um cadastro em `/entrar`, com confirmação de e-mail e recuperação de
   senha. O GitHub passou a ser um dos caminhos de entrada, e quem entra por ele
@@ -144,6 +164,9 @@ do endpoint de saúde.
 
 ### Corrigido
 
+- Contraste do nome da página na barra de contexto (4.28:1) e do rodapé
+  (4.03:1) — os dois reprovavam no axe-core em **todas** as páginas do
+  dashboard. Agora passam no critério AA da WCAG.
 - O valor inicial de páginas do sitemap agora respeita o limite configurado no
   servidor, evitando que a validação nativa bloqueie o Scanner no Render.
 - A geração do relatório de Jornada renova o cookie protegido antes de abrir o

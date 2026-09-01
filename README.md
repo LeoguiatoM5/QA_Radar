@@ -91,6 +91,16 @@ performance.
 - Cancelamento de análises em fila, durante sitemap ou com o navegador aberto.
 - Diretório isolado para os artefatos de cada análise.
 
+### QA Toolbox
+
+- Ferramentas rápidas de QA no navegador, sem configuração e sem login.
+- JSON Diff com campos dinâmicos ignoráveis por nome, caminho ou `[*]`.
+- JWT Inspector que decodifica sem jamais dizer que a assinatura foi verificada.
+- Gerador de massa sintética válida e propositalmente inválida (JSON, CSV, SQL).
+- cURL convertido em Playwright, Cypress, Fetch, Axios, Python ou Rest Assured.
+- Verificação de saúde de vários endpoints com relatório do ambiente colável.
+- Análise de valor limite para inteiro, decimal, tamanho de texto e data.
+
 ## Requisitos
 
 - Node.js 20 ou superior.
@@ -335,6 +345,45 @@ código nem esperar um job rodar.
 
 Isso não tem relação com o Modo Jornada de Playwright — as duas ferramentas
 são independentes e não compartilham estado.
+
+## QA Toolbox
+
+**Daily tools for Software Quality.**
+
+```powershell
+npm run web   # abre em http://localhost:4173/toolbox
+```
+
+A rota `/toolbox` reúne ferramentas rápidas para o dia a dia de QA — as coisas
+que hoje se resolvem com seis abas abertas em sites de terceiros. Não substitui
+nada: a Inspeção, a Jornada, os Testes de API e o histórico continuam onde
+estavam. O Toolbox é o complemento que resolve o pequeno em segundos, sem
+projeto, sem configuração e sem esperar um job rodar.
+
+| Ferramenta                   | Categoria   | Onde roda | O que faz                                                             |
+| ---------------------------- | ----------- | --------- | --------------------------------------------------------------------- |
+| **JSON Diff**                | API & JSON  | Navegador | Compara dois JSON ignorando campos dinâmicos                          |
+| **JWT Inspector**            | API & JSON  | Navegador | Decodifica header/payload e interpreta `iat`, `exp` e `nbf`           |
+| **API Health**               | API & JSON  | Servidor  | Mede status e tempo de vários endpoints e resume o ambiente           |
+| **Test Data Generator**      | Test Data   | Navegador | Gera massa sintética válida ou propositalmente inválida               |
+| **cURL Converter**           | Automation  | Navegador | Converte um cURL em Playwright, Cypress, Fetch, Axios, Python ou Java |
+| **Boundary Value Generator** | Test Design | Navegador | Deriva os casos de fronteira de um campo                              |
+
+- **Privacidade primeiro.** Toda ferramenta que consegue rodar no navegador
+  roda no navegador. O selo 🔒 **Roda local** só aparece quando nada digitado
+  sai da sua máquina, e o catálogo é testado para que essa promessa não minta.
+- **Nada de segredo guardado.** JWT, `Authorization` e chave de API não são
+  persistidos, não vão para log e não vão para telemetria. No cURL Converter
+  eles aparecem mascarados na tela e viram variável de ambiente no código
+  gerado.
+- **API Health é a única que usa o servidor**, porque o navegador não consegue
+  medir um endpoint de terceiro (CORS). A chamada sai do QA Radar apenas com
+  `GET` ou `HEAD`, sem cabeçalhos vindos do cliente, em até 10 endpoints por
+  vez, e com a mesma proteção contra redes privadas (SSRF) usada na Inspeção.
+- **Busca** por nome, descrição, tag e categoria; `/` leva direto ao campo.
+
+Documentação completa, arquitetura e o passo a passo para adicionar uma
+ferramenta: [`docs/qa-toolbox.md`](docs/qa-toolbox.md).
 
 ## Como interpretar os resultados
 
