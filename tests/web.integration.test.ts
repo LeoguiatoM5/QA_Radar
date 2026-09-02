@@ -250,6 +250,7 @@ describe("web scan integration", () => {
         mimeType: "text/typescript",
         buffer: Buffer.from(source),
       });
+      await page.waitForFunction((expected) => (document.querySelector<HTMLTextAreaElement>("#playwright-code")?.value ?? "") === expected, source, { timeout: 10_000 });
       assert.equal(await page.locator("#playwright-code").inputValue(), source);
 
       const downloadPromise = page.waitForEvent("download");
