@@ -21,6 +21,8 @@ export interface ScanJobPersistence {
   removed(id: string): Promise<void>;
   /** Apaga o histórico inteiro de uma conta e devolve os ids removidos. */
   removeForOwner(ownerId: string): Promise<string[]>;
+  /** Histórico de uma aplicação da conta, do mais recente para o mais antigo. */
+  listForApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedScanJob[]>;
   /** Busca um job que não está mais em memória. */
   load(id: string): Promise<PersistedScanJob | undefined>;
   /**
@@ -49,6 +51,7 @@ export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
   updated: async () => {},
   removed: async () => {},
   removeForOwner: async () => [],
+  listForApplication: async () => [],
   load: async () => undefined,
   recoverOrphans: async () => [],
   pending: async () => [],
@@ -134,6 +137,14 @@ export function createScanJobPersistence({ repository, retentionMs, onError }: S
         return await repository.queuedJobs();
       } catch (error) {
         onError("pending", error);
+        return [];
+      }
+    },
+    async listForApplication(ownerId, applicationId, limit) {
+      try {
+        return await repository.listByApplication(ownerId, applicationId, limit);
+      } catch (error) {
+        onError("list", error);
         return [];
       }
     },

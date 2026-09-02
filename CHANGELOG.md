@@ -6,6 +6,13 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **Histórico por aplicação em `/aplicacoes`.** A Inspeção gravava
+  `scan_jobs.application_id` desde que Aplicações existe, mas **nenhuma consulta
+  lia essa coluna**: o vínculo ia para o banco e não aparecia em lugar nenhum do
+  produto. Cada aplicação ganhou um botão **Histórico** que abre as análises
+  guardadas nela. Novo `GET /api/v1/applications/:id/scans`, com o dono dentro
+  da própria consulta — id de aplicação de outra conta responde 404, não 403.
+
 - **O JavaScript do cliente saiu das strings — primeira etapa.** A interface
   inteira vivia dentro de `String.raw`, então o `tsc` e o `eslint` tratavam o
   código do navegador como texto e não olhavam para ele; foi de lá que saíram os

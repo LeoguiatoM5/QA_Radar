@@ -79,10 +79,12 @@ function renderApplications(applications: Application[]): void {
         tags +
         "</div>" +
         '<div class="application-actions">' +
+        '<button type="button" data-action="history" aria-expanded="false">Histórico</button>' +
         '<button type="button" data-action="scan">Inspecionar</button>' +
         '<button type="button" data-action="edit">Editar</button>' +
         '<button type="button" data-action="archive">Arquivar</button>' +
         "</div>" +
+        '<div class="application-history" hidden></div>' +
         "</article>"
       );
     })
@@ -100,6 +102,51 @@ function disableApplicationForm(reason: string): void {
   if (notice) {
     notice.textContent = reason;
     notice.hidden = false;
+  }
+}
+
+interface PersistedScan {
+  id: string;
+  status?: string;
+  createdAt?: string;
+  report?: { url?: string; targetUrl?: string; title?: string; passed?: boolean; durationMs?: number; summary?: { errors?: number; warnings?: number } };
+}
+
+function scanLine(scan: PersistedScan): string {
+  const report = scan.report;
+  const done = scan.status === "completed";
+  const passed = done && report?.passed !== false;
+  const summary = report?.summary;
+  const quando = scan.createdAt ? new Date(scan.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+  const resultado = done ? `${summary?.errors ?? 0} erro(s) · ${summary?.warnings ?? 0} aviso(s)` : (scan.status ?? "—");
+  return `<div class="application-run"><i class="${passed ? "pass" : ""}"></i><span>${appEsc(quando)} · ${appEsc(resultado)}</span><b>${done && report?.durationMs ? `${(report.durationMs / 1000).toFixed(1)}s` : ""}</b></div>`;
+}
+
+/**
+ * O histórico da aplicação, aberto sob demanda.
+ *
+ * A Inspeção grava o vínculo desde que Aplicações existe, mas nada lia a
+ * coluna. Nasce fechado porque a lista precisa continuar escaneável: quem abre
+ * a página quer ver quais aplicações tem, não a última execução de cada uma.
+ */
+async function toggleHistory(button: HTMLButtonElement, application: Application): Promise<void> {
+  const box = button.closest<HTMLElement>(".application-item")?.querySelector<HTMLElement>(".application-history");
+  if (!box) return;
+  const abrindo = box.hidden;
+  box.hidden = !abrindo;
+  button.setAttribute("aria-expanded", String(abrindo));
+  if (!abrindo) return;
+  box.innerHTML = "<p>Carregando execuções…</p>";
+  try {
+    const response = await fetch(`/api/v1/applications/${encodeURIComponent(application.id)}/scans`);
+    if (!response.ok) {
+      box.innerHTML = "<p>Não foi possível carregar o histórico desta aplicação.</p>";
+      return;
+    }
+    const scans = ((await response.json()) as { scans?: PersistedScan[] }).scans ?? [];
+    box.innerHTML = scans.length ? scans.map(scanLine).join("") : "<p>Nenhuma análise guardada nesta aplicação ainda. Use <strong>Inspecionar</strong> para começar.</p>";
+  } catch {
+    box.innerHTML = "<p>Não foi possível carregar o histórico desta aplicação.</p>";
   }
 }
 
@@ -136,6 +183,10 @@ applicationList?.addEventListener("click", (event) => {
   if (!application) return;
   if (button.dataset.action === "edit") {
     editApplication(application);
+    return;
+  }
+  if (button.dataset.action === "history") {
+    void toggleHistory(button, application);
     return;
   }
   if (button.dataset.action === "scan") {

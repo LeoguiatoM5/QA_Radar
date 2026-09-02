@@ -92,7 +92,7 @@ function publicJob(job: ScanJob, queuePosition?: number): Record<string, unknown
 }
 
 /** Mesma forma de `publicJob`, a partir do registro gravado no banco. */
-function publicPersistedJob(job: PersistedScanJob): Record<string, unknown> {
+export function publicPersistedJob(job: PersistedScanJob): Record<string, unknown> {
   return {
     id: job.id,
     status: job.status,

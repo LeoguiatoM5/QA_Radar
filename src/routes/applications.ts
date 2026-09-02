@@ -5,6 +5,7 @@ import { ApplicationNameTakenError, type Application, type ApplicationRepository
 import type { RequestContext, RouteHandler } from "./context.js";
 import type { IncomingMessage } from "node:http";
 import type { User } from "../identity.js";
+import { publicPersistedJob } from "./scans.js";
 
 /** Teto do corpo: nome, URL e alguns rótulos não passam disso. */
 const MAX_APPLICATION_BODY_BYTES = 8 * 1024;
@@ -12,6 +13,9 @@ const MAX_APPLICATION_BODY_BYTES = 8 * 1024;
 const MAX_NAME_LENGTH = 60;
 const MAX_ENVIRONMENTS = 10;
 const MAX_ENVIRONMENT_LENGTH = 40;
+
+/** Teto do histórico devolvido de uma vez, igual ao da conta. */
+const MAX_APPLICATION_HISTORY = 50;
 
 function publicApplication(application: Application): Record<string, unknown> {
   return {
@@ -85,6 +89,30 @@ export const tryHandleApplications: RouteHandler = async (context, request, resp
   if (!url.pathname.startsWith("/api/applications")) return false;
 
   const rest = url.pathname.slice("/api/applications".length);
+
+  /**
+   * Histórico da aplicação.
+   *
+   * A Inspeção grava `application_id` desde que Aplicações existe, mas nada
+   * lia essa coluna: o vínculo era gravado e nunca mostrado. É aqui que ele
+   * vira algo que a pessoa vê.
+   */
+  const historyMatch = /^\/([^/]+)\/scans$/.exec(rest);
+  if (historyMatch?.[1]) {
+    if (request.method !== "GET") {
+      jsonError(response, "method_not_allowed", "Método não suportado para o histórico da aplicação.");
+      return true;
+    }
+    const repository = requireRepository(context);
+    const user = await requireAccount(context, request);
+    // 404 e não 403 pelo mesmo motivo do GET de uma aplicação: responder
+    // "proibido" confirmaria que aquele id existe na conta de outra pessoa.
+    if (!(await repository.get(user.id, historyMatch[1]))) throw new ApiError("not_found", "Aplicação não encontrada.");
+    const scans = await context.scanJobs.listForApplication(user.id, historyMatch[1], MAX_APPLICATION_HISTORY);
+    json(response, 200, { scans: scans.map((scan) => publicPersistedJob(scan)) });
+    return true;
+  }
+
   const id = rest.startsWith("/") ? rest.slice(1) : "";
   if (id.includes("/")) return false;
 

@@ -14,6 +14,11 @@ import { PostgresIdempotencyKeys, idempotencyScope } from "../src/idempotency-st
 const OWNER_A = "11111111-1111-4111-8111-111111111111";
 const OWNER_B = "22222222-2222-4222-8222-222222222222";
 
+/** Aplicações fixas, uma por dono. No Postgres `application_id` tem chave
+ * estrangeira para `applications`, então elas também precisam existir. */
+const APPLICATION_A = "33333333-3333-4333-8333-333333333333";
+const APPLICATION_B = "44444444-4444-4444-8444-444444444444";
+
 function options(overrides: Partial<ScanOptions> = {}): ScanOptions {
   return {
     url: "https://example.com",
@@ -202,6 +207,25 @@ function contractFor(name: string, create: () => Promise<ScanJobRepository>, hoo
       assert.deepEqual(await repository.listByOwner(OWNER_B, 50), []);
     });
 
+    it("lista o histórico de uma aplicação, e só dela", async () => {
+      // O dono entra na própria consulta: com a checagem só no chamador, um id
+      // de aplicação vazado devolveria o histórico de outra conta.
+      const repository = await create();
+      const daLoja = job({ ownerId: OWNER_A, applicationId: APPLICATION_A, createdAt: "2026-08-01T10:00:00.000Z" });
+      const outraDaLoja = job({ ownerId: OWNER_A, applicationId: APPLICATION_A, createdAt: "2026-08-02T10:00:00.000Z" });
+      const semAplicacao = job({ ownerId: OWNER_A });
+      const deOutraConta = job({ ownerId: OWNER_B, applicationId: APPLICATION_B });
+      for (const entry of [daLoja, outraDaLoja, semAplicacao, deOutraConta]) await repository.insert(entry);
+
+      assert.deepEqual(
+        (await repository.listByApplication(OWNER_A, APPLICATION_A, 50)).map((entry) => entry.id),
+        [outraDaLoja.id, daLoja.id],
+        "só as da aplicação, mais recente primeiro",
+      );
+      assert.deepEqual(await repository.listByApplication(OWNER_B, APPLICATION_A, 50), [], "o dono errado não alcança a aplicação alheia");
+      assert.equal((await repository.listByApplication(OWNER_A, APPLICATION_A, 1)).length, 1, "o teto vale");
+    });
+
     it("apaga o histórico de uma conta sem tocar no das outras", async () => {
       // "Limpar histórico" na Visão geral chega aqui. Alcançar a análise de
       // outra conta seria a pior falha possível desta operação.
@@ -276,6 +300,12 @@ if (TEST_DATABASE_URL) {
         // `user_identities`, então não há mais par (provedor, conta) para
         // reconciliar aqui — o dono destes testes é o próprio id fixo.
         await database.query("insert into users (id, login) values ($1,$2) on conflict (id) do nothing", [id, login]);
+      }
+      for (const [id, owner, name] of [
+        [APPLICATION_A, OWNER_A, "Loja da conta A"],
+        [APPLICATION_B, OWNER_B, "Loja da conta B"],
+      ]) {
+        await database.query("insert into applications (id, owner_id, name, base_url) values ($1,$2,$3,'https://exemplo.com') on conflict (id) do nothing", [id, owner, name]);
       }
       return new PostgresScanJobRepository(database);
     },

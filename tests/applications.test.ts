@@ -406,3 +406,65 @@ describe("histórico da conta", () => {
     }
   });
 });
+
+describe("histórico da aplicação", () => {
+  function withPersistence() {
+    return {
+      ...withAccounts(),
+      scanJobs: createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 3_600_000, onError: () => {} }),
+    };
+  }
+
+  async function scanFor(baseUrl: string, cookie: string, applicationId?: string) {
+    const response = await fetch(`${baseUrl}/api/v1/scans`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ url: baseUrl, ...(applicationId ? { applicationId } : {}) }),
+    });
+    assert.equal(response.status, 202);
+  }
+
+  async function historyOf(baseUrl: string, cookie: string, applicationId: string) {
+    const response = await fetch(`${baseUrl}/api/v1/applications/${applicationId}/scans`, { headers: { cookie } });
+    return { status: response.status, body: (await response.json()) as { scans?: unknown[] } };
+  }
+
+  // A coluna `application_id` era gravada desde que Aplicações existe e nunca
+  // lida por consulta nenhuma: o vínculo ia para o banco e não aparecia em
+  // lugar algum do produto.
+  it("lista só as análises daquela aplicação", async () => {
+    const { baseUrl, close } = await startServer(withPersistence());
+    try {
+      const cookie = await signUp(baseUrl, "dono@exemplo.com");
+      const loja = (await (await createApplication(baseUrl, cookie, { name: "Loja", baseUrl: "https://loja.exemplo.com" })).json()) as { application: { id: string } };
+      const checkout = (await (await createApplication(baseUrl, cookie, { name: "Checkout", baseUrl: "https://checkout.exemplo.com" })).json()) as { application: { id: string } };
+
+      await scanFor(baseUrl, cookie, loja.application.id);
+      await scanFor(baseUrl, cookie, loja.application.id);
+      await scanFor(baseUrl, cookie, checkout.application.id);
+      // Sem aplicação: entra no histórico da conta, não no de nenhuma delas.
+      await scanFor(baseUrl, cookie);
+
+      assert.equal((await historyOf(baseUrl, cookie, loja.application.id)).body.scans?.length, 2);
+      assert.equal((await historyOf(baseUrl, cookie, checkout.application.id)).body.scans?.length, 1);
+    } finally {
+      await close();
+    }
+  });
+
+  it("não entrega o histórico da aplicação de outra conta", async () => {
+    const { baseUrl, close } = await startServer(withPersistence());
+    try {
+      const cookieA = await signUp(baseUrl, "a@exemplo.com");
+      const cookieB = await signUp(baseUrl, "b@exemplo.com");
+      const daA = (await (await createApplication(baseUrl, cookieA, { name: "Da A", baseUrl: "https://a.exemplo.com" })).json()) as { application: { id: string } };
+      await scanFor(baseUrl, cookieA, daA.application.id);
+
+      // 404 e não 403: "proibido" confirmaria que o id existe em outra conta.
+      assert.equal((await historyOf(baseUrl, cookieB, daA.application.id)).status, 404);
+      assert.equal((await fetch(`${baseUrl}/api/v1/applications/${daA.application.id}/scans`)).status, 401);
+    } finally {
+      await close();
+    }
+  });
+});

@@ -45,6 +45,14 @@ export interface ScanJobRepository {
   queuedJobs(): Promise<PersistedScanJob[]>;
   /** Histórico de uma conta, do mais recente para o mais antigo. */
   listByOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]>;
+  /**
+   * Histórico de uma aplicação, do mais recente para o mais antigo.
+   *
+   * O dono entra na própria consulta, e não numa checagem antes dela: com o
+   * `ownerId` só no chamador, um id de aplicação vazado devolveria o histórico
+   * de outra conta.
+   */
+  listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedScanJob[]>;
   delete(id: string): Promise<void>;
   /**
    * Apaga o histórico inteiro de uma conta e devolve os ids removidos.
@@ -160,6 +168,14 @@ export class InMemoryScanJobRepository implements ScanJobRepository {
     this.#jobs.delete(id);
     const index = this.#order.indexOf(id);
     if (index >= 0) this.#order.splice(index, 1);
+  }
+
+  async listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedScanJob[]> {
+    return [...this.#jobs.values()]
+      .filter((job) => job.ownerId === ownerId && job.applicationId === applicationId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+      .map((job) => ({ ...job }));
   }
 
   async deleteByOwner(ownerId: string): Promise<string[]> {
@@ -329,6 +345,15 @@ export class PostgresScanJobRepository implements ScanJobRepository {
 
   async delete(id: string): Promise<void> {
     await this.database.query("delete from scan_jobs where id = $1", [id]);
+  }
+
+  async listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedScanJob[]> {
+    const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where owner_id = $1 and application_id = $2 order by created_at desc limit $3`, [
+      ownerId,
+      applicationId,
+      limit,
+    ]);
+    return rows.map(fromRow);
   }
 
   async deleteByOwner(ownerId: string): Promise<string[]> {
