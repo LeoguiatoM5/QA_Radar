@@ -35,6 +35,7 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   contrato publicado, entrou junto.
 
 ### Corrigido
+
 - **A ordem das execuções na Visão geral estava errada sempre que havia
   histórico de conta.** O caminho local grava a data como época em número e o
   histórico da conta devolve ISO 8601; a ordenação usava `Number(...)`, que
