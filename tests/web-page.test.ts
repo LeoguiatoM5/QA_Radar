@@ -73,7 +73,6 @@ describe("dashboard components", () => {
     assert.match(html, /id="dashboard-last-scan"/);
     assert.match(html, /id="dashboard-last-journey"/);
     assert.match(html, /id="dashboard-last-api"/);
-    assert.match(html, /Última execução/);
     assert.match(html, /Aguardando execução/);
     assert.match(html, /id="dashboard-quality-index"/);
     assert.match(html, /data-radar-point="http"/);
@@ -86,7 +85,10 @@ describe("dashboard components", () => {
     assert.match(html, /id="dashboard-history-toggle"/);
     assert.match(html, /id="dashboard-clear"/);
     assert.match(html, /Limpar histórico/);
-    assert.match(html, /'\/api\/dashboard\/activity',\{method:'DELETE'\}/);
+    // O cliente virou módulo, então as asserções que liam o corpo do script
+    // embutido saíram: o que a página garante agora é que aponta para ele, e o
+    // comportamento é conferido no navegador e pelo typecheck do módulo.
+    assert.match(html, /<script type="module" src="\/assets\/js\/dashboard\.js"><\/script>/);
     // O cabeçalho da tabela nunca chegou a ser renderizado e deixava um
     // `role="rowgroup"` sem tabela por cima — violação crítica de
     // `aria-required-parent`. Os papéis órfãos não podem voltar.
@@ -98,15 +100,12 @@ describe("dashboard components", () => {
     for (const label of ["HTTP", "Performance", "Acessibilidade", "DOM", "JavaScript"]) {
       assert.match(html, new RegExp(`>${label} <tspan class="radar-label-value" id="radar-value-`));
     }
-    assert.match(html, /dashboardShowAll/);
-    assert.match(html, /run-score/);
     assert.match(html, /class="home-dashboard"/);
     assert.match(html, /class="nav-icon icon-overview"/);
     assert.match(html, /class="nav-group"/);
     assert.match(html, /nav-group-support/);
     assert.match(html, /class="sidebar-help/);
     assert.match(html, />Ajuda</);
-    assert.match(html, /qa-radar-activity/);
     assert.match(html, /class="app-sidebar"/);
     assert.match(html, /class="context-bar"/);
     assert.match(html, /QA Radar Web/);
@@ -115,10 +114,7 @@ describe("dashboard components", () => {
     assert.match(html, /updateContextClock/);
     assert.match(html, /class="mobile-nav-toggle"/);
     assert.match(html, /setMobileNavigation/);
-    assert.match(html, /\/api\/dashboard\/activity/);
-    assert.match(html, /\/api\/dashboard\/activity\/events/);
     assert.match(html, /id="dashboard-live-state"/);
-    assert.match(html, /new EventSource/);
     assert.doesNotMatch(html, /Plano Empresarial|Plano empresarial/);
     assert.match(html, /href="\/scanner"/);
     assert.match(html, /href="\/journeys"/);

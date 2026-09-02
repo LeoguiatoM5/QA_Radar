@@ -1,4 +1,4 @@
-import { HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
+import { SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
 import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
 import { TOOLBOX_HOME_SCRIPT, TOOLBOX_SCRIPTS } from "./toolbox-client.js";
@@ -603,7 +603,7 @@ export function createHomePage(): string {
   <title>QA Radar · Qualidade web</title>
   <style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}</style>
 </head>
-<body>${renderHome()}<script>${SHELL_CLIENT_SCRIPT}</script><script>${HOME_DASHBOARD_SCRIPT}</script></body>
+<body>${renderHome()}<script>${SHELL_CLIENT_SCRIPT}</script><script type="module" src="/assets/js/dashboard.js"></script></body>
 </html>`;
 }
 

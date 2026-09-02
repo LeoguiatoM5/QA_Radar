@@ -70,7 +70,8 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
       "permissions-policy": "camera=(), microphone=(), geolocation=()",
-      "content-security-policy": "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'",
+      "content-security-policy":
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'",
     });
     response.end(createHomePage());
     return true;

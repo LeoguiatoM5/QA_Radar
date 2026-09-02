@@ -42,7 +42,7 @@ describe("web server", () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
     assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
-    assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'unsafe-inline'/);
+    assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self' 'unsafe-inline'/);
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.match(html, /Executar inspeção/);
     assert.match(html, /Executar jornada/);

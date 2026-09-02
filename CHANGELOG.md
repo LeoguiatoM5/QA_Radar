@@ -20,6 +20,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 - `/aplicacoes` é a segunda página migrada. Ela ainda carrega o script do
   shell embutido, então mantém `'unsafe-inline'` no `script-src` — mas agora
   com `'self'` junto, senão o módulo seria bloqueado sem aviso na página.
+- A Visão geral é a terceira. O `HOME_DASHBOARD_SCRIPT` era o maior dos
+  clientes embutidos e o mais castigado desta semana.
 
 - **"Limpar histórico" na Visão geral.** As execuções recentes se acumulavam
   sem nenhuma forma de apagar, e a mesma lista tinha **três** cópias: a do
@@ -33,6 +35,12 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   contrato publicado, entrou junto.
 
 ### Corrigido
+- **A ordem das execuções na Visão geral estava errada sempre que havia
+  histórico de conta.** O caminho local grava a data como época em número e o
+  histórico da conta devolve ISO 8601; a ordenação usava `Number(...)`, que
+  transforma ISO em `NaN`, faz o comparador devolver `NaN` e simplesmente não
+  ordena. Dava para ver no Sinal ao vivo, com 18:18 e 19:38 listados embaixo de
+  10:17. Os dois formatos agora passam pelo mesmo conversor.
 
 - **A Inspeção falhava na primeira execução em qualquer servidor com histórico
   ligado.** A barra de contexto preenche o campo "Ambiente" sozinha e o campo

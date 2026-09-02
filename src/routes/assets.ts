@@ -7,7 +7,7 @@ import type { RouteHandler } from "./context.js";
  * A lista fecha a rota: sem ela, o nome vindo da URL viraria leitura de arquivo
  * arbitrária dentro do diretório.
  */
-const MODULES = new Set(["applications", "auth"]);
+const MODULES = new Set(["applications", "auth", "dashboard"]);
 
 export const tryHandleAssets: RouteHandler = async (_context, request, response, url) => {
   if (request.method !== "GET" || !url.pathname.startsWith("/assets/js/")) return false;
