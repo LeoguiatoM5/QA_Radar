@@ -1,4 +1,4 @@
-import { SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
+import { WEB_CLIENT_SCRIPT } from "./web-client.js";
 import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
 import { TOOLBOX_HOME_SCRIPT, TOOLBOX_SCRIPTS } from "./toolbox-client.js";
@@ -372,19 +372,6 @@ const FAQ_STYLES = `
 
 // Uma pergunta alcançada por âncora (ex.: /docs#alertas, vindo da navegação lateral)
 // precisa chegar aberta — <details> não expande sozinho com :target.
-const DOCS_FAQ_SCRIPT = String.raw`
-function openFaqFromHash(){
-  const id=location.hash.slice(1);
-  if(!id)return;
-  const item=document.getElementById(id);
-  if(!item||item.tagName!=='DETAILS')return;
-  item.open=true;
-  item.scrollIntoView({block:'center'});
-}
-openFaqFromHash();
-window.addEventListener('hashchange',openFaqFromHash);
-`;
-
 /**
  * Estilo do QA Toolbox.
  *
@@ -590,7 +577,7 @@ export function createWebPage(turnstileSiteKey?: string, allowHistory = false, m
   <style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}</style>
 </head>
 <body>${renderDashboard({ allowHistory, maxSitemapPages, turnstileWidget, historyWidget })}
-<script>${SHELL_CLIENT_SCRIPT}</script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
+<script type="module" src="/assets/js/shell.js"></script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
 }
 
 export function createHomePage(): string {
@@ -603,7 +590,7 @@ export function createHomePage(): string {
   <title>QA Radar · Qualidade web</title>
   <style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}</style>
 </head>
-<body>${renderHome()}<script>${SHELL_CLIENT_SCRIPT}</script><script type="module" src="/assets/js/dashboard.js"></script></body>
+<body>${renderHome()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/dashboard.js"></script></body>
 </html>`;
 }
 
@@ -611,7 +598,7 @@ export function createApplicationsPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - aplicações da sua conta"><title>QA Radar · Aplicações</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${APPLICATIONS_STYLES}</style></head>
-<body>${renderApplicationsPage()}<script>${SHELL_CLIENT_SCRIPT}</script><script type="module" src="/assets/js/applications.js"></script></body>
+<body>${renderApplicationsPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/applications.js"></script></body>
 </html>`;
 }
 
@@ -627,7 +614,7 @@ export function createConstructionPage(area: string): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - área em construção"><title>QA Radar · Em construção</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}</style></head>
-<body>${renderConstructionPage(area)}<script>${SHELL_CLIENT_SCRIPT}</script></body>
+<body>${renderConstructionPage(area)}<script type="module" src="/assets/js/shell.js"></script></body>
 </html>`;
 }
 
@@ -635,7 +622,7 @@ export function createDocsPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Perguntas frequentes sobre o QA Radar"><title>QA Radar · Ajuda</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${FAQ_STYLES}</style></head>
-<body>${renderDocs()}<script>${SHELL_CLIENT_SCRIPT}</script><script>${DOCS_FAQ_SCRIPT}</script></body>
+<body>${renderDocs()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/docs.js"></script></body>
 </html>`;
 }
 
@@ -643,21 +630,21 @@ export function createJourneyPage(allowCodeMode = false): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - Modo Jornada de Playwright"><title>QA Radar · Jornada Playwright</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${CODE_MODE_STYLES}</style></head>
-<body>${renderJourneyPage(allowCodeMode)}<script>${SHELL_CLIENT_SCRIPT}</script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
+<body>${renderJourneyPage(allowCodeMode)}<script type="module" src="/assets/js/shell.js"></script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
 }
 
 export function createApiTestsPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - Testes de API"><title>QA Radar · Testes de API</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${API_TESTS_STYLES}</style></head>
-<body>${renderApiPage()}<script>${SHELL_CLIENT_SCRIPT}</script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
+<body>${renderApiPage()}<script type="module" src="/assets/js/shell.js"></script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
 }
 
 export function createToolboxHomePage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Toolbox - ferramentas rápidas para QA, automação, APIs e design de testes"><title>QA Radar · QA Toolbox</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${TOOLBOX_STYLES}</style></head>
-<body>${renderToolboxHome()}<script>${SHELL_CLIENT_SCRIPT}</script><script type="module">${TOOLBOX_HOME_SCRIPT}</script></body>
+<body>${renderToolboxHome()}<script type="module" src="/assets/js/shell.js"></script><script type="module">${TOOLBOX_HOME_SCRIPT}</script></body>
 </html>`;
 }
 
@@ -675,6 +662,6 @@ export function createToolPage(tool: QaToolDefinition): string | undefined {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="${escapeAttribute(`QA Toolbox - ${tool.description}`)}"><title>QA Radar · ${escapeAttribute(tool.name)}</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${TOOLBOX_STYLES}</style></head>
-<body>${body}<script>${SHELL_CLIENT_SCRIPT}</script><script type="module">${script}</script></body>
+<body>${body}<script type="module" src="/assets/js/shell.js"></script><script type="module">${script}</script></body>
 </html>`;
 }

@@ -22,6 +22,12 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   com `'self'` junto, senão o módulo seria bloqueado sem aviso na página.
 - A Visão geral é a terceira. O `HOME_DASHBOARD_SCRIPT` era o maior dos
   clientes embutidos e o mais castigado desta semana.
+- O shell — relógio, seletor de ambiente, menu no celular e controle de conta —
+  e o script do FAQ também viraram módulos. Com isso **cinco páginas ficaram sem
+  nenhum script embutido** e perderam o `'unsafe-inline'` do `script-src`: `/`,
+  `/docs`, `/aplicacoes`, `/entrar` e `/em-construcao`. Inspeção, Jornada,
+  Testes de API e Toolbox mantêm os dois valores enquanto o cliente das
+  ferramentas continuar embutido.
 
 - **"Limpar histórico" na Visão geral.** As execuções recentes se acumulavam
   sem nenhuma forma de apagar, e a mesma lista tinha **três** cópias: a do

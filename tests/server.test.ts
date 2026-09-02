@@ -42,7 +42,9 @@ describe("web server", () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
     assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
-    assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self' 'unsafe-inline'/);
+    // A Home não tem mais script embutido nenhum: só módulos de /assets/js/.
+    assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self';/);
+    assert.doesNotMatch(response.headers.get("content-security-policy") ?? "", /script-src[^;]*'unsafe-inline'/);
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.match(html, /Executar inspeção/);
     assert.match(html, /Executar jornada/);

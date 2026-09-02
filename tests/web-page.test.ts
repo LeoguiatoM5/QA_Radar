@@ -56,7 +56,7 @@ describe("entrada e cadastro", () => {
     // não carregam: o controle nascia oculto e nunca aparecia na primeira
     // página que se abre.
     for (const html of [createHomePage(), createDocsPage(), createJourneyPage(), createApiTestsPage(), createWebPage()]) {
-      assert.match(html, /refreshAccount/, "toda página precisa consultar /auth/me");
+      assert.match(html, /<script type="module" src="\/assets\/js\/shell\.js"><\/script>/, "toda página precisa carregar o shell, que é quem consulta /auth/me");
       assert.match(html, /id="verify-banner"/);
     }
   });
@@ -111,9 +111,8 @@ describe("dashboard components", () => {
     assert.match(html, /QA Radar Web/);
     assert.match(html, /id="context-clock"/);
     assert.match(html, /Últimas 24h/);
-    assert.match(html, /updateContextClock/);
+    assert.match(html, /<script type="module" src="\/assets\/js\/shell\.js"><\/script>/);
     assert.match(html, /class="mobile-nav-toggle"/);
-    assert.match(html, /setMobileNavigation/);
     assert.match(html, /id="dashboard-live-state"/);
     assert.doesNotMatch(html, /Plano Empresarial|Plano empresarial/);
     assert.match(html, /href="\/scanner"/);
@@ -204,9 +203,11 @@ describe("dashboard components", () => {
     ]) {
       assert.match(html, new RegExp(`<option value="${slug}">${label}</option>`), `ambiente ausente: ${label}`);
     }
-    // A escolha vale para as demais páginas e chega ao campo Ambiente da Inspeção.
-    assert.match(html, /qa-radar-environment/);
-    assert.match(html, /createWebPage|#environment/);
+    // A escolha vale para as demais páginas e chega ao campo Ambiente da
+    // Inspeção. Aqui ficam as duas pontas: quem carrega o shell e quem tem o
+    // campo que ele preenche.
+    assert.match(html, /<script type="module" src="\/assets\/js\/shell\.js"><\/script>/);
+    assert.match(createWebPage(), /id="environment"/);
   });
 
   it("compõe somente o Modo Jornada de Playwright na página de automação", () => {
@@ -226,7 +227,7 @@ describe("dashboard components", () => {
     // e-mail e senha, o GitHub virou um dos caminhos e não mais o único.
     assert.match(html, /id="account-signin"[^>]*href="\/entrar"/);
     assert.match(html, /id="account-signout"/);
-    assert.match(html, /loginAvailable/);
+    assert.match(html, /<script type="module" src="\/assets\/js\/shell\.js"><\/script>/);
     assert.match(html, /id="journey-signin"/);
     assert.match(html, /Entrar ou criar conta/);
     assert.doesNotMatch(html, /journey-admin-token/);

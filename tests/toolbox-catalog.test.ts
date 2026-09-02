@@ -142,7 +142,7 @@ describe("toolbox · páginas", () => {
   it("carrega o shell comum e o módulo da ferramenta em cada página", () => {
     for (const tool of AVAILABLE_TOOLS) {
       const html = createToolPage(tool) as string;
-      assert.match(html, /refreshAccount/, `${tool.id} não carrega o controle de conta`);
+      assert.match(html, /<script type="module" src="\/assets\/js\/shell\.js"><\/script>/, `${tool.id} não carrega o shell comum`);
       assert.match(html, /<script type="module">/, `${tool.id} não carrega o módulo da ferramenta`);
       assert.match(html, /\/assets\/toolbox\//, `${tool.id} não importa a regra de negócio servida`);
       assert.equal((html.match(/<h1>/g) ?? []).length, 1, `${tool.id} deve ter um único h1`);
