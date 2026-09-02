@@ -1,4 +1,4 @@
-import { APPLICATIONS_CLIENT_SCRIPT, HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
+import { HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
 import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
 import { TOOLBOX_HOME_SCRIPT, TOOLBOX_SCRIPTS } from "./toolbox-client.js";
@@ -611,7 +611,7 @@ export function createApplicationsPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - aplicações da sua conta"><title>QA Radar · Aplicações</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${APPLICATIONS_STYLES}</style></head>
-<body>${renderApplicationsPage()}<script>${SHELL_CLIENT_SCRIPT}</script><script>${APPLICATIONS_CLIENT_SCRIPT}</script></body>
+<body>${renderApplicationsPage()}<script>${SHELL_CLIENT_SCRIPT}</script><script type="module" src="/assets/js/applications.js"></script></body>
 </html>`;
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CONSTRUCTION_AREAS, renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
-import { createApiTestsPage, createAuthPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
+import { createApiTestsPage, createApplicationsPage, createAuthPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
 
 describe("entrada e cadastro", () => {
   it("compõe os quatro formulários de conta numa página só", () => {
@@ -16,6 +16,12 @@ describe("entrada e cadastro", () => {
     assert.match(html, /autocomplete="new-password"/, "o cadastro precisa dizer ao gerenciador de senhas que é senha nova");
     assert.match(html, /autocomplete="current-password"/);
     assert.match(html, /name="robots" content="noindex"/, "a tela de entrada não deve ser indexada");
+  });
+
+  it("carrega o cliente de aplicações como módulo", () => {
+    const html = createApplicationsPage();
+    assert.match(html, /<script type="module" src="\/assets\/js\/applications\.js"><\/script>/);
+    assert.doesNotMatch(html, /application-form'\)/, "o cliente saiu da string e não pode voltar embutido");
   });
 
   it("carrega o cliente como módulo, sem script embutido", () => {

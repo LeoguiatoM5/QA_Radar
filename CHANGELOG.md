@@ -17,6 +17,9 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   `src/toolbox/`. A lista de módulos permitidos fecha a rota. `/entrar` é a
   primeira página migrada e, sem script embutido, perdeu o `'unsafe-inline'` do
   `script-src`: um `<script>` injetado no HTML dela não executa mais.
+- `/aplicacoes` é a segunda página migrada. Ela ainda carrega o script do
+  shell embutido, então mantém `'unsafe-inline'` no `script-src` — mas agora
+  com `'self'` junto, senão o módulo seria bloqueado sem aviso na página.
 
 - **"Limpar histórico" na Visão geral.** As execuções recentes se acumulavam
   sem nenhuma forma de apagar, e a mesma lista tinha **três** cópias: a do

@@ -1516,4 +1516,29 @@ describe("módulos de navegador", () => {
       await rm(resultsDir, { recursive: true, force: true });
     }
   });
+
+  it("libera 'self' no script-src de toda página que carrega módulo", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-csp-"));
+    const cspServer = createQaRadarServer({ resultsDir, allowCodeMode: true });
+    await new Promise<void>((resolve) => cspServer.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${(cspServer.address() as AddressInfo).port}`;
+    try {
+      const paginas = ["/", "/scanner", "/journeys", "/api-tests", "/docs", "/aplicacoes", "/entrar", "/em-construcao", "/toolbox", "/toolbox/json-diff"];
+      let comModulo = 0;
+      for (const caminho of paginas) {
+        const response = await fetch(`${base}${caminho}`);
+        assert.equal(response.status, 200, caminho);
+        const body = await response.text();
+        if (!/src="\/assets\//.test(body)) continue;
+        comModulo += 1;
+        const csp = response.headers.get("content-security-policy") ?? "";
+        const scriptSrc = /script-src ([^;]*)/.exec(csp)?.[1] ?? "";
+        assert.match(scriptSrc, /'self'/, `${caminho} carrega módulo mas o script-src não permite 'self': o navegador bloqueia sem quebrar a página`);
+      }
+      assert.ok(comModulo >= 2, "o teste precisa estar olhando para páginas que de fato carregam módulo");
+    } finally {
+      await new Promise<void>((resolve) => cspServer.close(() => resolve()));
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
 });

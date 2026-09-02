@@ -171,3 +171,8 @@ async function start(): Promise<void> {
 }
 
 void start();
+
+// O navegador carrega este arquivo como módulo ES, com escopo próprio. O
+// `export {}` diz o mesmo ao compilador: sem ele os nomes do topo entrariam no
+// escopo global e colidiriam com os de outro módulo.
+export {};
