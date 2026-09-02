@@ -47,7 +47,7 @@ function running(){
   document.querySelector('#result-title').textContent='Analisando aplicação';document.querySelector('#comparison').textContent='';
   for(const id of ['errors','warnings','http','duration','ttfb','lcp','cls'])document.querySelector('#'+id).textContent='—';
   document.querySelector('#pages').textContent=document.querySelector('#sitemap').checked?'…':'1';
-  document.querySelector('#issues').innerHTML='<div class="issue"><div class="message">O navegador está carregando e observando a página…</div></div>';
+  document.querySelector('#issues').innerHTML='<div class="issue issue-note"><div class="message">O navegador está carregando e observando a página…</div></div>';
   document.querySelector('#actions').innerHTML='';document.querySelector('#report-frame').hidden=true;
   document.querySelector('#progress').hidden=false;document.querySelector('#progress-text').textContent='Preparando análise…';document.querySelector('#progress-bar').style.width='0%';cancelButton.hidden=true;cancelButton.disabled=false;
 }
@@ -71,7 +71,7 @@ async function render(job){
   document.querySelector('#ttfb').textContent=perf?.ttfbMs===undefined?'N/A':perf.ttfbMs+' ms';document.querySelector('#lcp').textContent=perf?.lcpMs===undefined?'N/A':perf.lcpMs+' ms';document.querySelector('#cls').textContent=perf?.cls??'N/A';
   document.querySelector('#comparison').textContent=r.comparison?r.comparison.newIssues+' novo(s) · '+r.comparison.existingIssues+' existente(s) · '+r.comparison.resolvedIssues.length+' resolvido(s)':'';
   const categories={console:'Navegador',javascript:'JavaScript',http:'Carregamento',network:'Rede',navigation:'Navegação',performance:'Performance','best-practices':'Boas práticas',seo:'SEO',element:'Elemento da página',accessibility:'Acessibilidade'},list=document.querySelector('#issues');
-  list.innerHTML=r.issues.length?r.issues.map(i=>'<div class="issue"><span class="badge '+esc(i.severity)+'">'+(i.severity==='error'?'Erro':'Aviso')+'</span><span class="category">'+esc(categories[i.category]||i.category)+'</span><div class="message"><strong>'+esc(i.title||i.message)+'</strong>'+(i.baselineStatus?' <small>· '+(i.baselineStatus==='new'?'NOVO':'EXISTENTE')+'</small>':'')+(i.occurrences>1?' ('+i.occurrences+'x)':'')+(i.impact?'<p><b>Impacto:</b> '+esc(i.impact)+'</p>':'')+(i.recommendation?'<p><b>Como verificar:</b> '+esc(i.recommendation)+'</p>':'')+(i.url?'<code>'+esc(i.url)+'</code>':'')+(i.evidence?'<span class="evidence-ref">'+esc(i.evidence.label)+' · '+esc(i.evidence.selector)+'</span>':'')+'<details><summary>Detalhe técnico</summary><code>'+esc(i.message)+'</code></details></div></div>').join(''):'<div class="issue"><div class="message">Nenhum problema encontrado. Tudo limpo por aqui.</div></div>';
+  list.innerHTML=r.issues.length?r.issues.map(i=>'<div class="issue"><span class="badge '+esc(i.severity)+'">'+(i.severity==='error'?'Erro':'Aviso')+'</span><span class="category">'+esc(categories[i.category]||i.category)+'</span><div class="message"><strong>'+esc(i.title||i.message)+'</strong>'+(i.baselineStatus?' <small>· '+(i.baselineStatus==='new'?'NOVO':'EXISTENTE')+'</small>':'')+(i.occurrences>1?' ('+i.occurrences+'x)':'')+(i.impact?'<p><b>Impacto:</b> '+esc(i.impact)+'</p>':'')+(i.recommendation?'<p><b>Como verificar:</b> '+esc(i.recommendation)+'</p>':'')+(i.url?'<code>'+esc(i.url)+'</code>':'')+(i.evidence?'<span class="evidence-ref">'+esc(i.evidence.label)+' · '+esc(i.evidence.selector)+'</span>':'')+'<details><summary>Detalhe técnico</summary><code>'+esc(i.message)+'</code></details></div></div>').join(''):'<div class="issue issue-note"><div class="message">Nenhum problema encontrado. Tudo limpo por aqui.</div></div>';
   const issueCount=category=>r.issues.filter(issue=>issue.category===category).length;
   const qualityScore=count=>Math.max(0,Math.min(100,100-count*14));
   recordActivity({id:'scan-'+job.id,type:'scan',title:r.title||activityTarget(r.targetUrl),detail:(r.pages?.length??1)+' página(s) · '+r.browser,status:r.passed?'success':'error',errors:r.summary.errors,warnings:r.summary.warnings,durationMs:r.durationMs,href:'/scanner',scores:{http:r.mainStatus&&r.mainStatus<400?100:35,performance:perf?.lcpMs===undefined?undefined:Math.max(0,Math.min(100,Math.round(110-perf.lcpMs/35))),accessibility:qualityScore(issueCount('accessibility')),dom:qualityScore(issueCount('element')+issueCount('seo')),javascript:qualityScore(issueCount('javascript')+issueCount('console'))}});
@@ -195,7 +195,7 @@ if(httpSend){
   function kvRow(container,keyPlaceholder,valuePlaceholder){
     const row=document.createElement('div');
     row.className='http-kv-row';
-    row.innerHTML='<input type="text" class="http-kv-key" placeholder="'+esc(keyPlaceholder)+'"><input type="text" class="http-kv-value" placeholder="'+esc(valuePlaceholder)+'"><button type="button" class="secondary http-kv-remove" aria-label="Remover">×</button>';
+    row.innerHTML='<input type="text" class="http-kv-key" aria-label="Nome" placeholder="'+esc(keyPlaceholder)+'"><input type="text" class="http-kv-value" aria-label="Valor" placeholder="'+esc(valuePlaceholder)+'"><button type="button" class="secondary http-kv-remove" aria-label="Remover">×</button>';
     row.querySelector('.http-kv-remove').addEventListener('click',()=>{row.remove();pairsChanged(container)});
     container.appendChild(row);
     return row;
@@ -591,10 +591,19 @@ async function loadApplications(){
     const response=await fetch('/api/v1/applications');
     if(response.status===401){location.href='/entrar?proximo='+encodeURIComponent(location.pathname);return}
     const body=await response.json();
-    if(!response.ok){if(applicationHint)applicationHint.textContent=body.error||'Não foi possível carregar suas aplicações.';return}
+    if(!response.ok){disableApplicationForm(body.error||'Não foi possível carregar suas aplicações.');return}
     applicationsCache=body.applications||[];
     renderApplications(applicationsCache);
-  }catch{if(applicationHint)applicationHint.textContent='Não foi possível carregar suas aplicações.'}
+  }catch{disableApplicationForm('Não foi possível carregar suas aplicações.')}
+}
+
+// Desligar é mais honesto que deixar digitar: o campo aberto promete um cadastro
+// que o servidor não tem como aceitar.
+function disableApplicationForm(reason){
+  if(applicationHint)applicationHint.textContent=reason;
+  for(const field of [fieldName,fieldBaseUrl,fieldEnvironments,applicationSubmit])if(field)field.disabled=true;
+  const notice=document.querySelector('#application-unavailable');
+  if(notice){notice.textContent=reason;notice.hidden=false}
 }
 
 applicationList?.addEventListener('click',async event=>{
@@ -749,7 +758,14 @@ async function start(){
     const me=await (await fetch('/api/v1/auth/me')).json();
     // Quem já está dentro não tem o que fazer aqui.
     if(me.authenticated){location.replace('/');return}
-    if(!me.loginAvailable){fail('Este servidor não guarda contas: use o QA Radar sem entrar.');if(authTabs)authTabs.hidden=true;return}
+    if(!me.loginAvailable){
+      // Deixar o formulário de pé aqui só levava a um 403 depois de digitar a
+      // senha. Some tudo e sobra a saída que de fato existe: usar sem conta.
+      show('indisponivel');
+      const fallback=document.querySelector('#auth-unavailable');
+      if(fallback)fallback.hidden=false;
+      return;
+    }
     if(githubBlock)githubBlock.dataset.available=me.githubAvailable?'true':'false';
     // Sem provedor de e-mail não há caminho de volta, então o link não aparece.
     if(forgotOpen)forgotOpen.hidden=!me.passwordResetAvailable;
@@ -829,13 +845,12 @@ function renderDashboard(){
   const activities=dashboardActivities.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)).slice(0,40);
   const recent=document.querySelector('#dashboard-recent-list'),signals=document.querySelector('#dashboard-signal-list');
   const emptyRecent=document.querySelector('#dashboard-recent-empty'),emptySignals=document.querySelector('#dashboard-signal-empty');
-  const tableHead=document.querySelector('#dashboard-table-head'),historyToggle=document.querySelector('#dashboard-history-toggle');
+  const historyToggle=document.querySelector('#dashboard-history-toggle');
   const filtered=dashboardFilter==='all'?activities:activities.filter(item=>item.type===dashboardFilter);
   document.querySelector('#dashboard-run-count').textContent=activities.length?(filtered.length===activities.length?activities.length:filtered.length+' de '+activities.length)+' local(is)':'Dados locais';
   historyToggle.hidden=!filtered.length;
   historyToggle.textContent=dashboardShowAll?'Mostrar recentes':'Ver histórico completo';
   historyToggle.setAttribute('aria-expanded',String(dashboardShowAll));
-  tableHead.hidden=!filtered.length;
   ['scan','journey','api'].forEach(type=>{
     const label=document.querySelector('#dashboard-last-'+type),latest=activities.find(item=>item.type===type);
     if(label)label.textContent=latest?'Última execução '+dashboardTime(latest.createdAt):'Sem execuções recentes';
@@ -856,7 +871,7 @@ function renderDashboard(){
     const title=dashboardEsc(item.title);
     // item.detail é o resultado ("200 OK", "1 falha(s)"), não o ambiente: ele
     // acompanha o título, e a coluna de ambiente mostra de fato o ambiente.
-    return '<div class="dashboard-run" role="row"><span class="run-kind icon-'+meta.icon+'"><i></i></span><a class="run-title" href="'+href+'"><strong>'+title+'</strong><small>'+dashboardEsc(item.detail||meta.label)+'</small></a><span class="run-environment">Local</span><span class="run-status '+(failed?'error':'success')+'"><i></i>'+(failed?'ERRO':'SUCESSO')+'</span><span class="run-errors '+(errors?'has-value':'')+'">'+dashboardCount(errors,'erro','erros')+'</span><span class="run-warnings '+(warnings?'has-value':'')+'">'+dashboardCount(warnings,'aviso','avisos')+'</span><span class="run-score '+(Number.isFinite(performance)?'has-value':'')+'">'+dashboardScore(performance,'perf.')+'</span><span class="run-score '+(Number.isFinite(accessibility)?'has-value':'')+'">'+dashboardScore(accessibility,'acess.')+'</span><time datetime="'+createdAt.toISOString()+'" title="'+dashboardTime(item.createdAt)+'">'+createdAt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</time><span class="run-duration">'+dashboardDuration(item.durationMs)+'</span><a class="run-play" href="'+href+'" aria-label="Executar novamente '+title+'">▷</a><a class="run-action" href="'+href+'" aria-label="Abrir '+title+'">›</a></div>';
+    return '<div class="dashboard-run"><span class="run-kind icon-'+meta.icon+'"><i></i></span><a class="run-title" href="'+href+'"><strong>'+title+'</strong><small>'+dashboardEsc(item.detail||meta.label)+'</small></a><span class="run-environment">Local</span><span class="run-status '+(failed?'error':'success')+'"><i></i>'+(failed?'ERRO':'SUCESSO')+'</span><span class="run-errors '+(errors?'has-value':'')+'">'+dashboardCount(errors,'erro','erros')+'</span><span class="run-warnings '+(warnings?'has-value':'')+'">'+dashboardCount(warnings,'aviso','avisos')+'</span><span class="run-score '+(Number.isFinite(performance)?'has-value':'')+'">'+dashboardScore(performance,'perf.')+'</span><span class="run-score '+(Number.isFinite(accessibility)?'has-value':'')+'">'+dashboardScore(accessibility,'acess.')+'</span><time datetime="'+createdAt.toISOString()+'" title="'+dashboardTime(item.createdAt)+'">'+createdAt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</time><span class="run-duration">'+dashboardDuration(item.durationMs)+'</span><a class="run-play" href="'+href+'" aria-label="Executar novamente '+title+'">▷</a><a class="run-action" href="'+href+'" aria-label="Abrir '+title+'">›</a></div>';
   }).join('');
   signals.innerHTML=activities.slice(0,7).map(item=>{
     const meta=activityMeta(item);
@@ -890,7 +905,9 @@ function renderDashboard(){
     svg.querySelector('.radar-area').setAttribute('points',points);
     svg.querySelector('.radar-area').style.opacity=available.length?'1':'0';
   }
-  document.querySelector('.radar-visual').setAttribute('aria-label',index===undefined?'Mapa de qualidade sem dados':'Índice de qualidade '+index+' de 100');
+  const axisNames={http:'HTTP',performance:'Performance',accessibility:'Acessibilidade',dom:'DOM',javascript:'JavaScript'};
+  const axisSummary=axes.filter(axis=>Number.isFinite(values[axis])).map(axis=>axisNames[axis]+' '+values[axis]).join(', ');
+  document.querySelector('.radar-visual').setAttribute('aria-label',index===undefined?'Mapa de qualidade sem dados':'Índice de qualidade '+index+' de 100'+(axisSummary?'. '+axisSummary:''));
   const day=86400000,elapsed=item=>Date.now()-Number(item.createdAt||0);
   const lastDay=activities.filter(item=>elapsed(item)<day),previousDay=activities.filter(item=>elapsed(item)>=day&&elapsed(item)<day*2);
   const totalOf=(list,field)=>list.reduce((sum,item)=>sum+Number(item[field]||0),0);
@@ -900,7 +917,9 @@ function renderDashboard(){
   };
   // O delta só aparece quando existe janela anterior para comparar — sem isso não há variação real a mostrar.
   const setMetric=(id,current,previous)=>{
-    document.querySelector('#dashboard-'+id).textContent=current===undefined?'—':String(current);
+    const field=document.querySelector('#dashboard-'+id);
+    if(!field)return;
+    field.textContent=current===undefined?'—':String(current);
     const delta=document.querySelector('#dashboard-'+id+'-delta');
     if(!delta)return;
     const difference=current===undefined||previous===undefined?0:current-previous;
@@ -909,8 +928,6 @@ function renderDashboard(){
   };
   setMetric('errors',totalOf(lastDay,'errors'),previousDay.length?totalOf(previousDay,'errors'):undefined);
   setMetric('warnings',totalOf(lastDay,'warnings'),previousDay.length?totalOf(previousDay,'warnings'):undefined);
-  setMetric('performance',values.performance,averageOf(previousDay,'performance'));
-  setMetric('accessibility',values.accessibility,averageOf(previousDay,'accessibility'));
 }
 renderDashboard();
 let dashboardStream;

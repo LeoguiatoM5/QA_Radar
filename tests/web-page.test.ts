@@ -67,7 +67,17 @@ describe("dashboard components", () => {
     assert.match(html, /id="dashboard-signal-list"/);
     assert.match(html, /data-dashboard-filter="scan"/);
     assert.match(html, /id="dashboard-history-toggle"/);
-    assert.match(html, /id="dashboard-table-head"/);
+    // O cabeçalho da tabela nunca chegou a ser renderizado e deixava um
+    // `role="rowgroup"` sem tabela por cima — violação crítica de
+    // `aria-required-parent`. Os papéis órfãos não podem voltar.
+    assert.doesNotMatch(html, /role="rowgroup"/);
+    assert.doesNotMatch(html, /role="columnheader"/);
+    // Cada eixo do radar precisa dizer o próprio nome: o polígono sozinho não
+    // informa qual vértice é qual.
+    assert.match(html, /class="radar-labels"/);
+    for (const label of ["HTTP", "Performance", "Acessibilidade", "DOM", "JavaScript"]) {
+      assert.match(html, new RegExp(`>${label} <tspan class="radar-label-value" id="radar-value-`));
+    }
     assert.match(html, /dashboardShowAll/);
     assert.match(html, /run-score/);
     assert.match(html, /class="home-dashboard"/);

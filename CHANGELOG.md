@@ -4,6 +4,54 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+### Corrigido
+
+- **A Inspeção falhava na primeira execução em qualquer servidor com histórico
+  ligado.** A barra de contexto preenche o campo "Ambiente" sozinha e o campo
+  "Projeto" nasce vazio; como a CLI exige os dois juntos, toda análise voltava
+  com `--environment exige a opção --project.` — a mensagem de uma opção de
+  linha de comando que ninguém tinha digitado. Sem projeto, ambiente e
+  `acceptBaseline` agora são descartados em vez de reprovarem a análise.
+- **`hidden` deixou de ser silenciosamente ignorado.** Qualquer regra de autor
+  que declarasse `display` vencia o atributo, e cada componente precisava
+  lembrar de repetir a exceção. As abas de `/entrar` continuavam à vista depois
+  de terem sido escondidas. Uma regra global fecha a classe inteira de bug.
+- **`/entrar` num servidor sem contas mantinha o formulário utilizável**: dava
+  para digitar e-mail e senha e o envio voltava 403. Agora a página mostra o que
+  de fato existe — usar o QA Radar sem entrar.
+- **`/aplicacoes` num servidor sem banco também mantinha o cadastro aberto.** Os
+  campos ficam desligados, com o motivo antes do formulário, e campo desligado
+  passou a parecer desligado.
+- **Avisos de uma linha na lista de ocorrências quebravam uma palavra por
+  linha**: sem selo nem categoria, a mensagem caía na primeira coluna de 85px da
+  grade. Atingia "O navegador está carregando e observando a página…" e "Nenhum
+  problema encontrado". O texto inicial também citava o Chromium mesmo quando a
+  análise roda no Firefox ou no WebKit.
+- **Violação crítica de acessibilidade na Visão geral**: a lista de execuções
+  declarava `role="rowgroup"` e o cabeçalho `role="row"` sem nenhuma tabela por
+  cima (`aria-required-parent`). O cabeçalho, aliás, tinha `display:none` desde
+  sempre e nunca chegou a ser renderizado — saiu junto com os papéis órfãos.
+- **Contraste abaixo do mínimo** no contador de "Execuções recentes": 8,3px em
+  `#60778d` dava 3,97:1.
+- Campos de nome e valor dos Testes de API chegavam sem nome acessível ao leitor
+  de tela — os títulos "Nome" e "Valor" da grade não são `label`.
+- Sombra do botão primário vazava por baixo e pintava o rótulo do campo
+  seguinte, visível na Jornada.
+- Alinhamento alternado dos números de qualidade quando viram cartões no
+  celular, e filtros de execução com 30px de altura.
+
+### Mudado
+
+- **Os cinco eixos do radar da Visão geral agora dizem o próprio nome.** O
+  polígono era desenhado sem rótulo nenhum — o markup até tinha os cinco spans,
+  mas com `display:none` desde que foram escritos — enquanto quatro números
+  soltos nos cantos do painel sugeriam ser os vértices ao lado. Os rótulos
+  passaram para dentro do SVG, e os cantos ficaram só com o que o radar não
+  mostra: a contagem de erros e de avisos. Performance e Acessibilidade
+  apareciam duas vezes na mesma moldura, com o mesmo valor.
+- Caixas de seleção nativas passaram a seguir o tema (`accent-color`) e
+  cresceram de 13px para 18px.
+
 ## [3.2.0] - 2026-09-01
 
 Esta versão acrescenta o **QA Toolbox** — uma área de ferramentas rápidas para

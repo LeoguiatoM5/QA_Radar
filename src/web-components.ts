@@ -36,7 +36,7 @@ export function renderScannerForm(options: DashboardOptions): string {
       <div class="scan-panel" id="scan-panel" role="tabpanel" aria-labelledby="scan-tab">
         <h2>Nova análise</h2><p class="sub">Informe o ambiente que deseja inspecionar.</p>
         <div class="application-picker" id="application-picker" hidden><label for="scan-application">Aplicação</label><select id="scan-application" name="applicationId"><option value="">Sem aplicação</option></select><small class="hint">Escolha uma aplicação da sua conta para guardar esta análise no histórico dela. <a href="/aplicacoes">Gerenciar aplicações</a></small></div>
-        <label for="url">URL da aplicação</label><div class="url-row"><span>⌁</span><input id="url" name="url" type="url" placeholder="https://staging.sua-aplicacao.com" required autofocus></div><small class="hint">Endereço público iniciado por http:// ou https://. Ambientes locais e redes privadas são bloqueados na versão pública.</small>
+        <label for="url">URL da aplicação</label><div class="url-row"><span aria-hidden="true">⌁</span><input id="url" name="url" type="url" placeholder="https://staging.sua-aplicacao.com" required autofocus></div><small class="hint">Endereço público iniciado por http:// ou https://. Ambientes locais e redes privadas são bloqueados na versão pública.</small>
         <div class="row"><div><label for="browser">Navegador</label><select id="browser" name="browser"><option>chromium</option><option>firefox</option><option>webkit</option></select><small class="hint">Motor usado para abrir e observar a página.</small></div><div><label for="failOn">Reprovar a partir de</label><select id="failOn" name="failOn"><option value="error">Erros</option><option value="warning">Avisos</option><option value="none">Nunca</option></select><small class="hint">Define quando o resultado será marcado como reprovado.</small></div></div>
         <div class="row"><div><label for="project">Projeto</label><input id="project" name="project" placeholder="loja-web" ${allowHistory ? "" : "disabled"}><small class="hint">${allowHistory ? "Ativa histórico e baseline automático." : "Histórico desabilitado neste servidor."}</small></div><div><label for="environment">Ambiente</label><input id="environment" name="environment" value="staging" ${allowHistory ? "" : "disabled"}><small class="hint">Separa staging, produção e outros ambientes.</small></div></div>
         <div class="row"><div class="option"><input id="sitemap" name="sitemap" type="checkbox"><div><label for="sitemap">Cobrir sitemap.xml</label><small class="hint">Analisa até ${maxSitemapPages} páginas do mesmo domínio.</small></div></div><div><label for="maxPages">Máximo de páginas</label><input id="maxPages" name="maxPages" type="number" min="1" max="${maxSitemapPages}" value="${defaultMaxPages}"><small class="hint">Execução sequencial para controlar recursos.</small></div></div>
@@ -50,7 +50,7 @@ export function renderScannerForm(options: DashboardOptions): string {
 }
 
 export function renderResultsPanel(): string {
-  return `<section class="results" id="results"><div class="result-head"><div><div class="eyebrow">Resultado da análise</div><h2 id="result-title">Analisando aplicação</h2><div class="comparison" id="comparison"></div><div class="progress" id="progress"><span id="progress-text">Preparando análise…</span><div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div></div></div><div><span class="status running" id="status"><i class="loader"></i>Executando</span><button class="cancel" id="cancel" type="button" hidden>Cancelar</button></div></div><div class="metrics"><div class="metric"><small>Erros</small><strong id="errors">—</strong></div><div class="metric"><small>Avisos</small><strong id="warnings">—</strong></div><div class="metric"><small>HTTP principal</small><strong id="http">—</strong></div><div class="metric"><small>Duração</small><strong id="duration">—</strong></div><div class="metric"><small>TTFB</small><strong id="ttfb">—</strong></div><div class="metric"><small>LCP</small><strong id="lcp">—</strong></div><div class="metric"><small>CLS</small><strong id="cls">—</strong></div><div class="metric"><small>Páginas</small><strong id="pages">1</strong></div></div><div class="issues" id="issues"><div class="issue"><div class="message">O Chromium está carregando e observando a página…</div></div></div><div class="actions" id="actions"></div><iframe id="report-frame" title="Relatório completo" hidden></iframe></section>`;
+  return `<section class="results" id="results"><div class="result-head"><div><div class="eyebrow">Resultado da análise</div><h2 id="result-title">Analisando aplicação</h2><div class="comparison" id="comparison"></div><div class="progress" id="progress"><span id="progress-text">Preparando análise…</span><div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div></div></div><div><span class="status running" id="status"><i class="loader"></i>Executando</span><button class="cancel" id="cancel" type="button" hidden>Cancelar</button></div></div><div class="metrics"><div class="metric"><small>Erros</small><strong id="errors">—</strong></div><div class="metric"><small>Avisos</small><strong id="warnings">—</strong></div><div class="metric"><small>HTTP principal</small><strong id="http">—</strong></div><div class="metric"><small>Duração</small><strong id="duration">—</strong></div><div class="metric"><small>TTFB</small><strong id="ttfb">—</strong></div><div class="metric"><small>LCP</small><strong id="lcp">—</strong></div><div class="metric"><small>CLS</small><strong id="cls">—</strong></div><div class="metric"><small>Páginas</small><strong id="pages">1</strong></div></div><div class="issues" id="issues"><div class="issue issue-note"><div class="message">O navegador está carregando e observando a página…</div></div></div><div class="actions" id="actions"></div><iframe id="report-frame" title="Relatório completo" hidden></iframe></section>`;
 }
 
 export function renderDashboard(options: DashboardOptions): string {
@@ -177,7 +177,7 @@ function renderCodePanel(): string {
 }
 
 function renderHttpKeyValueRow(keyPlaceholder: string, valuePlaceholder: string): string {
-  return `<div class="http-kv-row"><input type="text" class="http-kv-key" placeholder="${keyPlaceholder}"><input type="text" class="http-kv-value" placeholder="${valuePlaceholder}"><button type="button" class="secondary http-kv-remove" aria-label="Remover">×</button></div>`;
+  return `<div class="http-kv-row"><input type="text" class="http-kv-key" aria-label="Nome" placeholder="${keyPlaceholder}"><input type="text" class="http-kv-value" aria-label="Valor" placeholder="${valuePlaceholder}"><button type="button" class="secondary http-kv-remove" aria-label="Remover">×</button></div>`;
 }
 
 function renderApiPanel(): string {
@@ -263,10 +263,38 @@ function renderApiPanel(): string {
 // vértices dos dados no cliente (que lê estas constantes dos data-* do <svg>),
 // para que um eixo com valor 75 caia exatamente sobre o anel do 75.
 const RADAR_CENTER = 200;
-const RADAR_RADIUS = 180;
+const RADAR_RADIUS = 156;
+// Distância do rótulo do eixo ao centro: fora do anel de 100, dentro do viewBox.
+const RADAR_LABEL_RADIUS = 178;
 const RADAR_FLOOR = 0.2; // fração do raio ocupada pelo valor 0
 const RADAR_SPAN = 0.008; // fração do raio ganha por ponto de 0 a 100
 const RADAR_AXES = ["http", "performance", "accessibility", "dom", "javascript"] as const;
+
+/**
+ * Rótulo visível de cada eixo, na ordem em que o polígono é desenhado.
+ *
+ * O radar plotava cinco vértices sem dizer o que era cada um, e os quatro
+ * números nos cantos do painel são outras métricas — quem olhava lia um deles
+ * como se fosse o vértice ao lado. Nomear o eixo é o que torna o gráfico
+ * legível.
+ */
+const RADAR_AXIS_LABELS: Record<(typeof RADAR_AXES)[number], string> = {
+  http: "HTTP",
+  performance: "Performance",
+  accessibility: "Acessibilidade",
+  dom: "DOM",
+  javascript: "JavaScript",
+};
+
+// O texto foge do vértice para não cobrir o polígono: acima no topo, à esquerda
+// do próprio ponto do lado direito e à direita do lado esquerdo.
+const RADAR_LABEL_PLACEMENT: Record<(typeof RADAR_AXES)[number], { anchor: string; dy: number }> = {
+  http: { anchor: "middle", dy: -6 },
+  performance: { anchor: "end", dy: 0 },
+  accessibility: { anchor: "end", dy: 12 },
+  dom: { anchor: "start", dy: 12 },
+  javascript: { anchor: "start", dy: 0 },
+};
 
 function radarRadius(value: number): number {
   return RADAR_RADIUS * (RADAR_FLOOR + RADAR_SPAN * Math.max(0, Math.min(100, value)));
@@ -287,11 +315,18 @@ function renderRadarSvg(): string {
   }).join("");
   const dots = RADAR_AXES.map((axis) => `<circle class="radar-dot" data-radar-point="${axis}" cx="${RADAR_CENTER}" cy="${RADAR_CENTER}" r="4.5"/>`).join("");
   const labels = [100, 75, 50, 25].map((value) => `<text x="${RADAR_CENTER}" y="${round(RADAR_CENTER - radarRadius(value) + 11)}">${value}</text>`).join("");
+  const axisLabels = RADAR_AXES.map((axis, index) => {
+    const angle = ((-90 + index * 72) * Math.PI) / 180;
+    const x = RADAR_CENTER + Math.cos(angle) * RADAR_LABEL_RADIUS;
+    const placement = RADAR_LABEL_PLACEMENT[axis];
+    const y = RADAR_CENTER + Math.sin(angle) * RADAR_LABEL_RADIUS + placement.dy;
+    return `<text x="${round(x)}" y="${round(y)}" text-anchor="${placement.anchor}">${RADAR_AXIS_LABELS[axis]} <tspan class="radar-label-value" id="radar-value-${axis}">—</tspan></text>`;
+  }).join("");
   const collapsed = RADAR_AXES.map((_, index) => {
     const [x, y] = radarCoordinate(index, 0);
     return `${round(x)},${round(y)}`;
   }).join(" ");
-  return `<svg class="radar-svg" viewBox="0 0 400 400" aria-hidden="true" data-radar-center="${RADAR_CENTER}" data-radar-radius="${RADAR_RADIUS}" data-radar-floor="${RADAR_FLOOR}" data-radar-span="${RADAR_SPAN}"><g class="radar-rings">${rings}</g><g class="radar-spokes">${spokes}</g><polygon class="radar-area" points="${collapsed}"/><g class="radar-dots">${dots}</g><g class="radar-scale">${labels}</g></svg>`;
+  return `<svg class="radar-svg" viewBox="0 0 400 400" aria-hidden="true" data-radar-center="${RADAR_CENTER}" data-radar-radius="${RADAR_RADIUS}" data-radar-floor="${RADAR_FLOOR}" data-radar-span="${RADAR_SPAN}"><g class="radar-rings">${rings}</g><g class="radar-spokes">${spokes}</g><polygon class="radar-area" points="${collapsed}"/><g class="radar-dots">${dots}</g><g class="radar-scale">${labels}</g><g class="radar-labels">${axisLabels}</g></svg>`;
 }
 
 export function renderHome(): string {
@@ -303,13 +338,10 @@ export function renderHome(): string {
       <div class="quality-map">
       <div class="quality-metrics">
         <span class="quality-errors"><small>Erros</small><strong id="dashboard-errors">0</strong><em class="quality-delta" id="dashboard-errors-delta"></em></span>
-        <span class="quality-performance"><small>Performance</small><strong id="dashboard-performance">—</strong><em class="quality-delta" id="dashboard-performance-delta"></em></span>
         <span class="quality-warnings"><small>Avisos</small><strong id="dashboard-warnings">0</strong><em class="quality-delta" id="dashboard-warnings-delta"></em></span>
-        <span class="quality-accessibility"><small>Acessibilidade</small><strong id="dashboard-accessibility">—</strong><em class="quality-delta" id="dashboard-accessibility-delta"></em></span>
       </div>
       <div class="radar-visual" aria-label="Coberturas observadas pelo QA Radar">
         ${renderRadarSvg()}
-        <span class="radar-axis axis-top">HTTP <b id="radar-value-http">—</b></span><span class="radar-axis axis-right">Performance <b id="radar-value-performance">—</b></span><span class="radar-axis axis-bottom-right">Acessibilidade <b id="radar-value-accessibility">—</b></span><span class="radar-axis axis-bottom-left">DOM <b id="radar-value-dom">—</b></span><span class="radar-axis axis-left">JavaScript <b id="radar-value-javascript">—</b></span>
         <div class="radar-center"><div><strong id="dashboard-quality-index">—</strong><span>/100</span></div><small>Índice de qualidade</small><em id="dashboard-quality-label">Sem dados</em></div>
       </div>
       <div class="section-kicker map-legend">Mapa de qualidade</div>
@@ -327,15 +359,14 @@ export function renderHome(): string {
       </section>
       <section class="recent-runs">
         <div class="recent-head"><div class="section-kicker">Execuções recentes <span class="run-count" id="dashboard-run-count">Dados locais</span><span class="run-source" id="dashboard-source" hidden>Da sua conta</span></div><div class="recent-controls"><div class="dashboard-filters" role="group" aria-label="Filtrar execuções"><button class="active" type="button" data-dashboard-filter="all">Todas</button><button type="button" data-dashboard-filter="scan">Inspeção</button><button type="button" data-dashboard-filter="journey">Jornada</button><button type="button" data-dashboard-filter="api">API</button></div><button class="history-toggle" id="dashboard-history-toggle" type="button" aria-expanded="false" hidden>Ver histórico completo</button></div></div>
-        <div class="dashboard-table-head" id="dashboard-table-head" role="row" hidden><span></span><span role="columnheader">Execução</span><span role="columnheader">Ambiente</span><span role="columnheader">Status</span><span role="columnheader">Erros</span><span role="columnheader">Avisos</span><span role="columnheader">Qualidade</span><span role="columnheader">Horário</span><span role="columnheader">Duração</span><span></span></div>
-        <div class="dashboard-runs" id="dashboard-recent-list" role="rowgroup"></div>
+        <div class="dashboard-runs" id="dashboard-recent-list"></div>
         <div class="recent-empty" id="dashboard-recent-empty"><span class="icon-overview"><i></i></span><div><strong>Nenhuma execução encontrada</strong><p>Comece por uma inspeção, uma jornada ou uma requisição de API.</p></div><a href="/scanner">Executar agora</a></div>
       </section>
     </div>
     <aside class="live-signal">
       <div class="section-kicker signal-kicker"><span>Sinal ao vivo</span><span class="live-state" id="dashboard-live-state" data-state="connecting" title="Conectando ao sinal ao vivo" aria-live="polite"><span class="live-dot"></span><span class="sr-only">Conectando ao sinal ao vivo</span></span></div>
       <div class="signal-list" id="dashboard-signal-list"></div>
-      <div class="signal-empty" id="dashboard-signal-empty"><i>⌁</i><strong>Aguardando execução</strong><p>Erros, avisos e sucessos aparecerão aqui durante as análises.</p></div>
+      <div class="signal-empty" id="dashboard-signal-empty"><i aria-hidden="true">⌁</i><strong>Aguardando execução</strong><p>Erros, avisos e sucessos aparecerão aqui durante as análises.</p></div>
       <a class="signals-link" href="/scanner">Ver todos os sinais <span>→</span></a>
       <a class="quality-center-card" href="/em-construcao?area=central-de-qualidade"><span class="quality-center-icon"><i class="icon-overview"><b></b></i></span><span><strong>Central de qualidade</strong><small>Acompanhe padrões, tendências e a evolução da qualidade do projeto.</small><b>Acessar central <i>→</i></b></span></a>
     </aside>
@@ -377,6 +408,7 @@ export function renderApplicationsPage(): string {
     <form class="panel" id="application-form" novalidate>
       <h2 id="application-form-title">Nova aplicação</h2>
       <p class="sub">Um apelido e o endereço onde ela roda.</p>
+      <p class="form-unavailable" id="application-unavailable" hidden></p>
       <input type="hidden" id="application-id">
       <label for="application-name">Nome</label>
       <input id="application-name" maxlength="60" placeholder="Loja Web" required>
@@ -460,6 +492,12 @@ export function renderAuthPage(): string {
       ${authField("reset-password", "Nova senha", "password", "new-password", "Pelo menos 10 caracteres.", 'required minlength="10" maxlength="200"')}
       <button type="submit" id="reset-submit">Salvar e entrar</button>
     </form>
+
+    <div class="auth-unavailable" id="auth-unavailable" hidden>
+      <h1>Sem contas por aqui</h1>
+      <p>Neste servidor as análises ficam no seu navegador e cada relatório é acessado pelo próprio link. Não há o que cadastrar.</p>
+      <a href="/">Usar o QA Radar sem entrar</a>
+    </div>
 
     <div class="auth-external" id="auth-github-block" hidden>
       <span class="auth-divider"><i></i>ou<i></i></span>
