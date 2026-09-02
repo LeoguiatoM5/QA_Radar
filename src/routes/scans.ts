@@ -23,6 +23,7 @@ export function scanOptions(body: Record<string, unknown>, outputDir: string, co
   const url = textField(body, "url");
   if (!url) throw invalidRequest("Informe a URL da aplicação.");
   const args = [url, "--output", outputDir, "--format", "all"];
+  const project = textField(body, "project");
   const fields: Array<[string, string | undefined]> = [
     ["--browser", textField(body, "browser")],
     ["--fail-on", textField(body, "failOn")],
@@ -31,8 +32,13 @@ export function scanOptions(body: Record<string, unknown>, outputDir: string, co
     ["--screenshot", textField(body, "screenshot")],
     ["--ignore-status", textField(body, "ignoredStatuses")],
     ["--ignore-url", textField(body, "ignoredUrl")],
-    ["--project", textField(body, "project")],
-    ["--environment", textField(body, "environment")],
+    ["--project", project],
+    // Ambiente e baseline só existem dentro de um projeto: é o par
+    // projeto+ambiente que endereça o histórico. Sem projeto eles são
+    // descartados em vez de reprovarem a análise — a barra de contexto do
+    // dashboard preenche o ambiente sozinha, então exigir os dois aqui fazia a
+    // primeira execução de quem nunca digitou um projeto falhar sempre.
+    ["--environment", project ? textField(body, "environment") : undefined],
     ["--max-pages", numberField(body, "maxPages")],
   ];
   for (const [name, value] of fields) {
@@ -41,8 +47,8 @@ export function scanOptions(body: Record<string, unknown>, outputDir: string, co
   if (body.sitemap === true) args.push("--sitemap");
   if (body.accessibility === true) args.push("--accessibility");
   if (body.regressionsOnly === true) args.push("--regressions-only");
-  if (body.acceptBaseline === true) args.push("--accept-baseline");
-  if (textField(body, "project")) args.push("--history-dir", config.historyDir);
+  if (body.acceptBaseline === true && project) args.push("--accept-baseline");
+  if (project) args.push("--history-dir", config.historyDir);
   const parsed = validating(() => parseCli(args));
   if (!parsed.options) throw invalidRequest("Não foi possível preparar a análise.");
   const options = parsed.options;

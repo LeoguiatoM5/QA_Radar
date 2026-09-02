@@ -9,6 +9,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { createQaRadarServer } from "../src/server.js";
+import { scanOptions } from "../src/routes/scans.js";
 import { codeExecutionEnvironment } from "../src/code-execution.js";
 import type { OperationalEvent } from "../src/server.js";
 
@@ -1419,5 +1420,35 @@ describe("web server", () => {
     } finally {
       await new Promise<void>((resolve) => expirationServer.close(() => resolve()));
     }
+  });
+});
+
+describe("opções da análise", () => {
+  const config = {
+    resultsDir: "/tmp/qa-radar-results",
+    historyDir: "/tmp/qa-radar-history",
+    allowHistory: true,
+    allowCustomIgnorePatterns: true,
+    maxSitemapPages: 20,
+  } as unknown as Parameters<typeof scanOptions>[2];
+
+  // A barra de contexto do dashboard preenche o campo "Ambiente" sozinha, e
+  // "Projeto" nasce vazio. Enquanto o par era obrigatório, a primeira execução
+  // de quem nunca digitou um projeto morria com a mensagem da CLI
+  // "--environment exige a opção --project".
+  it("ignora ambiente e baseline quando não há projeto, em vez de reprovar", () => {
+    const options = scanOptions({ url: "https://exemplo.com", environment: "local", acceptBaseline: true }, "/tmp/saida", config);
+
+    assert.equal(options.environment, undefined);
+    assert.ok(!options.acceptBaseline);
+    assert.equal(options.project, undefined);
+  });
+
+  it("mantém ambiente e baseline quando o projeto existe", () => {
+    const options = scanOptions({ url: "https://exemplo.com", project: "loja-web", environment: "staging", acceptBaseline: true }, "/tmp/saida", config);
+
+    assert.equal(options.project, "loja-web");
+    assert.equal(options.environment, "staging");
+    assert.equal(options.acceptBaseline, true);
   });
 });
