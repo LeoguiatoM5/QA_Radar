@@ -28,6 +28,13 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   `/docs`, `/aplicacoes`, `/entrar` e `/em-construcao`. Inspeção, Jornada,
   Testes de API e Toolbox mantêm os dois valores enquanto o cliente das
   ferramentas continuar embutido.
+- O último cliente embutido saiu, e no caminho virou três. O
+  `WEB_CLIENT_SCRIPT` era um script só, carregado igual em Inspeção, Jornada e
+  Testes de API — cada página baixava o código das outras duas e o executava
+  inerte. Agora são `scanner`, `journey` e `api-tests`, com o que é comum em
+  `shared`. **Com isso nenhuma página do produto tem script embutido**, e o
+  `'unsafe-inline'` saiu do `script-src` de todas — só o Toolbox mantém,
+  porque os módulos dele ainda são declarados dentro da página.
 
 - **"Limpar histórico" na Visão geral.** As execuções recentes se acumulavam
   sem nenhuma forma de apagar, e a mesma lista tinha **três** cópias: a do

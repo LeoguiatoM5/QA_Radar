@@ -143,7 +143,7 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
       "permissions-policy": "camera=(), microphone=(), geolocation=()",
-      "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
+      "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
     });
     response.end(createJourneyPage(config.allowCodeMode));
     return true;
@@ -157,7 +157,7 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
       "permissions-policy": "camera=(), microphone=(), geolocation=()",
-      "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
+      "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
     });
     response.end(createApiTestsPage());
     return true;
@@ -171,7 +171,7 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
       "permissions-policy": "camera=(), microphone=(), geolocation=()",
-      "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
+      "content-security-policy": `default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'${turnstileSources}; frame-src 'self'${turnstileSources}; img-src 'self' data: blob:; connect-src 'self'${turnstileSources}`,
     });
     response.end(createWebPage(config.turnstileSiteKey, config.allowHistory, config.maxSitemapPages));
     return true;

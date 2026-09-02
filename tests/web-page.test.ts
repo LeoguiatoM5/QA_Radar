@@ -276,11 +276,11 @@ describe("dashboard components", () => {
     assert.match(html, /id="http-collection-search"/);
     assert.match(html, /id="http-history-list"/);
     assert.match(html, /id="http-clear-history"/);
-    assert.match(html, /qa-radar-api-variables/);
-    assert.match(html, /qa-radar-api-history/);
-    assert.match(html, /new AbortController\(\)/);
-    assert.match(html, /event\.key==='Enter'/);
     assert.match(html, />Enviar<\/button>/);
+    // O cliente virou módulo próprio; a página garante que carrega o dela e
+    // nenhum dos outros.
+    assert.match(html, /<script type="module" src="\/assets\/js\/api-tests\.js"><\/script>/);
+    assert.doesNotMatch(html, /src="\/assets\/js\/(scanner|journey)\.js"/);
     assert.doesNotMatch(html, /Execução desligada neste servidor/);
     assert.doesNotMatch(html, /id="playwright-code"|id="codegen-start"|id="codegen-stop"|id="code-mode-panel"/);
     assert.doesNotMatch(html, /id="scan-form"/);
@@ -296,9 +296,8 @@ describe("dashboard components", () => {
     assert.match(html, /Informe a URL e ajuste os critérios da análise/);
     assert.doesNotMatch(html, /Encontre falhas antes que o/);
     assert.match(html, /\.progress-bar\{/);
-    assert.match(html, /cancelButton\.addEventListener/);
-    assert.match(html, /queuePosition/);
-    assert.match(html, /Gerando relatórios/);
+    assert.match(html, /<script type="module" src="\/assets\/js\/scanner\.js"><\/script>/);
+    assert.doesNotMatch(html, /src="\/assets\/js\/(journey|api-tests)\.js"/);
     assert.match(html, /Histórico desabilitado neste servidor/);
     assert.doesNotMatch(html, /id="history-button"/);
   });

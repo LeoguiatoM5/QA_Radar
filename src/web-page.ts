@@ -1,4 +1,3 @@
-import { WEB_CLIENT_SCRIPT } from "./web-client.js";
 import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
 import { TOOLBOX_HOME_SCRIPT, TOOLBOX_SCRIPTS } from "./toolbox-client.js";
@@ -577,7 +576,7 @@ export function createWebPage(turnstileSiteKey?: string, allowHistory = false, m
   <style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}</style>
 </head>
 <body>${renderDashboard({ allowHistory, maxSitemapPages, turnstileWidget, historyWidget })}
-<script type="module" src="/assets/js/shell.js"></script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
+<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/scanner.js"></script></body></html>`;
 }
 
 export function createHomePage(): string {
@@ -630,14 +629,14 @@ export function createJourneyPage(allowCodeMode = false): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - Modo Jornada de Playwright"><title>QA Radar · Jornada Playwright</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${CODE_MODE_STYLES}</style></head>
-<body>${renderJourneyPage(allowCodeMode)}<script type="module" src="/assets/js/shell.js"></script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
+<body>${renderJourneyPage(allowCodeMode)}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/journey.js"></script></body></html>`;
 }
 
 export function createApiTestsPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - Testes de API"><title>QA Radar · Testes de API</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${API_TESTS_STYLES}</style></head>
-<body>${renderApiPage()}<script type="module" src="/assets/js/shell.js"></script><script>${WEB_CLIENT_SCRIPT}</script></body></html>`;
+<body>${renderApiPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/api-tests.js"></script></body></html>`;
 }
 
 export function createToolboxHomePage(): string {
