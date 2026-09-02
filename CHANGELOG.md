@@ -4,6 +4,16 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+### Adicionado
+
+- **"Limpar histórico" na Visão geral.** As execuções recentes se acumulavam
+  sem nenhuma forma de apagar, e havia duas cópias da mesma lista: a do
+  navegador e uma por sessão no servidor, atrás de um cookie de um ano —
+  com a URL de cada ambiente inspecionado. Apagar só a primeira não resolvia,
+  porque a segunda voltava inteira no carregamento seguinte. O botão apaga as
+  duas, com confirmação, e diz que as análises guardadas na conta não saem por
+  ali. Novo `DELETE /api/dashboard/activity`.
+
 ### Corrigido
 
 - **A Inspeção falhava na primeira execução em qualquer servidor com histórico

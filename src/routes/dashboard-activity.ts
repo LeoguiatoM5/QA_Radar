@@ -130,7 +130,15 @@ export const tryHandleDashboardActivity: RouteHandler = async (context, request,
     return true;
   }
 
-  response.setHeader("allow", "GET, POST");
+  // Sem forma de apagar, o histórico só crescia e ficava — com a URL de cada
+  // ambiente inspecionado — atrás de um cookie de um ano que ninguém vê.
+  if (request.method === "DELETE") {
+    await context.dashboardActivity.clear(sessionId);
+    response.writeHead(204).end();
+    return true;
+  }
+
+  response.setHeader("allow", "GET, POST, DELETE");
   jsonError(response, "method_not_allowed", "Método não permitido.");
   return true;
 };

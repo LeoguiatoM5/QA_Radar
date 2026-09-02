@@ -67,6 +67,9 @@ describe("dashboard components", () => {
     assert.match(html, /id="dashboard-signal-list"/);
     assert.match(html, /data-dashboard-filter="scan"/);
     assert.match(html, /id="dashboard-history-toggle"/);
+    assert.match(html, /id="dashboard-clear"/);
+    assert.match(html, /Limpar histórico/);
+    assert.match(html, /'\/api\/dashboard\/activity',\{method:'DELETE'\}/);
     // O cabeçalho da tabela nunca chegou a ser renderizado e deixava um
     // `role="rowgroup"` sem tabela por cima — violação crítica de
     // `aria-required-parent`. Os papéis órfãos não podem voltar.

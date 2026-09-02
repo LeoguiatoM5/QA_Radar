@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export type DashboardActivityType = "scan" | "journey" | "api";
@@ -71,6 +71,27 @@ export class DashboardActivityStore {
         }
       }
       return result;
+    } finally {
+      if (this.#writes.get(key) === write) this.#writes.delete(key);
+    }
+  }
+
+  /**
+   * Apaga o histórico deste navegador.
+   *
+   * Entra na mesma fila de escrita do `append` de propósito: apagar enquanto uma
+   * atividade está a caminho do disco deixaria o arquivo recriado logo depois,
+   * e quem clicou em "limpar" veria a execução voltar sozinha.
+   */
+  async clear(sessionId: string): Promise<void> {
+    const key = sessionHash(sessionId);
+    const previous = this.#writes.get(key) ?? Promise.resolve();
+    const write = previous.then(async () => {
+      await rm(this.#path(sessionId), { force: true });
+    });
+    this.#writes.set(key, write);
+    try {
+      await write;
     } finally {
       if (this.#writes.get(key) === write) this.#writes.delete(key);
     }

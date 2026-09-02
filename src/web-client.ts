@@ -783,8 +783,11 @@ const dashboardActivityKey='qa-radar-activity';
 const dashboardEsc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
 function loadDashboardActivity(){
   try{
-    const stored=JSON.parse(localStorage.getItem(dashboardActivityKey)||'[]');
-    if(Array.isArray(stored)&&stored.length)return stored;
+    const raw=localStorage.getItem(dashboardActivityKey);
+    if(raw!==null){
+      const stored=JSON.parse(raw);
+      if(Array.isArray(stored))return stored;
+    }
   }catch{}
   try{
     const apiHistory=JSON.parse(localStorage.getItem('qa-radar-api-history')||'[]');
@@ -849,6 +852,8 @@ function renderDashboard(){
   const filtered=dashboardFilter==='all'?activities:activities.filter(item=>item.type===dashboardFilter);
   document.querySelector('#dashboard-run-count').textContent=activities.length?(filtered.length===activities.length?activities.length:filtered.length+' de '+activities.length)+' local(is)':'Dados locais';
   historyToggle.hidden=!filtered.length;
+  const clearButton=document.querySelector('#dashboard-clear');
+  if(clearButton)clearButton.hidden=!activities.length;
   historyToggle.textContent=dashboardShowAll?'Mostrar recentes':'Ver histórico completo';
   historyToggle.setAttribute('aria-expanded',String(dashboardShowAll));
   ['scan','journey','api'].forEach(type=>{
@@ -956,6 +961,23 @@ document.querySelectorAll('[data-dashboard-filter]').forEach(button=>button.addE
   renderDashboard();
 }));
 document.querySelector('#dashboard-history-toggle')?.addEventListener('click',()=>{dashboardShowAll=!dashboardShowAll;renderDashboard()});
+// Limpar o histórico precisa apagar as duas cópias. O localStorage é o que a
+// lista lê primeiro, mas o servidor guarda a mesma coisa por navegador, atrás do
+// cookie do dashboard, e devolve tudo no próximo carregamento — apagar só uma
+// das duas faria as execuções voltarem sozinhas.
+const dashboardClear=document.querySelector('#dashboard-clear');
+dashboardClear?.addEventListener('click',async()=>{
+  const source=document.querySelector('#dashboard-source'),hasAccount=Boolean(source)&&!source.hidden;
+  const warning='Apagar '+dashboardCount(dashboardActivities.length,'execução','execuções')+' da Visão geral? A ação não tem volta.'+(hasAccount?'\n\nAs análises guardadas na sua conta não são apagadas por aqui.':'');
+  if(!confirm(warning))return;
+  dashboardClear.disabled=true;
+  try{localStorage.setItem(dashboardActivityKey,'[]')}catch{}
+  try{await fetch('/api/dashboard/activity',{method:'DELETE'})}catch{}
+  dashboardActivities=[];
+  dashboardShowAll=false;
+  renderDashboard();
+  dashboardClear.disabled=false;
+});
 window.addEventListener('storage',event=>{if(event.key===dashboardActivityKey){dashboardActivities=loadDashboardActivity();renderDashboard()}});
 
 /**

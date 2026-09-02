@@ -1346,6 +1346,43 @@ describe("web server", () => {
       const response = await fetch(`http://127.0.0.1:${restartedAddress.port}/api/dashboard/activity`, { headers: { cookie } });
       const body = (await response.json()) as { activities: Array<{ id: string }> };
       assert.equal(body.activities[0]?.id, "api-1");
+
+      const cleared = await fetch(`http://127.0.0.1:${restartedAddress.port}/api/dashboard/activity`, { method: "DELETE", headers: { cookie } });
+      assert.equal(cleared.status, 204);
+
+      const afterClear = await fetch(`http://127.0.0.1:${restartedAddress.port}/api/dashboard/activity`, { headers: { cookie } });
+      assert.deepEqual(await afterClear.json(), { activities: [] });
+
+      // Apagar duas vezes não é erro: quem clicou já não tem histórico nenhum.
+      const again = await fetch(`http://127.0.0.1:${restartedAddress.port}/api/dashboard/activity`, { method: "DELETE", headers: { cookie } });
+      assert.equal(again.status, 204);
+
+      // E limpar um navegador não pode alcançar o histórico de outro.
+      const otherUrl = `http://127.0.0.1:${restartedAddress.port}/api/dashboard/activity`;
+      const otherCookie = ((await fetch(otherUrl)).headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      assert.notEqual(otherCookie, cookie);
+      await fetch(otherUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: otherCookie },
+        body: JSON.stringify({
+          id: "de-outro",
+          type: "scan",
+          title: "Inspeção de outro navegador",
+          detail: "",
+          status: "success",
+          errors: 0,
+          warnings: 0,
+          durationMs: 10,
+          href: "/scanner",
+          scores: {},
+        }),
+      });
+      await fetch(otherUrl, { method: "DELETE", headers: { cookie } });
+      const otherBrowser = (await (await fetch(otherUrl, { headers: { cookie: otherCookie } })).json()) as { activities: Array<{ id: string }> };
+      assert.deepEqual(
+        otherBrowser.activities.map((item) => item.id),
+        ["de-outro"],
+      );
     } finally {
       await new Promise<void>((resolve) => restartedServer.close(() => resolve()));
       await rm(resultsDir, { recursive: true, force: true });
