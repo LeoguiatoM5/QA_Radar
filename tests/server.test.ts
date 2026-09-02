@@ -1489,3 +1489,31 @@ describe("opções da análise", () => {
     assert.equal(options.acceptBaseline, true);
   });
 });
+
+describe("módulos de navegador", () => {
+  // A rota é o que permite escrever o cliente como TypeScript de verdade em vez
+  // de texto dentro de `String.raw`. A lista fechada é o que impede o nome vindo
+  // da URL de virar leitura arbitrária de arquivo.
+  it("serve o módulo listado e recusa qualquer outro caminho", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-assets-"));
+    const assetServer = createQaRadarServer({ resultsDir });
+    await new Promise<void>((resolve) => assetServer.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${(assetServer.address() as AddressInfo).port}`;
+    try {
+      const servido = await fetch(`${base}/assets/js/auth.js`);
+      assert.equal(servido.status, 200);
+      assert.match(servido.headers.get("content-type") ?? "", /^text\/javascript/);
+      assert.equal(servido.headers.get("x-content-type-options"), "nosniff");
+      const code = await servido.text();
+      assert.match(code, /auth-signin-form/);
+      assert.doesNotMatch(code, /sourceMappingURL/, "o .map não é servido: a referência renderia 404 no DevTools");
+
+      for (const caminho of ["/assets/js/server.js", "/assets/js/nao-existe.js", "/assets/js/auth.ts"]) {
+        assert.equal((await fetch(`${base}${caminho}`)).status, 404, caminho);
+      }
+    } finally {
+      await new Promise<void>((resolve) => assetServer.close(() => resolve()));
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+});

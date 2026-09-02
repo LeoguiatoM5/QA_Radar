@@ -21,6 +21,7 @@ import { CodegenSessionStore, type CodegenSession } from "./codegen-session-stor
 import { CodeExecutionJobStore, type CodeExecutionJob } from "./code-execution-job-store.js";
 import { LegacyJourneyRegistry, type JourneyJob } from "./legacy-journey-registry.js";
 import type { RequestContext, RouteHandler } from "./routes/context.js";
+import { tryHandleAssets } from "./routes/assets.js";
 import { tryHandlePages } from "./routes/pages.js";
 import { tryHandleCodegen } from "./routes/codegen.js";
 import { tryHandleCodeExecution } from "./routes/code-execution.js";
@@ -176,6 +177,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
 };
 
 const ROUTE_HANDLERS: RouteHandler[] = [
+  tryHandleAssets,
   tryHandlePages,
   tryHandleAuth,
   tryHandleApplications,

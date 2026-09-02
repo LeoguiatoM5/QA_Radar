@@ -112,9 +112,11 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
       "permissions-policy": "camera=(), microphone=(), geolocation=()",
       // `form-action 'self'` importa aqui mais do que nas outras: esta é a única
       // página onde alguém digita uma senha, e é o que impede um script injetado
-      // de reapontar o envio para fora.
+      // de reapontar o envio para fora. E como o cliente virou módulo servido de
+      // `/assets/js/`, não há mais script embutido: `'unsafe-inline'` saiu do
+      // `script-src`, então um `<script>` injetado no HTML não executa.
       "content-security-policy":
-        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'",
     });
     response.end(createAuthPage());
     return true;

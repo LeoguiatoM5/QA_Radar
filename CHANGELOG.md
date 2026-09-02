@@ -6,6 +6,18 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **O JavaScript do cliente saiu das strings — primeira etapa.** A interface
+  inteira vivia dentro de `String.raw`, então o `tsc` e o `eslint` tratavam o
+  código do navegador como texto e não olhavam para ele; foi de lá que saíram os
+  bugs de UI mais caros, inclusive um erro de sintaxe que passou pelo build e
+  pelos 553 testes e só apareceu abrindo a página. Agora existe `src/browser/`,
+  compilado por `tsconfig.browser.json` com a lib do DOM e servido em
+  `/assets/js/<módulo>.js` — em produção o `.js` do build, em desenvolvimento
+  transpilado na hora, o mesmo caminho que o Toolbox já usava para
+  `src/toolbox/`. A lista de módulos permitidos fecha a rota. `/entrar` é a
+  primeira página migrada e, sem script embutido, perdeu o `'unsafe-inline'` do
+  `script-src`: um `<script>` injetado no HTML dela não executa mais.
+
 - **"Limpar histórico" na Visão geral.** As execuções recentes se acumulavam
   sem nenhuma forma de apagar, e a mesma lista tinha **três** cópias: a do
   navegador, uma por sessão no servidor — atrás de um cookie de um ano, com a

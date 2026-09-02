@@ -18,6 +18,17 @@ describe("entrada e cadastro", () => {
     assert.match(html, /name="robots" content="noindex"/, "a tela de entrada não deve ser indexada");
   });
 
+  it("carrega o cliente como módulo, sem script embutido", () => {
+    // O JavaScript do cliente vivia dentro de um `String.raw` do servidor, onde
+    // nem o `tsc` nem o `eslint` olhavam — foi de lá que saiu um erro de sintaxe
+    // que passou pelo build e pelos testes e só apareceu abrindo a página.
+    // Voltar a embutir script aqui desfaria isso em silêncio.
+    const html = createAuthPage();
+
+    assert.match(html, /<script type="module" src="\/assets\/js\/auth\.js"><\/script>/);
+    assert.doesNotMatch(html, /<script(?! type="module")/, "nenhum script embutido nesta página");
+  });
+
   it("não carrega o script das ferramentas na tela de entrada", () => {
     // A página é anônima por definição: puxar o cliente do scanner traria
     // consultas e estado que ninguém ali pode usar.

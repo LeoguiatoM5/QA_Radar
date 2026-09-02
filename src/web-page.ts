@@ -1,4 +1,4 @@
-import { APPLICATIONS_CLIENT_SCRIPT, AUTH_CLIENT_SCRIPT, HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
+import { APPLICATIONS_CLIENT_SCRIPT, HOME_DASHBOARD_SCRIPT, SHELL_CLIENT_SCRIPT, WEB_CLIENT_SCRIPT } from "./web-client.js";
 import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
 import { TOOLBOX_HOME_SCRIPT, TOOLBOX_SCRIPTS } from "./toolbox-client.js";
@@ -619,7 +619,7 @@ export function createAuthPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Entrar ou criar conta no QA Radar"><meta name="robots" content="noindex"><title>QA Radar · Entrar</title><style>${WEB_STYLES}${AUTH_STYLES}</style></head>
-<body>${renderAuthPage()}<script>${AUTH_CLIENT_SCRIPT}</script></body>
+<body>${renderAuthPage()}<script type="module" src="/assets/js/auth.js"></script></body>
 </html>`;
 }
 
