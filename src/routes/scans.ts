@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseCli } from "../cli.js";
@@ -298,6 +298,32 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     }
     const scans = await context.scanJobs.listForOwner(viewer.id, MAX_HISTORY_ITEMS);
     json(response, 200, { scans: scans.map((scan) => publicPersistedJob(scan)) });
+    return true;
+  }
+
+  // Limpar o histórico precisa alcançar esta cópia também. Sem ela, apagar no
+  // dashboard só durava até a próxima recarga: a lista da conta voltava inteira,
+  // e com ela o índice de qualidade e os sinais.
+  if (request.method === "DELETE" && url.pathname === "/api/scans") {
+    const viewer = await context.currentUser(request);
+    if (!viewer) {
+      jsonError(response, "unauthorized", "Entre com sua conta para apagar seu histórico de análises.");
+      return true;
+    }
+    const scans = await context.scanJobs.listForOwner(viewer.id, MAX_HISTORY_ITEMS);
+    const removed = await context.scanJobs.removeForOwner(viewer.id);
+    // Apagar a linha e deixar o relatório no disco não é apagar: o HTML
+    // continuaria acessível por link. Só entram os que já terminaram — mexer no
+    // diretório de uma análise em curso quebraria a execução que está rodando.
+    await Promise.all(
+      scans
+        .filter((scan) => removed.includes(scan.id) && isTerminalJobStatus(scan.status))
+        .map(async (scan) => {
+          await context.artifacts.remove(scan.id).catch(() => {});
+          await rm(scan.options.outputDir, { recursive: true, force: true }).catch(() => {});
+        }),
+    );
+    json(response, 200, { removed: removed.length });
     return true;
   }
 

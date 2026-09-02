@@ -202,6 +202,30 @@ function contractFor(name: string, create: () => Promise<ScanJobRepository>, hoo
       assert.deepEqual(await repository.listByOwner(OWNER_B, 50), []);
     });
 
+    it("apaga o histórico de uma conta sem tocar no das outras", async () => {
+      // "Limpar histórico" na Visão geral chega aqui. Alcançar a análise de
+      // outra conta seria a pior falha possível desta operação.
+      const repository = await create();
+      const daContaA = job({ ownerId: OWNER_A });
+      const outraDaContaA = job({ ownerId: OWNER_A });
+      const daContaB = job({ ownerId: OWNER_B });
+      const anonima = job();
+      for (const entry of [daContaA, outraDaContaA, daContaB, anonima]) await repository.insert(entry);
+
+      const removidos = await repository.deleteByOwner(OWNER_A);
+      assert.deepEqual([...removidos].sort(), [daContaA.id, outraDaContaA.id].sort());
+      assert.deepEqual(await repository.listByOwner(OWNER_A, 50), []);
+      assert.equal((await repository.listByOwner(OWNER_B, 50)).length, 1);
+      assert.ok(await repository.get(anonima.id), "análise anônima não tem dono e não entra na limpeza");
+    });
+
+    it("apagar o histórico de uma conta vazia não é erro", async () => {
+      const repository = await create();
+      await repository.insert(job({ ownerId: OWNER_A }));
+      assert.deepEqual(await repository.deleteByOwner(OWNER_B), []);
+      assert.equal((await repository.listByOwner(OWNER_A, 50)).length, 1);
+    });
+
     it("preserva o dono na volta do armazenamento", async () => {
       const repository = await create();
       const comDono = job({ ownerId: OWNER_A });

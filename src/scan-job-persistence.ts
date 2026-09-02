@@ -19,6 +19,8 @@ export interface ScanJobPersistence {
   updated(job: ScanJob): Promise<void>;
   /** Remove o registro quando a retenção expira. Nunca lança. */
   removed(id: string): Promise<void>;
+  /** Apaga o histórico inteiro de uma conta e devolve os ids removidos. */
+  removeForOwner(ownerId: string): Promise<string[]>;
   /** Busca um job que não está mais em memória. */
   load(id: string): Promise<PersistedScanJob | undefined>;
   /**
@@ -46,6 +48,7 @@ export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
   created: async () => {},
   updated: async () => {},
   removed: async () => {},
+  removeForOwner: async () => [],
   load: async () => undefined,
   recoverOrphans: async () => [],
   pending: async () => [],
@@ -96,6 +99,12 @@ export function createScanJobPersistence({ repository, retentionMs, onError }: S
     created: (job) => repository.insert(toPersistedScanJob(job, retentionMs)).then(() => undefined),
     updated: (job) => swallow("update", () => repository.update(toPersistedScanJob(job, retentionMs))),
     removed: (id) => swallow("delete", () => repository.delete(id)),
+    async removeForOwner(ownerId) {
+      // Aqui a falha não pode ser engolida: quem pediu para apagar precisa
+      // saber se sobrou alguma coisa. Engolir devolveria "pronto" com o
+      // histórico intacto.
+      return await repository.deleteByOwner(ownerId);
+    },
     async load(id) {
       try {
         return await repository.get(id);

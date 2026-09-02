@@ -46,6 +46,14 @@ export interface ScanJobRepository {
   /** Histórico de uma conta, do mais recente para o mais antigo. */
   listByOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]>;
   delete(id: string): Promise<void>;
+  /**
+   * Apaga o histórico inteiro de uma conta e devolve os ids removidos.
+   *
+   * Os ids importam: quem chama ainda precisa remover os artefatos e o
+   * diretório de saída de cada análise, senão "apagar o histórico" deixaria os
+   * relatórios acessíveis por link.
+   */
+  deleteByOwner(ownerId: string): Promise<string[]>;
   /** Posição na fila, 1 para o próximo. `undefined` se o job não está na fila. */
   position(id: string): Promise<number | undefined>;
   counts(): Promise<{ active: number; queued: number; jobs: number }>;
@@ -152,6 +160,20 @@ export class InMemoryScanJobRepository implements ScanJobRepository {
     this.#jobs.delete(id);
     const index = this.#order.indexOf(id);
     if (index >= 0) this.#order.splice(index, 1);
+  }
+
+  async deleteByOwner(ownerId: string): Promise<string[]> {
+    const removed: string[] = [];
+    for (const [id, job] of this.#jobs) {
+      if (job.ownerId !== ownerId) continue;
+      this.#jobs.delete(id);
+      removed.push(id);
+    }
+    for (const id of removed) {
+      const index = this.#order.indexOf(id);
+      if (index >= 0) this.#order.splice(index, 1);
+    }
+    return removed;
   }
 
   async position(id: string): Promise<number | undefined> {
@@ -307,6 +329,11 @@ export class PostgresScanJobRepository implements ScanJobRepository {
 
   async delete(id: string): Promise<void> {
     await this.database.query("delete from scan_jobs where id = $1", [id]);
+  }
+
+  async deleteByOwner(ownerId: string): Promise<string[]> {
+    const rows = await this.database.query<{ id: string }>("delete from scan_jobs where owner_id = $1 returning id", [ownerId]);
+    return rows.map((row) => row.id);
   }
 
   async position(id: string): Promise<number | undefined> {

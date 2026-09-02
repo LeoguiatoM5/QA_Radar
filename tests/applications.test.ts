@@ -327,3 +327,82 @@ describe("análise vinculada a uma aplicação", () => {
     }
   });
 });
+
+/**
+ * Fica aqui, e não em `server.test.ts`, porque a bateria de contas já mora
+ * neste arquivo: cadastro, cookie de sessão e persistência em memória. Duplicar
+ * esse arranjo em outro lugar custaria mais do que a vizinhança imperfeita.
+ */
+describe("histórico da conta", () => {
+  function withPersistence() {
+    return {
+      ...withAccounts(),
+      scanJobs: createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 3_600_000, onError: () => {} }),
+    };
+  }
+
+  async function startScan(baseUrl: string, cookie: string) {
+    const response = await fetch(`${baseUrl}/api/v1/scans`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ url: baseUrl }),
+    });
+    assert.equal(response.status, 202);
+  }
+
+  async function historyOf(baseUrl: string, cookie: string): Promise<number> {
+    const body = (await (await fetch(`${baseUrl}/api/v1/scans`, { headers: { cookie } })).json()) as { scans: unknown[] };
+    return body.scans.length;
+  }
+
+  // "Limpar histórico" na Visão geral apaga três cópias, e esta é a que fazia
+  // tudo voltar: sem ela, recarregar a página trazia as execuções de novo, com
+  // o índice de qualidade e os sinais junto.
+  it("apaga o histórico da conta e não deixa nada voltar", async () => {
+    const { baseUrl, close } = await startServer(withPersistence());
+    try {
+      const cookie = await signUp(baseUrl, "dono@exemplo.com");
+      await startScan(baseUrl, cookie);
+      await startScan(baseUrl, cookie);
+      assert.equal(await historyOf(baseUrl, cookie), 2);
+
+      const limpeza = await fetch(`${baseUrl}/api/v1/scans`, { method: "DELETE", headers: { cookie } });
+      assert.equal(limpeza.status, 200);
+      assert.deepEqual(await limpeza.json(), { removed: 2 });
+      assert.equal(await historyOf(baseUrl, cookie), 0);
+
+      // Repetir converge para o mesmo estado, então não é conflito.
+      const denovo = await fetch(`${baseUrl}/api/v1/scans`, { method: "DELETE", headers: { cookie } });
+      assert.equal(denovo.status, 200);
+      assert.deepEqual(await denovo.json(), { removed: 0 });
+    } finally {
+      await close();
+    }
+  });
+
+  it("não alcança o histórico de outra conta", async () => {
+    const { baseUrl, close } = await startServer(withPersistence());
+    try {
+      const cookieA = await signUp(baseUrl, "a@exemplo.com");
+      const cookieB = await signUp(baseUrl, "b@exemplo.com");
+      await startScan(baseUrl, cookieA);
+      await startScan(baseUrl, cookieB);
+
+      await fetch(`${baseUrl}/api/v1/scans`, { method: "DELETE", headers: { cookie: cookieA } });
+      assert.equal(await historyOf(baseUrl, cookieA), 0);
+      assert.equal(await historyOf(baseUrl, cookieB), 1);
+    } finally {
+      await close();
+    }
+  });
+
+  it("exige conta para apagar", async () => {
+    const { baseUrl, close } = await startServer(withPersistence());
+    try {
+      const anonima = await fetch(`${baseUrl}/api/v1/scans`, { method: "DELETE" });
+      assert.equal(anonima.status, 401);
+    } finally {
+      await close();
+    }
+  });
+});

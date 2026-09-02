@@ -7,12 +7,15 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 ### Adicionado
 
 - **"Limpar histórico" na Visão geral.** As execuções recentes se acumulavam
-  sem nenhuma forma de apagar, e havia duas cópias da mesma lista: a do
-  navegador e uma por sessão no servidor, atrás de um cookie de um ano —
-  com a URL de cada ambiente inspecionado. Apagar só a primeira não resolvia,
-  porque a segunda voltava inteira no carregamento seguinte. O botão apaga as
-  duas, com confirmação, e diz que as análises guardadas na conta não saem por
-  ali. Novo `DELETE /api/dashboard/activity`.
+  sem nenhuma forma de apagar, e a mesma lista tinha **três** cópias: a do
+  navegador, uma por sessão no servidor — atrás de um cookie de um ano, com a
+  URL de cada ambiente inspecionado — e a da conta, no banco. Apagar qualquer
+  subconjunto delas não resolvia: o que sobrasse voltava inteiro no
+  carregamento seguinte. O botão apaga as três, com confirmação, e não deixa
+  resquício: os relatórios das análises que já terminaram saem do disco e do
+  storage junto. Novos `DELETE /api/dashboard/activity` e
+  `DELETE /api/v1/scans`; o `GET /api/v1/scans`, que também não estava no
+  contrato publicado, entrou junto.
 
 ### Corrigido
 
@@ -49,6 +52,11 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   seguinte, visível na Jornada.
 - Alinhamento alternado dos números de qualidade quando viram cartões no
   celular, e filtros de execução com 30px de altura.
+- **A Visão geral sem execuções ficava com sobras do render anterior.** O ramo
+  vazio limpava a lista de execuções e voltava, deixando para trás os sinais já
+  desenhados, os valores dos eixos do radar, o índice de qualidade e as
+  contagens de erros e avisos. Depois de limpar o histórico a tela dizia
+  "nenhuma execução encontrada" ao lado de sete sinais e de um índice 80.
 
 ### Mudado
 

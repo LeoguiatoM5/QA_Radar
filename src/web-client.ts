@@ -861,10 +861,24 @@ function renderDashboard(){
     if(label)label.textContent=latest?'Última execução '+dashboardTime(latest.createdAt):'Sem execuções recentes';
   });
   if(!activities.length){
-    recent.innerHTML='';emptyRecent.hidden=false;emptySignals.hidden=false;
+    recent.innerHTML='';signals.innerHTML='';
+    emptyRecent.hidden=false;emptySignals.hidden=false;
     // Sem execuções o radar mostra só a grade: nada de polígono sugerindo dados.
     const area=document.querySelector('.radar-area');if(area)area.style.opacity='0';
     document.querySelectorAll('.radar-dot').forEach(dot=>{dot.style.opacity='0'});
+    for(const axis of ['http','performance','accessibility','dom','javascript']){
+      const label=document.querySelector('#radar-value-'+axis);if(label)label.textContent='—';
+    }
+    document.querySelector('#dashboard-quality-index').textContent='—';
+    document.querySelector('#dashboard-quality-label').textContent='Sem dados';
+    document.querySelector('.radar-visual').setAttribute('aria-label','Mapa de qualidade sem dados');
+    const accountBadge=document.querySelector('#dashboard-source');
+    if(accountBadge)accountBadge.hidden=true;
+    for(const id of ['errors','warnings']){
+      const field=document.querySelector('#dashboard-'+id);if(field)field.textContent='0';
+      const delta=document.querySelector('#dashboard-'+id+'-delta');
+      if(delta){delta.className='quality-delta';delta.textContent=''}
+    }
     return;
   }
   emptyRecent.hidden=filtered.length>0;emptySignals.hidden=true;
@@ -968,11 +982,14 @@ document.querySelector('#dashboard-history-toggle')?.addEventListener('click',()
 const dashboardClear=document.querySelector('#dashboard-clear');
 dashboardClear?.addEventListener('click',async()=>{
   const source=document.querySelector('#dashboard-source'),hasAccount=Boolean(source)&&!source.hidden;
-  const warning='Apagar '+dashboardCount(dashboardActivities.length,'execução','execuções')+' da Visão geral? A ação não tem volta.'+(hasAccount?'\n\nAs análises guardadas na sua conta não são apagadas por aqui.':'');
+  const warning='Apagar '+dashboardCount(dashboardActivities.length,'execução','execuções')+' da Visão geral? A ação não tem volta.'+(hasAccount?'\n\nInclui as análises guardadas na sua conta, com os relatórios delas.':'');
   if(!confirm(warning))return;
   dashboardClear.disabled=true;
   try{localStorage.setItem(dashboardActivityKey,'[]')}catch{}
   try{await fetch('/api/dashboard/activity',{method:'DELETE'})}catch{}
+  // Terceira cópia: a da conta. Era ela que fazia tudo voltar na recarga
+  // seguinte, e por isso a confirmação avisa que ela também vai embora.
+  if(hasAccount){try{await fetch('/api/v1/scans',{method:'DELETE'})}catch{}}
   dashboardActivities=[];
   dashboardShowAll=false;
   renderDashboard();

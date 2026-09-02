@@ -182,6 +182,43 @@ export function createOpenApiDocument(): Record<string, unknown> {
             ...errorResponses([400, 403, 409, 413, 429, 500]),
           },
         },
+        get: {
+          tags: ["Análises"],
+          summary: "Listar o histórico da conta",
+          description: "Análises da conta autenticada, da mais recente para a mais antiga. Exige sessão: análises anônimas não pertencem a ninguém e não aparecem aqui.",
+          responses: {
+            "200": {
+              description: "Histórico da conta.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["scans"],
+                    properties: { scans: { type: "array", items: { $ref: "#/components/schemas/Scan" } } },
+                  },
+                },
+              },
+            },
+            ...errorResponses([401, 500]),
+          },
+        },
+        delete: {
+          tags: ["Análises"],
+          summary: "Apagar o histórico da conta",
+          description:
+            "Remove todas as análises da conta autenticada, junto com os relatórios e artefatos das que já terminaram. Não tem volta e não alcança o histórico de outra conta. Repetir devolve 200 com `removed: 0`, porque converge para o mesmo estado.",
+          responses: {
+            "200": {
+              description: "Histórico apagado.",
+              content: {
+                "application/json": {
+                  schema: { type: "object", required: ["removed"], properties: { removed: { type: "integer", minimum: 0, description: "Quantas análises foram removidas." } } },
+                },
+              },
+            },
+            ...errorResponses([401, 500]),
+          },
+        },
       },
       "/api/v1/scans/{id}": {
         get: {
