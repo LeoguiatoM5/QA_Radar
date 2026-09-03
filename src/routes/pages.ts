@@ -4,6 +4,7 @@ import {
   createApiTestsPage,
   createApplicationsPage,
   createReportsPage,
+  createQualityPage,
   createAuthPage,
   createConstructionPage,
   createDocsPage,
@@ -110,6 +111,20 @@ export const tryHandlePages: RouteHandler = async (context, request, response, u
         "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob:; connect-src 'self'",
     });
     response.end(createReportsPage());
+    return true;
+  }
+
+  if (request.method === "GET" && url.pathname === "/central-de-qualidade") {
+    response.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
+      "content-security-policy":
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob:; connect-src 'self'",
+    });
+    response.end(createQualityPage());
     return true;
   }
 

@@ -184,10 +184,10 @@ describe("dashboard components", () => {
     assert.match(html, /nav-link-supporting active" href="\/em-construcao\?area=alertas" aria-current="page"/);
   });
 
-  it("cai na Central de qualidade quando a área pedida não existe", () => {
+  it("cai em Alertas quando a área pedida não existe", () => {
     for (const area of ["", "inexistente", "<script>alert(1)</script>"]) {
       const html = createConstructionPage(area);
-      assert.match(html, /<div class="eyebrow">Central de qualidade<\/div>/);
+      assert.match(html, /<div class="eyebrow">Alertas<\/div>/);
       assert.doesNotMatch(html, /<script>alert/);
     }
   });

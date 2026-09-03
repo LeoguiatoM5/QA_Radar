@@ -1,4 +1,15 @@
-import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage, renderReportsPage } from "./web-components.js";
+import {
+  renderApiPage,
+  renderApplicationsPage,
+  renderAuthPage,
+  renderConstructionPage,
+  renderDashboard,
+  renderDocs,
+  renderHome,
+  renderJourneyPage,
+  renderQualityPage,
+  renderReportsPage,
+} from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
 import type { QaToolDefinition } from "./toolbox/catalog.js";
 import { WEB_STYLES } from "./web-styles.js";
@@ -635,6 +646,48 @@ export function createReportsPage(): string {
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - histórico de execuções"><title>QA Radar · Relatórios</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${REPORTS_STYLES}</style></head>
 <body>${renderReportsPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/reports.js"></script></body>
+</html>`;
+}
+
+const QUALITY_STYLES = `
+.quality-layout{display:grid;gap:18px}
+.quality-filter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:12px}
+.quality-filters .tool-field label{margin-top:0}
+.quality-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.quality-tile{position:relative}
+.quality-tile .quality-delta{position:absolute;top:14px;right:16px;font-size:.68rem}
+.quality-tile .quality-delta.good:before{content:"▲ ";color:#35d495}
+.quality-tile .quality-delta.bad:before{content:"▼ ";color:#ff625c}
+.quality-list-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:12px}
+.quality-list-head h2{margin:0}
+.quality-trend{display:flex;align-items:flex-end;gap:3px;height:130px;overflow-x:auto;padding-bottom:2px}
+.quality-bar{flex:1 1 0;min-width:4px;max-width:22px;border-radius:2px 2px 0 0;overflow:hidden;display:flex;flex-direction:column;background:#0c1c2c}
+.quality-bar b{display:block;background:#ff625c}
+.quality-bar i{display:block;background:#35d495}
+.quality-bar u{display:block;background:#f0c869}
+.quality-bar-empty{background:#16283a}
+.quality-kind-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.quality-kind-card{background:#07101d;border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.quality-kind-card small{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+.quality-kind-card strong{display:block;margin-top:6px;font-size:1.5rem;font-variant-numeric:tabular-nums}
+.quality-kind-card em{display:block;margin-top:4px;color:var(--muted);font-size:.74rem;font-style:normal}
+.quality-app-table{display:grid;gap:8px}
+.quality-app-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:14px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:#07101d}
+.quality-app-name{min-width:0;font-size:.86rem;font-weight:600;color:#e7f1fa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quality-app-count{color:var(--muted);font-size:.76rem;white-space:nowrap}
+.quality-app-rate{font-variant-numeric:tabular-nums;font-size:.86rem;font-weight:600;white-space:nowrap}
+.quality-app-rate.low{color:#ff625c}
+.quality-app-rate.high{color:#35d495}
+.quality-app-last{color:var(--muted);font-size:.74rem;white-space:nowrap}
+@media(max-width:900px){.quality-summary,.quality-kind-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.quality-filter-grid,.quality-summary,.quality-kind-grid{grid-template-columns:1fr}.quality-app-row{grid-template-columns:minmax(0,1fr) auto}.quality-app-count,.quality-app-last{display:none}}
+`;
+
+export function createQualityPage(): string {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - resumo de qualidade da conta"><title>QA Radar · Central de qualidade</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${QUALITY_STYLES}</style></head>
+<body>${renderQualityPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/quality.js"></script></body>
 </html>`;
 }
 

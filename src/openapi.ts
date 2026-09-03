@@ -226,6 +226,28 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      "/api/v1/quality/summary": {
+        get: {
+          tags: ["Relatórios"],
+          summary: "Resumo de qualidade da conta",
+          description:
+            "A mesma linha do tempo de `/api/v1/executions`, somada em vez de listada: total, taxa de sucesso, comparação com o período anterior de igual duração, quebra por tipo e por aplicação, e um ponto por dia para tendência. Acima de `MAX_QUALITY_ENTRIES` execuções no período os números viram aproximados (`truncated`).",
+          parameters: [
+            { name: "aplicacao", in: "query", required: false, schema: { type: "string", format: "uuid" }, description: "Só desta aplicação. De outra conta responde 404." },
+            {
+              name: "de",
+              in: "query",
+              required: false,
+              schema: { type: "string", format: "date-time" },
+              description: "Início do período. Ausente soma a conta inteira e não há comparação com período anterior.",
+            },
+          ],
+          responses: {
+            "200": { description: "O resumo do período.", content: { "application/json": { schema: { $ref: "#/components/schemas/QualitySummary" } } } },
+            ...errorResponses([400, 401, 403, 404, 405, 500]),
+          },
+        },
+      },
       "/api/v1/applications/{id}/collections": {
         get: {
           tags: ["Testes de API"],
@@ -611,6 +633,58 @@ export function createOpenApiDocument(): Record<string, unknown> {
             applicationId: { type: "string", format: "uuid", nullable: true },
             applicationName: { type: "string", nullable: true },
             href: { type: "string", description: "Para onde a linha leva." },
+          },
+        },
+        QualityCounts: {
+          type: "object",
+          required: ["total", "passed", "failed", "running", "passRate"],
+          properties: {
+            total: { type: "integer" },
+            passed: { type: "integer" },
+            failed: { type: "integer" },
+            running: { type: "integer" },
+            passRate: { type: "integer", nullable: true, description: "0 a 100. Ausente quando nenhuma execução do grupo terminou." },
+          },
+        },
+        QualitySummary: {
+          type: "object",
+          required: ["current", "byKind", "byApplication", "daily", "truncated"],
+          properties: {
+            current: { $ref: "#/components/schemas/QualityCounts" },
+            previous: { allOf: [{ $ref: "#/components/schemas/QualityCounts" }], nullable: true, description: 'Ausente sem período: "desde o começo" não tem um anterior para comparar.' },
+            byKind: {
+              type: "object",
+              required: ["scan", "journey", "api"],
+              properties: { scan: { $ref: "#/components/schemas/QualityCounts" }, journey: { $ref: "#/components/schemas/QualityCounts" }, api: { $ref: "#/components/schemas/QualityCounts" } },
+            },
+            byApplication: {
+              type: "array",
+              description: "Até 10 aplicações, da maior contagem de execuções para a menor.",
+              items: {
+                allOf: [
+                  { $ref: "#/components/schemas/QualityCounts" },
+                  {
+                    type: "object",
+                    required: ["lastRunAt"],
+                    properties: {
+                      applicationId: { type: "string", format: "uuid", nullable: true },
+                      applicationName: { type: "string", nullable: true },
+                      lastRunAt: { type: "string", format: "date-time" },
+                    },
+                  },
+                ],
+              },
+            },
+            daily: {
+              type: "array",
+              description: "Vazio sem período. Com período, um ponto por dia, inclusive os sem execução.",
+              items: {
+                type: "object",
+                required: ["date", "total", "passed", "failed"],
+                properties: { date: { type: "string", format: "date" }, total: { type: "integer" }, passed: { type: "integer" }, failed: { type: "integer" } },
+              },
+            },
+            truncated: { type: "boolean", description: "O período tinha mais execuções do que o resumo somou; os números são aproximados." },
           },
         },
         ApiRunSummary: {

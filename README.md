@@ -1052,6 +1052,11 @@ filtro por aplicação, tipo e período. Depende de conta — sem banco a págin
 isso e o histórico continua na Visão geral, por navegador. A API por trás é
 `GET /api/v1/executions`, paginada por cursor (`nextCursor`).
 
+**Central de qualidade (`/central-de-qualidade`)** soma a mesma linha do tempo
+em vez de listá-la: total, taxa de sucesso, comparação com o período anterior
+de igual duração, tendência diária e a quebra por tipo e por aplicação.
+Depende de conta, como Relatórios. A API é `GET /api/v1/quality/summary`.
+
 **Testes de API: o que sobe e o que não sobe.** Escolhida uma aplicação em
 `/api-tests`, a collection passa a viver na conta e cada execução entra no
 histórico da aplicação. Sobem nome, método, URL, params, headers e body, mais o

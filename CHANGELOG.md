@@ -6,6 +6,19 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **`/central-de-qualidade` existe de verdade.** Era um link para o aviso de
+  construção. Agora é o resumo da conta: total de execuções, taxa de sucesso e
+  a comparação com o período anterior de igual duração, tendência diária, e a
+  quebra por tipo (Inspeção/Jornada/Testes de API) e por aplicação. Relatórios
+  responde "o que aconteceu"; esta tela responde "como está indo".
+
+  Novo `GET /api/v1/quality/summary`, que soma a mesma linha do tempo de
+  Relatórios em vez de listá-la (`src/quality-summary.ts`). Não existe consulta
+  SQL de agregação: no volume de uma conta em Beta, paginar o histórico
+  internamente e somar em memória é simples e correto — acima de
+  `MAX_QUALITY_ENTRIES` (4000) execuções no período, os números viram
+  aproximados, marcados por `truncated`, em vez de a resposta demorar sem fim.
+
 - **`/relatorios` existe de verdade.** Era um link para o aviso de construção
   desde sempre. Agora é a linha do tempo consultável da conta: Inspeção, Jornada
   e Testes de API numa lista só, com filtro por **aplicação**, **tipo** e

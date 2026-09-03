@@ -1,4 +1,4 @@
-export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "relatorios" | "docs" | "construcao";
+export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "relatorios" | "qualidade" | "docs" | "construcao";
 
 /** Ambientes oferecidos no seletor da barra de contexto. */
 export const ENVIRONMENTS = [
@@ -9,8 +9,8 @@ export const ENVIRONMENTS = [
 
 /** Áreas de apoio que ainda não existem: a navegação leva ao aviso de construção. */
 export const CONSTRUCTION_AREAS = {
-  // "Relatórios" saiu daqui quando `/relatorios` passou a existir de verdade.
-  "central-de-qualidade": { label: "Central de qualidade", summary: "O painel de padrões, tendências e evolução da qualidade do projeto ao longo do tempo." },
+  // "Relatórios" saiu daqui quando `/relatorios` passou a existir de verdade,
+  // e "Central de qualidade" quando `/central-de-qualidade` passou a existir.
   alertas: { label: "Alertas", summary: "Notificações automáticas quando uma execução falhar ou um indicador de qualidade piorar." },
   // "Ambientes" saiu daqui quando Aplicações passou a existir de verdade: as
   // duas prometiam a mesma coisa — cadastrar o que se testa, com URL e ambiente
@@ -79,7 +79,7 @@ function renderAppNav(active: NavSection, area = ""): string {
         ${link("aplicacoes", "Aplicações", "/aplicacoes", "environments")}
         ${link("toolbox", "QA Toolbox", "/toolbox", "toolbox")}
         ${link("relatorios", "Relatórios", "/relatorios", "reports")}
-        ${supportingLink("central-de-qualidade", "Central de qualidade", "quality")}
+        ${link("qualidade", "Central de qualidade", "/central-de-qualidade", "quality")}
       </div>
       <div class="nav-group nav-group-support">
         ${supportingLink("alertas", "Alertas", "alerts")}
@@ -370,14 +370,14 @@ export function renderHome(): string {
       <div class="signal-list" id="dashboard-signal-list"></div>
       <div class="signal-empty" id="dashboard-signal-empty"><i aria-hidden="true">⌁</i><strong>Aguardando execução</strong><p>Erros, avisos e sucessos aparecerão aqui durante as análises.</p></div>
       <a class="signals-link" href="/scanner">Ver todos os sinais <span>→</span></a>
-      <a class="quality-center-card" href="/em-construcao?area=central-de-qualidade"><span class="quality-center-icon"><i class="icon-overview"><b></b></i></span><span><strong>Central de qualidade</strong><small>Acompanhe padrões, tendências e a evolução da qualidade do projeto.</small><b>Acessar central <i>→</i></b></span></a>
+      <a class="quality-center-card" href="/central-de-qualidade"><span class="quality-center-icon"><i class="icon-overview"><b></b></i></span><span><strong>Central de qualidade</strong><small>Acompanhe padrões, tendências e a evolução da qualidade do projeto.</small><b>Acessar central <i>→</i></b></span></a>
     </aside>
   </section>
   ${renderWorkspaceEnd()}`;
 }
 
 export function renderConstructionPage(area: string): string {
-  const slug: ConstructionArea = Object.hasOwn(CONSTRUCTION_AREAS, area) ? (area as ConstructionArea) : "central-de-qualidade";
+  const slug: ConstructionArea = Object.hasOwn(CONSTRUCTION_AREAS, area) ? (area as ConstructionArea) : "alertas";
   const { label, summary } = CONSTRUCTION_AREAS[slug];
   return `${renderWorkspaceStart("construcao", label, slug)}
   <section class="panel construction-panel">
@@ -505,6 +505,73 @@ function reportTile(id: string, label: string, value: string): string {
   return `<div class="reports-tile"><small>${label}</small><strong id="${id}">${value}</strong></div>`;
 }
 
+/**
+ * Central de qualidade: o resumo da conta, não a lista de execuções.
+ *
+ * Relatórios responde "o que aconteceu"; esta página responde "como está
+ * indo" — total, taxa de sucesso, tendência contra o período anterior, e a
+ * quebra por tipo e por aplicação. Os números vêm de `GET
+ * /api/v1/quality/summary`, que soma a mesma linha do tempo de Relatórios em
+ * vez de listá-la — ver `src/quality-summary.ts`.
+ */
+export function renderQualityPage(): string {
+  return `${renderWorkspaceStart("qualidade", "Central de qualidade")}
+  ${renderToolHeader("Panorama", "Central de qualidade", "Padrões, tendências e a evolução da qualidade da conta ao longo do tempo.")}
+  <section class="tool-layout quality-layout">
+    <p class="form-unavailable" id="quality-unavailable" hidden></p>
+    <section class="panel quality-filters" aria-label="Filtros do resumo">
+      <div class="quality-filter-grid">
+        <div class="tool-field">
+          <label for="quality-application">Aplicação</label>
+          <select id="quality-application"><option value="">Todas</option></select>
+        </div>
+        <div class="tool-field">
+          <label for="quality-period">Período</label>
+          <select id="quality-period">
+            <option value="7">Últimos 7 dias</option>
+            <option value="30" selected>Últimos 30 dias</option>
+            <option value="90">Últimos 90 dias</option>
+            <option value="">Desde o começo</option>
+          </select>
+        </div>
+      </div>
+      <small class="hint" id="quality-truncated-hint" hidden>O período tem mais execuções do que este resumo soma; os números são aproximados.</small>
+    </section>
+
+    <div class="error-box" id="quality-error" role="alert"></div>
+
+    <section class="panel quality-summary-panel" aria-label="Resumo do período">
+      <div class="quality-summary" id="quality-summary">
+        ${qualityTile("quality-total", "Execuções", "—")}
+        ${qualityTile("quality-rate", "Taxa de sucesso", "—", "quality-rate-delta")}
+        ${qualityTile("quality-passed", "Sem falha", "—")}
+        ${qualityTile("quality-failed", "Com falha", "—")}
+      </div>
+      <small class="hint" id="quality-summary-note">Calculado sobre o período escolhido.</small>
+    </section>
+
+    <section class="panel quality-trend-panel" aria-label="Tendência diária">
+      <div class="quality-list-head"><h2>Tendência</h2><span class="reports-count" id="quality-trend-note"></span></div>
+      <div class="quality-trend" id="quality-trend"><p class="hint">Carregando...</p></div>
+    </section>
+
+    <section class="panel quality-kind-panel" aria-label="Por tipo">
+      <h2>Por tipo</h2>
+      <div class="quality-kind-grid" id="quality-kind-grid"><p class="hint">Carregando...</p></div>
+    </section>
+
+    <section class="panel quality-app-panel" aria-label="Por aplicação">
+      <h2>Por aplicação</h2>
+      <div class="quality-app-table" id="quality-app-table"><p class="hint">Carregando...</p></div>
+    </section>
+  </section>
+  ${renderWorkspaceEnd()}`;
+}
+
+function qualityTile(id: string, label: string, value: string, deltaId = ""): string {
+  return `<div class="reports-tile quality-tile"><small>${label}</small><strong id="${id}">${value}</strong>${deltaId ? `<em class="quality-delta" id="${deltaId}"></em>` : ""}</div>`;
+}
+
 function authField(id: string, label: string, type: string, autocomplete: string, hint = "", attributes = ""): string {
   return `<label class="auth-field" for="${id}"><span>${label}</span><input id="${id}" name="${id}" type="${type}" autocomplete="${autocomplete}" ${attributes}>${hint ? `<small>${hint}</small>` : ""}</label>`;
 }
@@ -606,7 +673,8 @@ export function renderDocs(): string {
 
     <h2 class="faq-group">Resultados e dados</h2>
     ${faqItem("relatorios", "Onde vejo os relatórios das execuções?", "<p>Em <strong>Relatórios</strong>, que reúne Inspeção, Jornada e Testes de API numa linha do tempo só, com filtro por aplicação, tipo e período. Ela depende de conta: sem login o histórico fica em <strong>Execuções recentes</strong>, na Visão geral, guardado por navegador. A Inspeção gera relatório em HTML (leitura e compartilhamento) e em JSON (integração com CI), e a Jornada gera evidências em HTML com o passo a passo.</p>")}
-    ${faqItem("central-de-qualidade", "O que é o índice de qualidade?", "<p>É a nota de 0 a 100 no centro do radar. Ela é a média de cinco eixos — HTTP, performance, acessibilidade, DOM e JavaScript — calculada sobre as execuções mais recentes. Acima de 85 é <em>Excelente</em>; de 70 a 84, <em>Estável</em>; de 50 a 69, <em>Atenção</em>; abaixo disso, <em>Crítico</em>.</p><p>Os quatro números ao redor do radar comparam as últimas 24h com as 24h anteriores — a seta indica se o indicador melhorou ou piorou.</p>")}
+    ${faqItem("central-de-qualidade", "O que é o índice de qualidade?", "<p>É a nota de 0 a 100 no centro do radar, na Visão geral. Ela é a média de cinco eixos — HTTP, performance, acessibilidade, DOM e JavaScript — calculada sobre as execuções mais recentes deste navegador. Acima de 85 é <em>Excelente</em>; de 70 a 84, <em>Estável</em>; de 50 a 69, <em>Atenção</em>; abaixo disso, <em>Crítico</em>.</p><p>Os quatro números ao redor do radar comparam as últimas 24h com as 24h anteriores — a seta indica se o indicador melhorou ou piorou.</p>")}
+    ${faqItem("", "Qual a diferença entre o radar da Visão geral e a Central de qualidade?", "<p>O radar é por navegador: só o que rodou ali. A <strong>Central de qualidade</strong> soma a conta inteira — total de execuções, taxa de sucesso, tendência contra o período anterior, quebra por Inspeção/Jornada/Testes de API e por aplicação. Depende de conta, como Relatórios.</p>" + action("/central-de-qualidade", "Abrir Central de qualidade", "Ver o resumo de qualidade da conta."))}
     ${faqItem("", "Onde ficam salvos os meus dados?", "<p>O histórico do painel fica no seu navegador e também no servidor, associado à sua sessão, limitado às 40 execuções mais recentes. Collections, variáveis e credenciais dos Testes de API <strong>nunca saem do navegador</strong> — não são enviadas ao servidor.</p>")}
 
     <h2 class="faq-group">Configuração</h2>
