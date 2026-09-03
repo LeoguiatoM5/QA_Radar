@@ -20,8 +20,7 @@ import type { RouteHandler } from "./context.js";
  * página, esta era a última rota do produto com `'unsafe-inline'` no
  * `script-src`; agora nenhuma tem.
  */
-const TOOLBOX_CSP =
-  "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob:; connect-src 'self'";
+const TOOLBOX_CSP = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob:; connect-src 'self'";
 
 function html(response: Parameters<RouteHandler>[2], body: string): void {
   response.writeHead(200, {
