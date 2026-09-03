@@ -246,6 +246,8 @@ function renderApiPanel(): string {
       <button class="http-tab" type="button" role="tab" aria-selected="false" aria-controls="http-library-history" data-http-tab="http-library-history">Histórico <span class="http-tab-count" id="http-history-count">0</span></button>
     </div>
     <div class="http-library-panel http-collection" id="http-library-collection" role="tabpanel">
+      <div class="application-picker http-application-picker" id="api-application-picker" hidden><label for="api-application">Aplicação</label><select id="api-application" name="applicationId"><option value="">Somente neste navegador</option></select><small class="hint" id="api-application-hint">Escolha uma aplicação para guardar esta collection na sua conta e registrar as execuções no histórico dela. <a href="/aplicacoes">Gerenciar aplicações</a></small></div>
+      <div class="http-shared-warning" id="api-shared-warning" hidden role="status"><b>Esta collection está na sua conta.</b> Sobem nome, método, URL, params, headers e body. <b>Não sobem</b> os valores de Authorization, API key, senha e token — nem na query. Guarde credencial em <b>Variáveis</b>, que continuam só neste navegador, e referencie com <code>{{nome}}</code>.</div>
       <div class="http-collection-head"><div><h2>Collection</h2><p>Salve e recupere requisições frequentes.</p></div><div class="http-collection-save"><input id="http-collection-name" type="text" aria-label="Nome da requisição" placeholder="Nome da requisição"><button id="http-save-request" class="secondary" type="button">Salvar requisição</button></div></div>
       <div class="http-collection-toolbar"><input id="http-collection-search" class="http-collection-search" type="search" aria-label="Buscar na collection" placeholder="Buscar requisição..."><div class="http-import-row"><label class="http-import-label" for="http-collection-import">Importar JSON</label><input id="http-collection-import" type="file" accept=".json,application/json" hidden><button id="http-collection-export" class="secondary" type="button">Exportar JSON</button></div></div>
       <div id="http-collection-list" class="http-collection-list"><p class="hint">Nenhuma requisição salva ainda.</p></div>
@@ -255,7 +257,7 @@ function renderApiPanel(): string {
       <div class="http-history-list" id="http-history-list"><p class="hint">Nenhuma requisição executada ainda.</p></div>
     </div>
   </section>
-  <p class="hint http-footnote">As chamadas saem do servidor do QA Radar para evitar bloqueios de CORS e passam pela proteção contra redes privadas. Collections, histórico, variáveis e credenciais ficam somente neste navegador.</p>
+  <p class="hint http-footnote">As chamadas saem do servidor do QA Radar para evitar bloqueios de CORS e passam pela proteção contra redes privadas. Sem aplicação escolhida, tudo fica somente neste navegador. Com uma aplicação escolhida, a collection e o histórico de execuções ficam na sua conta — <b>credenciais e variáveis nunca sobem</b>.</p>
 </section>`;
 }
 

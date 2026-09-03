@@ -42,6 +42,7 @@ import type { OAuthProvider } from "./oauth.js";
 import { NO_EMAIL_SENDER, type EmailSender } from "./email.js";
 import type { ApplicationRepository } from "./application-repository.js";
 import type { CodeExecutionRepository } from "./code-execution-repository.js";
+import type { ApiCollectionRepository } from "./api-collection-repository.js";
 import { tryHandleApplications } from "./routes/applications.js";
 import { tryHandleAuth, sessionTokenFrom } from "./routes/auth.js";
 
@@ -138,6 +139,11 @@ export interface ServerOptions {
    * memória mais `code-report.json` no disco, sem dono e sem aplicação.
    */
   codeExecutions: CodeExecutionRepository | undefined;
+  /**
+   * Collections e histórico dos Testes de API. Ausente = comportamento antigo:
+   * tudo em `localStorage`, sem vínculo com aplicação nem com conta.
+   */
+  apiCollections: ApiCollectionRepository | undefined;
   /** Assina o estado do OAuth e nada mais. */
   sessionSecret: string;
   operationalLogger: (event: OperationalEvent) => void;
@@ -179,6 +185,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   emailSender: NO_EMAIL_SENDER,
   applications: undefined,
   codeExecutions: undefined,
+  apiCollections: undefined,
   sessionSecret: randomBytes(32).toString("base64url"),
   operationalLogger: defaultOperationalLogger,
 };
@@ -716,6 +723,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     emailSender: config.emailSender,
     applications: config.applications,
     codeExecutions: config.codeExecutions,
+    apiCollections: config.apiCollections,
     authRateLimiter,
     currentUser,
     accessTokens: config.accessTokens,

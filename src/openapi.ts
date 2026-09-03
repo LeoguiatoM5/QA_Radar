@@ -173,16 +173,70 @@ export function createOpenApiDocument(): Record<string, unknown> {
                 "application/json": {
                   schema: {
                     type: "object",
-                    required: ["scans", "journeys"],
+                    required: ["scans", "journeys", "apiRuns"],
                     properties: {
                       scans: { type: "array", items: { type: "object", additionalProperties: true } },
                       journeys: { type: "array", items: { $ref: "#/components/schemas/JourneySummary" } },
+                      apiRuns: { type: "array", items: { $ref: "#/components/schemas/ApiRunSummary" } },
                     },
                   },
                 },
               },
             },
             ...errorResponses([401, 403, 404, 500]),
+          },
+        },
+      },
+      "/api/v1/applications/{id}/collections": {
+        get: {
+          tags: ["Testes de API"],
+          summary: "Collections da aplicação",
+          parameters: [{ $ref: "#/components/parameters/ApplicationId" }],
+          responses: {
+            "200": {
+              description: "Collections da aplicação, da mais antiga para a mais nova.",
+              content: {
+                "application/json": {
+                  schema: { type: "object", required: ["collections"], properties: { collections: { type: "array", items: { $ref: "#/components/schemas/ApiCollection" } } } },
+                },
+              },
+            },
+            ...errorResponses([401, 403, 404, 500, 503]),
+          },
+        },
+        post: {
+          tags: ["Testes de API"],
+          summary: "Criar uma collection",
+          description:
+            "**Credenciais nunca são gravadas.** O servidor descarta o valor de header sensível, de query param com cara de segredo (inclusive dentro da URL) e de todo campo de autenticação — bearer token, senha e valor de API key. O que volta na resposta é exatamente o que ficou guardado.",
+          parameters: [{ $ref: "#/components/parameters/ApplicationId" }],
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/ApiCollectionRequest" } } } },
+          responses: {
+            "201": { description: "Collection criada, já sem credencial.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiCollectionEnvelope" } } } },
+            ...errorResponses([400, 401, 403, 404, 409, 413, 500, 503]),
+          },
+        },
+      },
+      "/api/v1/applications/{id}/collections/{collectionId}": {
+        put: {
+          tags: ["Testes de API"],
+          summary: "Substituir uma collection",
+          description: "Campo ausente não é alterado. A mesma limpeza de credenciais do POST se aplica.",
+          parameters: [{ $ref: "#/components/parameters/ApplicationId" }, { $ref: "#/components/parameters/CollectionId" }],
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/ApiCollectionRequest" } } } },
+          responses: {
+            "200": { description: "Collection alterada.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiCollectionEnvelope" } } } },
+            ...errorResponses([400, 401, 403, 404, 409, 413, 500, 503]),
+          },
+        },
+        delete: {
+          tags: ["Testes de API"],
+          summary: "Apagar uma collection",
+          description: "Apaga de vez, sem arquivar: uma collection é configuração, e não registro do que aconteceu.",
+          parameters: [{ $ref: "#/components/parameters/ApplicationId" }, { $ref: "#/components/parameters/CollectionId" }],
+          responses: {
+            "200": { description: "Collection apagada.", content: { "application/json": { schema: { type: "object", properties: { removed: { type: "boolean" } } } } } },
+            ...errorResponses([401, 403, 404, 500, 503]),
           },
         },
       },
@@ -465,6 +519,7 @@ export function createOpenApiDocument(): Record<string, unknown> {
         ScanId: { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ExecutionId: { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ApplicationId: { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        CollectionId: { name: "collectionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
       },
       schemas: {
         SessionState: {
@@ -502,6 +557,63 @@ export function createOpenApiDocument(): Record<string, unknown> {
         },
         ApplicationEnvelope: { type: "object", required: ["application"], properties: { application: { $ref: "#/components/schemas/Application" } } },
         ApplicationList: { type: "object", required: ["applications"], properties: { applications: { type: "array", items: { $ref: "#/components/schemas/Application" } } } },
+        ApiRunSummary: {
+          type: "object",
+          required: ["id", "method", "url", "createdAt"],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            method: { type: "string" },
+            url: { type: "string", description: "Já sem o valor de query param com cara de credencial." },
+            status: { type: "integer", nullable: true, description: "Ausente quando a chamada nem chegou a receber resposta." },
+            statusText: { type: "string", nullable: true },
+            durationMs: { type: "integer", nullable: true },
+            createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        ApiPair: {
+          type: "object",
+          required: ["key", "value"],
+          description: "Par nome/valor. O valor volta vazio quando o nome é de credencial.",
+          properties: { key: { type: "string" }, value: { type: "string" } },
+        },
+        ApiRequestDefinition: {
+          type: "object",
+          required: ["name", "method", "url"],
+          description: "Uma requisição salva. Os campos de credencial não existem aqui de propósito.",
+          properties: {
+            name: { type: "string", maxLength: 80 },
+            method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+            url: { type: "string", maxLength: 2048 },
+            params: { type: "array", items: { $ref: "#/components/schemas/ApiPair" } },
+            headers: { type: "array", items: { $ref: "#/components/schemas/ApiPair" } },
+            body: { type: "string", maxLength: 65536 },
+            auth: {
+              type: "object",
+              description: "Só o formato da autenticação. Bearer token, senha e valor de API key não têm campo aqui.",
+              properties: { type: { type: "string" }, username: { type: "string" }, apiKeyName: { type: "string" }, apiKeyLocation: { type: "string" } },
+            },
+          },
+        },
+        ApiCollection: {
+          type: "object",
+          required: ["id", "name", "requests"],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            applicationId: { type: "string", format: "uuid" },
+            name: { type: "string", maxLength: 60 },
+            requests: { type: "array", items: { $ref: "#/components/schemas/ApiRequestDefinition" } },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        ApiCollectionRequest: {
+          type: "object",
+          properties: {
+            name: { type: "string", maxLength: 60 },
+            requests: { type: "array", maxItems: 100, items: { $ref: "#/components/schemas/ApiRequestDefinition" } },
+          },
+        },
+        ApiCollectionEnvelope: { type: "object", required: ["collection"], properties: { collection: { $ref: "#/components/schemas/ApiCollection" } } },
         JourneySummary: {
           type: "object",
           required: ["id", "status", "createdAt"],
@@ -628,6 +740,12 @@ export function createOpenApiDocument(): Record<string, unknown> {
             method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"], default: "GET" },
             headers: { type: "object", additionalProperties: { type: "string" } },
             body: { type: "string" },
+            applicationId: {
+              type: "string",
+              format: "uuid",
+              description:
+                "Aplicação da conta onde registrar esta execução. Grava apenas metadado — método, URL já sem credencial, status e duração. Corpo de requisição e de resposta não são gravados. Aplicação de outra conta é ignorada em silêncio: a chamada já saiu e a resposta é devolvida do mesmo jeito.",
+            },
           },
         },
         HttpResponse: {

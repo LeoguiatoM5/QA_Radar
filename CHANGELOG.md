@@ -6,6 +6,36 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **Testes de API vinculados a uma aplicação — e a decisão de o que sobe.** A
+  página guardava tudo em `localStorage` e prometia por escrito que nada saía do
+  navegador. Compartilhar uma collection com a equipe exige quebrar metade dessa
+  promessa, e a parte que importa é **onde** ela foi quebrada.
+
+  **Sobe:** nome, método, URL, query params, headers (nome e valor) e body, mais
+  o _formato_ da autenticação — tipo, usuário, nome e posição da API key.
+
+  **Nunca sobe:** bearer token, senha, valor de API key, valor de header
+  sensível e valor de query param com cara de segredo, **inclusive colado dentro
+  da URL**, que é como a maioria das APIs documenta o uso de chave. Não são
+  mascarados nem cifrados: não entram na estrutura, e o tipo não tem campo onde
+  caibam. Guardar credencial de terceiro em banco é assumir a guarda dela —
+  cifra em repouso, rotação de chave e responder por um vazamento que não é do
+  nosso sistema. O caminho no lugar disso são as **variáveis**, que continuam só
+  no navegador: o body referencia `{{token}}` e o valor nunca sai da máquina.
+
+  A limpeza roda **no servidor** (`src/api-collection.ts`), sobre o que o cliente
+  mandou: feita só no navegador, seria uma limpeza que a próxima versão do
+  cliente — ou um `curl` direto na API — não faz. Há teste mandando cada
+  credencial de propósito e conferindo a linha crua no banco.
+
+  Nova migration `0007` com `api_collections` (requisições num `jsonb`, teto de 100) e `api_runs` (método, URL já limpa, status e duração — **sem corpo de
+  requisição nem de resposta**, que é onde moram token, dado pessoal e payload de
+  cliente). A collection tem `on delete cascade` na aplicação, ao contrário do
+  histórico: ela é configuração _da_ aplicação, não registro do que aconteceu.
+
+  O texto impresso na página foi reescrito para dizer isso, e um teste falha se
+  ele voltar a prometer o que não é verdade.
+
 - **A Jornada passou a deixar registro, com dono e aplicação.** Era a única
   coisa do produto que não deixava: a execução vivia num `Map` do processo e num
   `code-report.json` no disco — sem dono, sem aplicação, e na hospedagem, onde o
@@ -29,10 +59,12 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   Sem `QA_RADAR_DATABASE_URL` nada disso muda: a Jornada volta ao comportamento
   antigo, em memória e disco. O produto não pode passar a exigir banco.
 
-- **`GET /api/v1/applications/{id}/scans` devolve também as Jornadas** e entrou
-  no contrato publicado, onde ainda não estava. As duas origens viram uma linha
-  do tempo só na tela: separar em duas listas obrigaria quem lê a cruzar
-  horários de cabeça para responder "o que aconteceu nesta aplicação".
+- **`GET /api/v1/applications/{id}/scans` devolve as três origens** — Inspeções,
+  Jornadas e Testes de API — e entrou no contrato publicado, onde ainda não
+  estava. As três viram uma linha do tempo só na tela: separar em listas
+  obrigaria quem lê a cruzar horários de cabeça para responder "o que aconteceu
+  nesta aplicação". `/aplicacoes` ganhou os botões **Jornada** e **API**, que
+  levam à página com a aplicação já escolhida.
 
 - **Histórico por aplicação em `/aplicacoes`.** A Inspeção gravava
   `scan_jobs.application_id` desde que Aplicações existe, mas **nenhuma consulta

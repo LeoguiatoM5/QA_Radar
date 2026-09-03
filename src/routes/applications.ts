@@ -7,6 +7,8 @@ import type { IncomingMessage } from "node:http";
 import type { User } from "../identity.js";
 import { publicPersistedJob } from "./scans.js";
 import { publicCodeExecution } from "./code-execution.js";
+import { MAX_COLLECTIONS_PER_APPLICATION, MAX_COLLECTION_NAME, shareableRequests } from "../api-collection.js";
+import { ApiCollectionNameTakenError, type ApiCollection } from "../api-collection-repository.js";
 
 /** Teto do corpo: nome, URL e alguns rótulos não passam disso. */
 const MAX_APPLICATION_BODY_BYTES = 8 * 1024;
@@ -17,6 +19,27 @@ const MAX_ENVIRONMENT_LENGTH = 40;
 
 /** Teto do histórico devolvido de uma vez, igual ao da conta. */
 const MAX_APPLICATION_HISTORY = 50;
+
+/** Teto do corpo de uma collection: 100 requisições com body de 64 KB cabem aqui. */
+const MAX_COLLECTION_BODY_BYTES = 2 * 1024 * 1024;
+
+function readCollectionName(body: Record<string, unknown>): string {
+  const name = textField(body, "name")?.trim() ?? "";
+  if (!name) throw invalidRequest("Informe o nome da collection.");
+  if (name.length > MAX_COLLECTION_NAME) throw invalidRequest(`O nome da collection deve ter até ${MAX_COLLECTION_NAME} caracteres.`);
+  return name;
+}
+
+function publicCollection(collection: ApiCollection): Record<string, unknown> {
+  return {
+    id: collection.id,
+    applicationId: collection.applicationId,
+    name: collection.name,
+    requests: collection.requests,
+    createdAt: collection.createdAt,
+    updatedAt: collection.updatedAt,
+  };
+}
 
 function publicApplication(application: Application): Record<string, unknown> {
   return {
@@ -115,7 +138,90 @@ export const tryHandleApplications: RouteHandler = async (context, request, resp
     // duas chamadas obrigaria a tela a costurar duas linhas do tempo. Vazio
     // quando não há banco, que é quando a Jornada não deixa registro.
     const journeys = (await context.codeExecutions?.listByApplication(user.id, historyMatch[1], MAX_APPLICATION_HISTORY)) ?? [];
-    json(response, 200, { scans: scans.map((scan) => publicPersistedJob(scan)), journeys: journeys.map((journey) => publicCodeExecution(journey)) });
+    const apiRuns = (await context.apiCollections?.listRuns(user.id, historyMatch[1], MAX_APPLICATION_HISTORY)) ?? [];
+    json(response, 200, {
+      scans: scans.map((scan) => publicPersistedJob(scan)),
+      journeys: journeys.map((journey) => publicCodeExecution(journey)),
+      apiRuns: apiRuns.map((run) => ({
+        id: run.id,
+        method: run.method,
+        url: run.url,
+        status: run.status,
+        statusText: run.statusText,
+        durationMs: run.durationMs,
+        createdAt: run.createdAt,
+      })),
+    });
+    return true;
+  }
+
+  /**
+   * Collections de Testes de API da aplicação.
+   *
+   * O que pode ser gravado passa por `shareableRequests` **aqui**, no servidor,
+   * e não no cliente antes de mandar: uma limpeza feita só no navegador é uma
+   * limpeza que a próxima versão do cliente — ou um `curl` direto na API —
+   * não faz. Ver `src/api-collection.ts` para a regra e o porquê dela.
+   */
+  const collectionsMatch = /^\/([^/]+)\/collections(?:\/([^/]+))?$/.exec(rest);
+  if (collectionsMatch?.[1]) {
+    const applicationId = collectionsMatch[1];
+    const collectionId = collectionsMatch[2];
+    const repository = requireRepository(context);
+    const user = await requireAccount(context, request);
+    const collections = context.apiCollections;
+    if (!collections) throw new ApiError("feature_disabled", "Collections exigem banco de dados e não estão disponíveis neste servidor.");
+    if (!(await repository.get(user.id, applicationId))) throw new ApiError("not_found", "Aplicação não encontrada.");
+
+    if (!collectionId) {
+      if (request.method === "GET") {
+        json(response, 200, { collections: (await collections.listByApplication(user.id, applicationId)).map(publicCollection) });
+        return true;
+      }
+      if (request.method === "POST") {
+        const body = await readJson(request, MAX_COLLECTION_BODY_BYTES);
+        const existing = await collections.listByApplication(user.id, applicationId);
+        if (existing.length >= MAX_COLLECTIONS_PER_APPLICATION) {
+          throw new ApiError("conflict", `Cada aplicação comporta até ${MAX_COLLECTIONS_PER_APPLICATION} collections.`);
+        }
+        try {
+          const created = await collections.create({ ownerId: user.id, applicationId, name: readCollectionName(body), requests: shareableRequests(body.requests) });
+          json(response, 201, { collection: publicCollection(created) });
+        } catch (error) {
+          if (error instanceof ApiCollectionNameTakenError) throw new ApiError("conflict", error.message);
+          throw error;
+        }
+        return true;
+      }
+      jsonError(response, "method_not_allowed", "Método não suportado para collections.");
+      return true;
+    }
+
+    if (request.method === "PUT") {
+      const body = await readJson(request, MAX_COLLECTION_BODY_BYTES);
+      try {
+        const updated = await collections.replace(user.id, collectionId, {
+          ...(body.name === undefined ? {} : { name: readCollectionName(body) }),
+          ...(body.requests === undefined ? {} : { requests: shareableRequests(body.requests) }),
+        });
+        if (!updated) throw new ApiError("not_found", "Collection não encontrada.");
+        json(response, 200, { collection: publicCollection(updated) });
+      } catch (error) {
+        if (error instanceof ApiCollectionNameTakenError) throw new ApiError("conflict", error.message);
+        throw error;
+      }
+      return true;
+    }
+
+    if (request.method === "DELETE") {
+      // Apaga de vez, sem arquivar: collection é configuração, e não registro do
+      // que aconteceu — guardar a apagada só sujaria a lista.
+      if (!(await collections.remove(user.id, collectionId))) throw new ApiError("not_found", "Collection não encontrada.");
+      json(response, 200, { removed: true });
+      return true;
+    }
+
+    jsonError(response, "method_not_allowed", "Método não suportado para uma collection.");
     return true;
   }
 

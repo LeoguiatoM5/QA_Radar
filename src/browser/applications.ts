@@ -82,6 +82,7 @@ function renderApplications(applications: Application[]): void {
         '<button type="button" data-action="history" aria-expanded="false">Histórico</button>' +
         '<button type="button" data-action="scan">Inspecionar</button>' +
         '<button type="button" data-action="journey">Jornada</button>' +
+        '<button type="button" data-action="api">API</button>' +
         '<button type="button" data-action="edit">Editar</button>' +
         '<button type="button" data-action="archive">Arquivar</button>' +
         "</div>" +
@@ -151,6 +152,31 @@ function journeyLine(journey: PersistedJourney): string {
   );
 }
 
+interface PersistedApiRun {
+  id: string;
+  method?: string;
+  url?: string;
+  status?: number;
+  statusText?: string;
+  durationMs?: number;
+  createdAt?: string;
+}
+
+function apiRunLine(run: PersistedApiRun): string {
+  const status = run.status ?? 0;
+  const ok = status > 0 && status < 400;
+  const quando = run.createdAt ? new Date(run.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+  const resultado = status ? `${status} ${run.statusText ?? ""}`.trim() : "Falha de conexão";
+  const completo = `Teste de API · ${quando} · ${run.method ?? ""} ${run.url ?? ""} · ${resultado}`;
+  return (
+    `<div class="application-run"><i class="${ok ? "pass" : ""}"></i>` +
+    // Status antes da URL: a linha corta à direita, e o que responde "deu certo?"
+    // não pode ser justamente a parte que some.
+    `<span title="${appEsc(completo)}"><b class="application-run-kind">API</b> ${appEsc(quando)} · ${appEsc(resultado)} · ${appEsc(run.method ?? "")} ${appEsc(run.url ?? "")}</span>` +
+    `<b>${run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : ""}</b></div>`
+  );
+}
+
 /**
  * O histórico da aplicação, aberto sob demanda.
  *
@@ -172,19 +198,21 @@ async function toggleHistory(button: HTMLButtonElement, application: Application
       box.innerHTML = "<p>Não foi possível carregar o histórico desta aplicação.</p>";
       return;
     }
-    const body = (await response.json()) as { scans?: PersistedScan[]; journeys?: PersistedJourney[] };
+    const body = (await response.json()) as { scans?: PersistedScan[]; journeys?: PersistedJourney[]; apiRuns?: PersistedApiRun[] };
     const scans = body.scans ?? [];
     const journeys = body.journeys ?? [];
+    const apiRuns = body.apiRuns ?? [];
     // As duas origens viram uma linha do tempo só, ordenada por quando
     // rodaram: separar em duas listas obrigaria quem lê a cruzar horários na
     // cabeça para responder "o que aconteceu nesta aplicação".
     const linhas = [
       ...scans.map((scan) => ({ createdAt: scan.createdAt ?? "", html: scanLine(scan) })),
       ...journeys.map((journey) => ({ createdAt: journey.createdAt ?? "", html: journeyLine(journey) })),
+      ...apiRuns.map((run) => ({ createdAt: run.createdAt ?? "", html: apiRunLine(run) })),
     ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     box.innerHTML = linhas.length
       ? linhas.map((linha) => linha.html).join("")
-      : "<p>Nenhuma execução guardada nesta aplicação ainda. Use <strong>Inspecionar</strong> ou rode uma <strong>Jornada</strong> escolhendo esta aplicação.</p>";
+      : "<p>Nenhuma execução guardada nesta aplicação ainda. Use <strong>Inspecionar</strong>, rode uma <strong>Jornada</strong> ou dispare um <strong>Teste de API</strong> escolhendo esta aplicação.</p>";
   } catch {
     box.innerHTML = "<p>Não foi possível carregar o histórico desta aplicação.</p>";
   }
@@ -235,6 +263,10 @@ applicationList?.addEventListener("click", (event) => {
   }
   if (button.dataset.action === "journey") {
     location.href = `/journeys?aplicacao=${encodeURIComponent(application.id)}`;
+    return;
+  }
+  if (button.dataset.action === "api") {
+    location.href = `/api-tests?aplicacao=${encodeURIComponent(application.id)}`;
     return;
   }
   // Arquivar é reversível no banco, mas some da lista: confirmar evita o clique

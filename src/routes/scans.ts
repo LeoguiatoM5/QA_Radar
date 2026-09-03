@@ -343,7 +343,12 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
         await rm(join(config.resultsDir, codeArtifactPrefix(id)), { recursive: true, force: true }).catch(() => {});
       }),
     );
-    json(response, 200, { removed: removed.length, journeys: journeys.length });
+    // O histórico dos Testes de API entra pela mesma razão das Jornadas: o botão
+    // promete apagar o histórico da conta, e apagar dois terços dele é pior do
+    // que não apagar nada. As collections **não** saem — são configuração da
+    // aplicação, não histórico, e o botão não promete apagar o trabalho salvo.
+    const apiRuns = (await context.apiCollections?.removeRunsForOwner(viewer.id)) ?? 0;
+    json(response, 200, { removed: removed.length, journeys: journeys.length, apiRuns });
     return true;
   }
 

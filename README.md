@@ -1047,6 +1047,20 @@ só. O histórico de `GET /api/v1/scans` devolve exclusivamente o que pertence a
 quem pediu. Aplicação de outra conta responde `404`, e não `403`: responder
 proibido confirmaria que aquele identificador existe.
 
+**Testes de API: o que sobe e o que não sobe.** Escolhida uma aplicação em
+`/api-tests`, a collection passa a viver na conta e cada execução entra no
+histórico da aplicação. Sobem nome, método, URL, params, headers e body, mais o
+_formato_ da autenticação. **Nunca sobem** bearer token, senha, valor de API key,
+valor de header sensível nem valor de query param com cara de segredo — nem
+colado dentro da URL. Não são mascarados: não entram na estrutura gravada, e a
+limpeza roda no servidor, não no navegador. Guarde credencial em **Variáveis**,
+que ficam só no navegador, e referencie com `{{nome}}`. Sem aplicação escolhida,
+a página continua inteiramente local, como sempre foi.
+
+O histórico de execuções de API guarda método, URL já limpa, status e duração.
+**Corpo de requisição e de resposta não são gravados**: é neles que moram token,
+dado pessoal e payload de cliente.
+
 **A Jornada só deixa registro com banco.** Sem `QA_RADAR_DATABASE_URL` a
 execução continua vivendo em memória e num `code-report.json` no disco, como
 sempre: some no reinicio e não pertence a ninguém. Com banco ela ganha dono,

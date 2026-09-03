@@ -182,6 +182,53 @@ export const MIGRATIONS: Migration[] = [
       `create index if not exists code_executions_expires_idx on code_executions (expires_at)`,
     ],
   },
+  {
+    id: "0007_api_collections",
+    statements: [
+      // As requisições vivem num `jsonb` da própria collection, e não em tabela
+      // filha: o cliente lê e grava a collection inteira de uma vez, então uma
+      // tabela por requisição só acrescentaria junções para reconstruir o que
+      // sempre viaja junto. Tabela filha se paga quando houver permissão por
+      // requisição — não é o caso, e o teto de 100 mantém a linha pequena.
+      //
+      // **Nenhuma credencial entra aqui.** O que pode ser gravado está definido
+      // em `src/api-collection.ts`, e a limpeza roda no servidor.
+      //
+      // `on delete cascade` na aplicação, ao contrário do histórico: uma
+      // collection é configuração *da* aplicação, não registro do que
+      // aconteceu. Apagada a aplicação, ela não tem mais onde existir.
+      `create table if not exists api_collections (
+         id uuid primary key,
+         owner_id uuid not null references users (id) on delete cascade,
+         application_id uuid not null references applications (id) on delete cascade,
+         name text not null,
+         requests jsonb not null default '[]'::jsonb,
+         created_at timestamptz not null default now(),
+         updated_at timestamptz not null default now()
+       )`,
+      // Mesma razão do índice de aplicações: duas "Smoke" na mesma aplicação
+      // não se distinguem numa lista, e a segunda só existiria por engano.
+      `create unique index if not exists api_collections_application_name_idx on api_collections (application_id, lower(name))`,
+      `create index if not exists api_collections_application_idx on api_collections (application_id, created_at)`,
+      `create index if not exists api_collections_owner_idx on api_collections (owner_id)`,
+      // O histórico de execuções é metadado, não o conteúdo: método, URL já
+      // limpa, status e duração. Corpo de requisição e de resposta ficam fora —
+      // é neles que moram token, dado pessoal e payload de cliente.
+      `create table if not exists api_runs (
+         id uuid primary key,
+         owner_id uuid references users (id) on delete set null,
+         application_id uuid references applications (id) on delete set null,
+         method text not null,
+         url text not null,
+         status integer,
+         status_text text,
+         duration_ms integer,
+         created_at timestamptz not null default now()
+       )`,
+      `create index if not exists api_runs_application_idx on api_runs (application_id, created_at desc)`,
+      `create index if not exists api_runs_owner_idx on api_runs (owner_id, created_at desc)`,
+    ],
+  },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `create table if not exists schema_migrations (

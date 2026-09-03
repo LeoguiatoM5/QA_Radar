@@ -1,4 +1,5 @@
 import { json, readJson, textField } from "../http-helpers.js";
+import { redactUrl } from "../api-collection.js";
 import { ApiError, invalidRequest } from "../api-error.js";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import { PublicNetworkGuard, type PublicUrlResolver } from "../security.js";
@@ -115,6 +116,39 @@ export const tryHandleHttpRequest: RouteHandler = async (context, request, respo
     const body = typeof requestBody.body === "string" ? requestBody.body : undefined;
 
     const result = await guardedFetch(targetUrl, method, headers, body, config.allowPrivateTargets);
+    // Registro da execução na aplicação escolhida: metadado apenas — método,
+    // URL já sem credencial, status e duração. Corpo de requisição e de resposta
+    // ficam fora de propósito: é neles que moram token, dado pessoal e payload
+    // de cliente, e guardar isso seria assumir a guarda de dado de terceiro.
+    const applicationId = textField(requestBody, "applicationId");
+    if (applicationId && context.apiCollections) {
+      const owner = await context.currentUser(request);
+      // Aplicação conferida contra o dono, como na Inspeção e na Jornada. Aqui
+      // não derruba a requisição: ela já saiu para a rede e a resposta é o que a
+      // pessoa pediu; o registro é melhor esforço.
+      if (owner && (await context.applications?.get(owner.id, applicationId))) {
+        await context.apiCollections
+          .recordRun({
+            ownerId: owner.id,
+            applicationId,
+            method,
+            url: redactUrl(targetUrl),
+            status: result.status,
+            statusText: result.statusText,
+            durationMs: result.durationMs,
+          })
+          .catch((error: unknown) => {
+            console.error(
+              JSON.stringify({
+                source: "qa-radar",
+                event: "api_run.persistence_failed",
+                timestamp: new Date().toISOString(),
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            );
+          });
+      }
+    }
     json(response, 200, result);
     return true;
   }

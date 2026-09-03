@@ -5,7 +5,14 @@ import { activityTarget, esc, recordActivity, signInAndReturn } from "./shared.j
  *
  * Independente do Modo Jornada: não compartilha elemento nenhum com ele. As
  * chamadas saem do servidor do QA Radar, e não do navegador, para não esbarrar
- * em CORS — collection, histórico, variáveis e credenciais ficam só aqui.
+ * em CORS.
+ *
+ * **Onde os dados ficam depende da aplicação escolhida.** Sem aplicação, tudo
+ * continua em `localStorage`, como sempre. Com uma aplicação da conta, a
+ * collection e o histórico de execuções passam a viver no servidor, para a
+ * equipe compartilhar. **Variáveis e credenciais nunca sobem**, em nenhum dos
+ * dois modos — e quem decide o que pode ser gravado é o servidor, em
+ * `src/api-collection.ts`, não este arquivo.
  */
 interface Pair {
   key: string;
@@ -213,7 +220,25 @@ if (
     }
   };
 
-  const loadCollection = (): { requests: SavedRequest[] } => {
+  /**
+   * Aplicação escolhida, ou vazio para "somente neste navegador".
+   *
+   * A escolha em si é preferência de uso e fica no `localStorage`: é sobre esta
+   * máquina, não sobre a conta.
+   */
+  let apiApplicationId = "";
+  let remoteCollectionId = "";
+  /**
+   * Cópia em memória da collection ativa.
+   *
+   * Existe porque a leitura passou a poder vir da rede e as dezenas de pontos
+   * que chamam `loadCollection()` são síncronos. Transformar todos em `async`
+   * espalharia espera por toda a tela para ganhar nada: o que está na tela já
+   * foi carregado.
+   */
+  let collectionCache: { requests: SavedRequest[] } | undefined;
+
+  const readLocalCollection = (): { requests: SavedRequest[] } => {
     try {
       const raw = localStorage.getItem(COLLECTION_KEY);
       const parsed = (raw ? JSON.parse(raw) : {}) as { requests?: unknown };
@@ -223,11 +248,134 @@ if (
     }
   };
 
+  const loadCollection = (): { requests: SavedRequest[] } => {
+    collectionCache ??= readLocalCollection();
+    return collectionCache;
+  };
+
   const saveCollection = (collection: { requests: SavedRequest[] }): void => {
+    collectionCache = collection;
+    if (!apiApplicationId) {
+      try {
+        localStorage.setItem(COLLECTION_KEY, JSON.stringify(collection));
+      } catch {
+        // Sem armazenamento a collection não persiste entre visitas.
+      }
+      return;
+    }
+    void pushCollection(collection);
+  };
+
+  const APPLICATION_KEY = "qa-radar-api-application";
+  const DEFAULT_COLLECTION_NAME = "Padrão";
+  const apiApplicationPicker = document.querySelector<HTMLElement>("#api-application-picker");
+  const apiApplicationSelect = document.querySelector<HTMLSelectElement>("#api-application");
+  const apiSharedWarning = document.querySelector<HTMLElement>("#api-shared-warning");
+
+  interface RemoteCollection {
+    id: string;
+    name: string;
+    requests: SavedRequest[];
+  }
+
+  /**
+   * Grava a collection na aplicação escolhida.
+   *
+   * A resposta do servidor é quem manda: ela volta **já sem as credenciais**, e
+   * adotar essa versão em vez de manter a local é o que faz a tela mostrar o que
+   * de fato ficou guardado. Continuar exibindo o token como se estivesse salvo
+   * seria mentir para quem vai depender disso amanhã.
+   */
+  const pushCollection = async (collection: { requests: SavedRequest[] }): Promise<void> => {
+    if (!apiApplicationId) return;
     try {
-      localStorage.setItem(COLLECTION_KEY, JSON.stringify(collection));
+      const base = `/api/v1/applications/${encodeURIComponent(apiApplicationId)}/collections`;
+      const response = remoteCollectionId
+        ? await fetch(`${base}/${encodeURIComponent(remoteCollectionId)}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ requests: collection.requests }),
+          })
+        : await fetch(base, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: DEFAULT_COLLECTION_NAME, requests: collection.requests }) });
+      if (response.status === 401) {
+        signInAndReturn();
+        return;
+      }
+      if (!response.ok) {
+        showHttpError("Não foi possível guardar a collection nesta aplicação.");
+        return;
+      }
+      const saved = ((await response.json()) as { collection?: RemoteCollection }).collection;
+      if (!saved) return;
+      remoteCollectionId = saved.id;
+      collectionCache = { requests: saved.requests };
+      renderCollection();
     } catch {
-      // Sem armazenamento a collection não persiste entre visitas.
+      showHttpError("Não foi possível falar com o servidor do QA Radar.");
+    }
+  };
+
+  /** Troca a origem da collection e recarrega a lista. */
+  const useApplication = async (applicationId: string): Promise<void> => {
+    apiApplicationId = applicationId;
+    remoteCollectionId = "";
+    try {
+      localStorage.setItem(APPLICATION_KEY, applicationId);
+    } catch {
+      // Preferência de uso: perder isso só custa escolher de novo.
+    }
+    if (apiSharedWarning) apiSharedWarning.hidden = !applicationId;
+    if (!applicationId) {
+      collectionCache = readLocalCollection();
+      renderCollection();
+      return;
+    }
+    try {
+      const response = await fetch(`/api/v1/applications/${encodeURIComponent(applicationId)}/collections`);
+      const collections = response.ok ? (((await response.json()) as { collections?: RemoteCollection[] }).collections ?? []) : [];
+      const first = collections[0];
+      remoteCollectionId = first?.id ?? "";
+      collectionCache = { requests: first?.requests ?? [] };
+    } catch {
+      collectionCache = { requests: [] };
+    }
+    renderCollection();
+  };
+
+  /**
+   * Seletor de aplicação dos Testes de API.
+   *
+   * Mesma regra dos outros dois: nasce oculto e só aparece para quem tem conta
+   * com aplicação cadastrada. Sem ele a página segue exatamente como era.
+   */
+  const loadApiApplications = async (): Promise<void> => {
+    if (!apiApplicationPicker || !apiApplicationSelect) return;
+    try {
+      const response = await fetch("/api/v1/applications");
+      if (!response.ok) return;
+      const applications = ((await response.json()) as { applications?: Array<{ id: string; name: string }> }).applications ?? [];
+      if (!applications.length) return;
+      for (const application of applications) {
+        const option = document.createElement("option");
+        option.value = application.id;
+        option.textContent = application.name;
+        apiApplicationSelect.append(option);
+      }
+      apiApplicationPicker.hidden = false;
+      const lembrada = (() => {
+        try {
+          return localStorage.getItem(APPLICATION_KEY) ?? "";
+        } catch {
+          return "";
+        }
+      })();
+      const pedida = new URLSearchParams(location.search).get("aplicacao") ?? lembrada;
+      const escolhida = applications.some((application) => application.id === pedida) ? pedida : "";
+      apiApplicationSelect.value = escolhida;
+      apiApplicationSelect.addEventListener("change", () => void useApplication(apiApplicationSelect.value));
+      if (escolhida) await useApplication(escolhida);
+    } catch {
+      // Sem aplicações disponíveis o seletor simplesmente não aparece.
     }
   };
 
@@ -478,6 +626,7 @@ if (
   syncAuthType();
   renderCollection();
   renderHistory();
+  void loadApiApplications();
 
   const requestedActivity = Number(new URLSearchParams(location.search).get("activity"));
   if (requestedActivity) {
@@ -706,7 +855,9 @@ if (
           method: "POST",
           headers: { "content-type": "application/json" },
           signal: activeHttpRequest?.signal ?? null,
-          body: JSON.stringify({ method, url, headers, ...(body !== undefined ? { body } : {}) }),
+          // A aplicação escolhida vai junto para o servidor registrar a
+          // execução no histórico dela — só método, URL, status e duração.
+          body: JSON.stringify({ method, url, headers, ...(body !== undefined ? { body } : {}), ...(apiApplicationId ? { applicationId: apiApplicationId } : {}) }),
         });
         const data = (await response.json()) as { status: number; statusText: string; durationMs: number; headers?: Record<string, string>; body?: string; bodyTruncated?: boolean; error?: string };
         if (response.status === 401) {
