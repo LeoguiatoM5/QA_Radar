@@ -81,6 +81,7 @@ function renderApplications(applications: Application[]): void {
         '<div class="application-actions">' +
         '<button type="button" data-action="history" aria-expanded="false">Histórico</button>' +
         '<button type="button" data-action="scan">Inspecionar</button>' +
+        '<button type="button" data-action="journey">Jornada</button>' +
         '<button type="button" data-action="edit">Editar</button>' +
         '<button type="button" data-action="archive">Arquivar</button>' +
         "</div>" +
@@ -112,6 +113,15 @@ interface PersistedScan {
   report?: { url?: string; targetUrl?: string; title?: string; passed?: boolean; durationMs?: number; summary?: { errors?: number; warnings?: number } };
 }
 
+interface PersistedJourney {
+  id: string;
+  status?: string;
+  createdAt?: string;
+  title?: string;
+  durationMs?: number;
+  tests?: { expected?: number; unexpected?: number; flaky?: number; skipped?: number };
+}
+
 function scanLine(scan: PersistedScan): string {
   const report = scan.report;
   const done = scan.status === "completed";
@@ -120,6 +130,25 @@ function scanLine(scan: PersistedScan): string {
   const quando = scan.createdAt ? new Date(scan.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
   const resultado = done ? `${summary?.errors ?? 0} erro(s) · ${summary?.warnings ?? 0} aviso(s)` : (scan.status ?? "—");
   return `<div class="application-run"><i class="${passed ? "pass" : ""}"></i><span>${appEsc(quando)} · ${appEsc(resultado)}</span><b>${done && report?.durationMs ? `${(report.durationMs / 1000).toFixed(1)}s` : ""}</b></div>`;
+}
+
+function journeyLine(journey: PersistedJourney): string {
+  const passou = journey.status === "passed";
+  const quando = journey.createdAt ? new Date(journey.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+  const testes = journey.tests;
+  // A contagem só aparece quando diz alguma coisa: "0 falha(s)" numa execução
+  // que passou é ruído, e o ícone verde já conta essa parte.
+  const resultado = passou ? `${testes?.expected ?? 0} teste(s) OK` : `${testes?.unexpected ?? 0} falha(s)`;
+  const nome = journey.title ? ` · ${journey.title}` : "";
+  // A linha corta com reticências num painel estreito, e o título do teste é
+  // justamente a parte que identifica a execução. O `title` devolve o texto
+  // inteiro no hover em vez de exigir abrir a execução para saber qual é.
+  const completo = `Jornada · ${quando} · ${resultado}${nome}`;
+  return (
+    `<div class="application-run"><i class="${passou ? "pass" : ""}"></i>` +
+    `<span title="${appEsc(completo)}"><b class="application-run-kind">Jornada</b> ${appEsc(quando)} · ${appEsc(resultado)}${appEsc(nome)}</span>` +
+    `<b>${journey.durationMs ? `${(journey.durationMs / 1000).toFixed(1)}s` : ""}</b></div>`
+  );
 }
 
 /**
@@ -143,8 +172,19 @@ async function toggleHistory(button: HTMLButtonElement, application: Application
       box.innerHTML = "<p>Não foi possível carregar o histórico desta aplicação.</p>";
       return;
     }
-    const scans = ((await response.json()) as { scans?: PersistedScan[] }).scans ?? [];
-    box.innerHTML = scans.length ? scans.map(scanLine).join("") : "<p>Nenhuma análise guardada nesta aplicação ainda. Use <strong>Inspecionar</strong> para começar.</p>";
+    const body = (await response.json()) as { scans?: PersistedScan[]; journeys?: PersistedJourney[] };
+    const scans = body.scans ?? [];
+    const journeys = body.journeys ?? [];
+    // As duas origens viram uma linha do tempo só, ordenada por quando
+    // rodaram: separar em duas listas obrigaria quem lê a cruzar horários na
+    // cabeça para responder "o que aconteceu nesta aplicação".
+    const linhas = [
+      ...scans.map((scan) => ({ createdAt: scan.createdAt ?? "", html: scanLine(scan) })),
+      ...journeys.map((journey) => ({ createdAt: journey.createdAt ?? "", html: journeyLine(journey) })),
+    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    box.innerHTML = linhas.length
+      ? linhas.map((linha) => linha.html).join("")
+      : "<p>Nenhuma execução guardada nesta aplicação ainda. Use <strong>Inspecionar</strong> ou rode uma <strong>Jornada</strong> escolhendo esta aplicação.</p>";
   } catch {
     box.innerHTML = "<p>Não foi possível carregar o histórico desta aplicação.</p>";
   }
@@ -191,6 +231,10 @@ applicationList?.addEventListener("click", (event) => {
   }
   if (button.dataset.action === "scan") {
     location.href = `/scanner?aplicacao=${encodeURIComponent(application.id)}`;
+    return;
+  }
+  if (button.dataset.action === "journey") {
+    location.href = `/journeys?aplicacao=${encodeURIComponent(application.id)}`;
     return;
   }
   // Arquivar é reversível no banco, mas some da lista: confirmar evita o clique

@@ -18,7 +18,7 @@ import { bearerToken, jsonError, storedAccessHash, tokenHash, tokenMatches } fro
 import { toApiError } from "./api-error.js";
 import { transitionJob, type TerminalJobStatus } from "./job-state.js";
 import { CodegenSessionStore, type CodegenSession } from "./codegen-session-store.js";
-import { CodeExecutionJobStore, type CodeExecutionJob } from "./code-execution-job-store.js";
+import { CodeExecutionJobStore, codeArtifactPrefix, type CodeExecutionJob } from "./code-execution-job-store.js";
 import { LegacyJourneyRegistry, type JourneyJob } from "./legacy-journey-registry.js";
 import type { RequestContext, RouteHandler } from "./routes/context.js";
 import { tryHandleAssets } from "./routes/assets.js";
@@ -41,6 +41,7 @@ import type { IdentityStore, User } from "./identity.js";
 import type { OAuthProvider } from "./oauth.js";
 import { NO_EMAIL_SENDER, type EmailSender } from "./email.js";
 import type { ApplicationRepository } from "./application-repository.js";
+import type { CodeExecutionRepository } from "./code-execution-repository.js";
 import { tryHandleApplications } from "./routes/applications.js";
 import { tryHandleAuth, sessionTokenFrom } from "./routes/auth.js";
 
@@ -132,6 +133,11 @@ export interface ServerOptions {
   emailSender: EmailSender;
   /** Ausente = aplicações indisponíveis; o resto do produto não depende delas. */
   applications: ApplicationRepository | undefined;
+  /**
+   * Registro durável das execuções da Jornada. Ausente = comportamento antigo:
+   * memória mais `code-report.json` no disco, sem dono e sem aplicação.
+   */
+  codeExecutions: CodeExecutionRepository | undefined;
   /** Assina o estado do OAuth e nada mais. */
   sessionSecret: string;
   operationalLogger: (event: OperationalEvent) => void;
@@ -172,6 +178,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   oauthProvider: undefined,
   emailSender: NO_EMAIL_SENDER,
   applications: undefined,
+  codeExecutions: undefined,
   sessionSecret: randomBytes(32).toString("base64url"),
   operationalLogger: defaultOperationalLogger,
 };
@@ -241,12 +248,44 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   // Chaves de idempotência vivem tanto quanto os jobs que representam.
   const idempotencyKeys = config.idempotencyKeys ?? new InMemoryIdempotencyKeys(config.retentionMs);
 
+  /** `<resultsDir>/code-<id>`, o único lugar onde a execução grava. */
+  const codeOutputDir = (id: string): string => join(config.resultsDir, `code-${id}`);
+
+  /**
+   * Acha a execução onde ela estiver: memória, banco ou disco, nessa ordem.
+   *
+   * A memória é o processo atual. O **banco** é o que sobrevive ao reinício e é
+   * o único que sabe de quem a execução é — o disco nunca soube. O disco fica
+   * por último porque é o caminho de quem roda sem banco (CLI e dashboard
+   * local), onde ele é a única fonte que existe.
+   */
   const loadCodeExecutionJob = async (id: string): Promise<CodeExecutionJob | undefined> => {
     const memoryJob = codeExecutionJobs.get(id);
     if (memoryJob) return memoryJob;
+    if (config.codeExecutions) {
+      const stored = await config.codeExecutions.get(id).catch(() => undefined);
+      if (stored) {
+        return {
+          id: stored.id,
+          outputDir: codeOutputDir(id),
+          status: stored.status,
+          report: stored.report,
+          accessTokenHash: stored.accessTokenHash,
+          createdAt: stored.createdAt,
+          ownerId: stored.ownerId,
+          applicationId: stored.applicationId,
+          ...(stored.failureDetails === undefined ? {} : { failureDetails: stored.failureDetails }),
+        };
+      }
+    }
     try {
       const directoryName = `code-${id}`;
-      const saved = JSON.parse(await readFile(join(config.resultsDir, directoryName, "code-report.json"), "utf8")) as { status?: unknown; report?: unknown; failureDetails?: unknown };
+      const saved = JSON.parse(await readFile(join(config.resultsDir, directoryName, "code-report.json"), "utf8")) as {
+        status?: unknown;
+        report?: unknown;
+        failureDetails?: unknown;
+        createdAt?: unknown;
+      };
       const accessTokenHash = await storedAccessHash(config.resultsDir, directoryName);
       if (saved.status !== "passed" && saved.status !== "failed") return undefined;
       if (!accessTokenHash) return undefined;
@@ -256,6 +295,11 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         status: saved.status,
         report: saved.report,
         accessTokenHash,
+        createdAt: typeof saved.createdAt === "string" ? saved.createdAt : new Date().toISOString(),
+        // O disco não guarda dono nem aplicação: um registro achado só aqui é
+        // tratado como anônimo, e continua exigindo o token.
+        ownerId: undefined,
+        applicationId: undefined,
         ...(typeof saved.failureDetails === "string" ? { failureDetails: saved.failureDetails } : {}),
       };
     } catch {
@@ -529,6 +573,12 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
   const expireCodeExecution = (job: CodeExecutionJob): void => {
     const timer = setTimeout(() => {
       codeExecutionJobs.delete(job.id);
+      void config.codeExecutions?.delete(job.id).catch(() => {
+        // A varredura por vencimento no boot pega o que ficar para trás.
+      });
+      void config.artifacts.remove(codeArtifactPrefix(job.id)).catch(() => {
+        /* A limpeza do disco abaixo é o que importa; o objeto vence sozinho. */
+      });
       void rm(job.outputDir, { recursive: true, force: true });
     }, config.retentionMs);
     timer.unref();
@@ -665,6 +715,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     oauthProvider: config.oauthProvider,
     emailSender: config.emailSender,
     applications: config.applications,
+    codeExecutions: config.codeExecutions,
     authRateLimiter,
     currentUser,
     accessTokens: config.accessTokens,
@@ -716,6 +767,29 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         JSON.stringify({
           source: "qa-radar",
           event: "scan.restore_failed",
+          timestamp: new Date().toISOString(),
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+
+    // A expiração de uma execução da Jornada é um `setTimeout` do processo que a
+    // rodou: se ele morre, o timer morre junto e a linha ficaria no banco para
+    // sempre. Esta varredura no boot é o que fecha essa conta.
+    try {
+      const expired = (await config.codeExecutions?.deleteExpired(new Date())) ?? [];
+      for (const id of expired) {
+        void config.artifacts.remove(codeArtifactPrefix(id)).catch(() => {});
+        void rm(codeOutputDir(id), { recursive: true, force: true });
+      }
+      if (expired.length > 0) {
+        console.log(JSON.stringify({ source: "qa-radar", event: "code_execution.expired_swept", timestamp: new Date().toISOString(), removed: expired.length }));
+      }
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          source: "qa-radar",
+          event: "code_execution.sweep_failed",
           timestamp: new Date().toISOString(),
           error: error instanceof Error ? error.message : String(error),
         }),

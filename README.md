@@ -1040,10 +1040,18 @@ o custo depois vale para senhas novas sem invalidar as existentes.
 | `QA_RADAR_REQUIRE_ACCOUNT`                                    | `true` exige conta para **executar** análise, jornada ou teste de API. Navegar, ler e abrir relatório continuam livres. **Padrão `false`**, para a CLI e o dashboard local não passarem a exigir cadastro.           |
 
 Cada conta tem suas próprias **aplicações** (nome, URL base e ambientes),
-gerenciadas em `/aplicacoes`. Uma análise pode ser vinculada a uma aplicação, e
-o histórico de `GET /api/v1/scans` devolve exclusivamente o que pertence a quem
-pediu. Aplicação de outra conta responde `404`, e não `403`: responder proibido
-confirmaria que aquele identificador existe.
+gerenciadas em `/aplicacoes`. Tanto uma análise da Inspeção quanto uma execução
+do Modo Jornada podem ser vinculadas a uma aplicação, e
+`GET /api/v1/applications/{id}/scans` devolve as duas coisas numa linha do tempo
+só. O histórico de `GET /api/v1/scans` devolve exclusivamente o que pertence a
+quem pediu. Aplicação de outra conta responde `404`, e não `403`: responder
+proibido confirmaria que aquele identificador existe.
+
+**A Jornada só deixa registro com banco.** Sem `QA_RADAR_DATABASE_URL` a
+execução continua vivendo em memória e num `code-report.json` no disco, como
+sempre: some no reinicio e não pertence a ninguém. Com banco ela ganha dono,
+aplicação e retenção — e, se o armazenamento de artefatos estiver configurado,
+o relatório de evidências e as capturas sobrevivem ao contêiner ser recriado.
 
 Brevo em vez de Resend por uma restrição concreta: o Resend só entrega para
 endereço de terceiros depois de verificar um **domínio**, e o endereço público

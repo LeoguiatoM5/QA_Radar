@@ -6,6 +6,7 @@ import type { RequestContext, RouteHandler } from "./context.js";
 import type { IncomingMessage } from "node:http";
 import type { User } from "../identity.js";
 import { publicPersistedJob } from "./scans.js";
+import { publicCodeExecution } from "./code-execution.js";
 
 /** Teto do corpo: nome, URL e alguns rótulos não passam disso. */
 const MAX_APPLICATION_BODY_BYTES = 8 * 1024;
@@ -109,7 +110,12 @@ export const tryHandleApplications: RouteHandler = async (context, request, resp
     // "proibido" confirmaria que aquele id existe na conta de outra pessoa.
     if (!(await repository.get(user.id, historyMatch[1]))) throw new ApiError("not_found", "Aplicação não encontrada.");
     const scans = await context.scanJobs.listForApplication(user.id, historyMatch[1], MAX_APPLICATION_HISTORY);
-    json(response, 200, { scans: scans.map((scan) => publicPersistedJob(scan)) });
+    // A Jornada entra na mesma resposta, e não num endpoint próprio: o histórico
+    // de uma aplicação é uma pergunta só — "o que rodou aqui" — e dividi-la em
+    // duas chamadas obrigaria a tela a costurar duas linhas do tempo. Vazio
+    // quando não há banco, que é quando a Jornada não deixa registro.
+    const journeys = (await context.codeExecutions?.listByApplication(user.id, historyMatch[1], MAX_APPLICATION_HISTORY)) ?? [];
+    json(response, 200, { scans: scans.map((scan) => publicPersistedJob(scan)), journeys: journeys.map((journey) => publicCodeExecution(journey)) });
     return true;
   }
 

@@ -15,6 +15,7 @@ import type { OAuthProvider } from "../oauth.js";
 import type { EmailSender } from "../email.js";
 import type { RateLimiter } from "../rate-limit.js";
 import type { ApplicationRepository } from "../application-repository.js";
+import type { CodeExecutionRepository } from "../code-execution-repository.js";
 
 /**
  * Shared state and helpers threaded into every route module's tryHandle().
@@ -43,6 +44,8 @@ export interface RequestContext {
   emailSender: EmailSender;
   /** Ausente sem banco: aplicações precisam de onde ficar entre reinícios. */
   applications: ApplicationRepository | undefined;
+  /** Ausente sem banco: a Jornada volta a viver só em memória e no disco. */
+  codeExecutions: CodeExecutionRepository | undefined;
   /**
    * Limite próprio das rotas de conta, separado do limite geral de análises.
    *

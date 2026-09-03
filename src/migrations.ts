@@ -155,6 +155,33 @@ export const MIGRATIONS: Migration[] = [
       `create index if not exists scan_jobs_application_idx on scan_jobs (application_id, created_at desc)`,
     ],
   },
+  {
+    id: "0006_code_executions",
+    statements: [
+      // A Jornada é a automação de verdade do produto e era a única coisa que
+      // não deixava registro: a execução vivia num Map e num JSON no disco, sem
+      // dono e sem aplicação. Aqui ela ganha as duas colunas que a Inspeção já
+      // tinha, e passa a sobreviver ao reinício.
+      //
+      // Não há coluna de diretório de saída: ele é sempre
+      // `<resultsDir>/code-<id>`, e gravar o caminho seria guardar uma verdade
+      // da máquina que morreu.
+      `create table if not exists code_executions (
+         id uuid primary key,
+         status text not null,
+         created_at timestamptz not null default now(),
+         expires_at timestamptz not null,
+         access_token_hash text not null,
+         report jsonb,
+         failure_details text,
+         owner_id uuid references users (id) on delete set null,
+         application_id uuid references applications (id) on delete set null
+       )`,
+      `create index if not exists code_executions_owner_idx on code_executions (owner_id, created_at desc)`,
+      `create index if not exists code_executions_application_idx on code_executions (application_id, created_at desc)`,
+      `create index if not exists code_executions_expires_idx on code_executions (expires_at)`,
+    ],
+  },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `create table if not exists schema_migrations (

@@ -208,6 +208,40 @@ function askToSignIn(message: string): void {
   }
 }
 
+/**
+ * Seletor de aplicação da Jornada.
+ *
+ * Mesma regra do da Inspeção: nasce oculto e só aparece para quem tem conta com
+ * aplicação cadastrada. Sem conta ou sem banco não há o que escolher, e um campo
+ * vazio ali só levantaria a pergunta "o que é isso?".
+ */
+const journeyApplicationPicker = document.querySelector<HTMLElement>("#journey-application-picker");
+const journeyApplicationSelect = document.querySelector<HTMLSelectElement>("#journey-application");
+
+async function loadJourneyApplications(): Promise<void> {
+  if (!journeyApplicationPicker || !journeyApplicationSelect) return;
+  try {
+    const response = await fetch("/api/v1/applications");
+    if (!response.ok) return;
+    const applications = ((await response.json()) as { applications?: Array<{ id: string; name: string }> }).applications ?? [];
+    if (!applications.length) return;
+    for (const application of applications) {
+      const option = document.createElement("option");
+      option.value = application.id;
+      option.textContent = application.name;
+      journeyApplicationSelect.append(option);
+    }
+    journeyApplicationPicker.hidden = false;
+    // Vindo de "Executar jornada" na lista de aplicações, já chega escolhida.
+    const wanted = new URLSearchParams(location.search).get("aplicacao");
+    if (wanted && applications.some((application) => application.id === wanted)) journeyApplicationSelect.value = wanted;
+  } catch {
+    // Sem aplicações disponíveis o seletor simplesmente não aparece.
+  }
+}
+
+void loadJourneyApplications();
+
 interface ExecutionResult {
   id: string;
   status?: string;
@@ -224,7 +258,11 @@ codeExecute?.addEventListener("click", () => {
   if (codeResult) codeResult.hidden = true;
   void (async () => {
     try {
-      const response = await fetch("/api/code-execution", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: codeEditor?.value ?? "" }) });
+      const response = await fetch("/api/code-execution", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: codeEditor?.value ?? "", ...(journeyApplicationSelect?.value ? { applicationId: journeyApplicationSelect.value } : {}) }),
+      });
       const data = (await response.json()) as ExecutionResult;
       if (response.status === 401 || response.status === 403) {
         askToSignIn(data.error ?? "Entre com sua conta para executar a jornada.");

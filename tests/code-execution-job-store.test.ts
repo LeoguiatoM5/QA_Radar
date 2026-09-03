@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { CodeExecutionJobStore, type CodeExecutionJob } from "../src/code-execution-job-store.js";
 
 function job(id: string, status: CodeExecutionJob["status"] = "passed"): CodeExecutionJob {
-  return { id, outputDir: `dir-${id}`, status, report: { ok: true }, accessTokenHash: "0".repeat(64) };
+  return { id, outputDir: `dir-${id}`, status, report: { ok: true }, accessTokenHash: "0".repeat(64), createdAt: new Date().toISOString(), ownerId: undefined, applicationId: undefined };
 }
 
 describe("code execution job store", () => {

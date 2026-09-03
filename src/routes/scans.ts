@@ -7,6 +7,7 @@ import { listProjectHistory } from "../history.js";
 import type { ScanOptions, ScanReport } from "../types.js";
 import type { ScanJob } from "../job-queue.js";
 import { ACCESS_HASH_FILE, accessCookie, json, jsonError, numberField, readJson, requireAccess, storedAccessHash, textField, tokenHash } from "../http-helpers.js";
+import { codeArtifactPrefix } from "../code-execution-job-store.js";
 import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { isTerminalJobStatus } from "../job-state.js";
 import { MAX_IDEMPOTENCY_KEY_LENGTH, idempotencyScope, requestFingerprint } from "../idempotency-store.js";
@@ -319,11 +320,30 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       scans
         .filter((scan) => removed.includes(scan.id) && isTerminalJobStatus(scan.status))
         .map(async (scan) => {
+          // Mesmo motivo do bloco das Jornadas logo abaixo: o job concluído
+          // segue em memória até a retenção vencer, e `GET /api/scans/:id` olha
+          // para lá antes do banco.
+          jobQueue.delete(scan.id);
           await context.artifacts.remove(scan.id).catch(() => {});
           await rm(scan.options.outputDir, { recursive: true, force: true }).catch(() => {});
         }),
     );
-    json(response, 200, { removed: removed.length });
+    // As execuções da Jornada entram no mesmo "apagar": elas passaram a ter
+    // dono, então deixá-las de fora faria o botão apagar metade do histórico e
+    // manter a outra metade acessível por link — pior do que não apagar nada,
+    // porque a pessoa acreditaria que apagou.
+    const journeys = (await context.codeExecutions?.deleteByOwner(viewer.id)) ?? [];
+    await Promise.all(
+      journeys.map(async (id) => {
+        // Tirar do cache do processo também. Sem isto o registro sai do banco e
+        // do disco, mas `loadCodeExecutionJob` consulta a memória primeiro e o
+        // link continuaria abrindo a execução que a pessoa acabou de apagar.
+        context.codeExecutionJobs.delete(id);
+        await context.artifacts.remove(codeArtifactPrefix(id)).catch(() => {});
+        await rm(join(config.resultsDir, codeArtifactPrefix(id)), { recursive: true, force: true }).catch(() => {});
+      }),
+    );
+    json(response, 200, { removed: removed.length, journeys: journeys.length });
     return true;
   }
 

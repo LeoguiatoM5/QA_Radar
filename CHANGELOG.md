@@ -6,6 +6,34 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **A Jornada passou a deixar registro, com dono e aplicação.** Era a única
+  coisa do produto que não deixava: a execução vivia num `Map` do processo e num
+  `code-report.json` no disco — sem dono, sem aplicação, e na hospedagem, onde o
+  disco é efêmero, sumindo no deploy seguinte. Nova tabela `code_executions`
+  (migration `0006`) com `owner_id` e `application_id`, os dois com
+  `on delete set null`: arquivar a aplicação ou apagar a conta não pode levar
+  junto o registro do que aconteceu. O `/journeys` ganhou o seletor de aplicação
+  que a Inspeção já tinha, e `/aplicacoes` ganhou o botão **Jornada**.
+
+  A tabela **não** guarda o diretório de saída: ele é sempre
+  `<resultsDir>/code-<id>` e o `resultsDir` muda de uma instância para outra —
+  gravar o caminho seria guardar uma verdade da máquina que morreu. Os artefatos
+  passaram a subir para o armazenamento durável, e a leitura tenta disco
+  primeiro, como na Inspeção.
+
+  **Isolamento:** o dono lê a própria execução sem apresentar o token; uma
+  execução anônima continua exigindo o token mesmo de quem está logado, senão
+  entrar numa conta qualquer viraria caminho para alcançar o que não é seu.
+  Apontar a execução para a aplicação de outra conta responde 404.
+
+  Sem `QA_RADAR_DATABASE_URL` nada disso muda: a Jornada volta ao comportamento
+  antigo, em memória e disco. O produto não pode passar a exigir banco.
+
+- **`GET /api/v1/applications/{id}/scans` devolve também as Jornadas** e entrou
+  no contrato publicado, onde ainda não estava. As duas origens viram uma linha
+  do tempo só na tela: separar em duas listas obrigaria quem lê a cruzar
+  horários de cabeça para responder "o que aconteceu nesta aplicação".
+
 - **Histórico por aplicação em `/aplicacoes`.** A Inspeção gravava
   `scan_jobs.application_id` desde que Aplicações existe, mas **nenhuma consulta
   lia essa coluna**: o vínculo ia para o banco e não aparecia em lugar nenhum do
@@ -66,6 +94,13 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   contrato publicado, entrou junto.
 
 ### Corrigido
+
+- **"Limpar histórico" deixava o resultado alcançável por link.** Ele apagava a
+  linha do banco e o relatório do disco, mas não o cache do processo — e a
+  consulta por id olha para a memória antes do banco. Quem apagasse e abrisse o
+  link guardado continuaria vendo o resultado até a retenção vencer, acreditando
+  ter apagado. Vale para as duas metades: a Jornada, que agora entra no mesmo
+  "apagar", e a Inspeção, onde o furo já existia.
 
 - **A ordem das execuções na Visão geral estava errada sempre que havia
   histórico de conta.** O caminho local grava a data como época em número e o

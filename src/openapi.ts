@@ -159,6 +159,33 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      "/api/v1/applications/{id}/scans": {
+        get: {
+          tags: ["Aplicações"],
+          summary: "Histórico de execuções da aplicação",
+          description:
+            "Inspeções e Jornadas guardadas nesta aplicação, das mais recentes para as mais antigas. `journeys` vem vazio em servidor sem banco, onde a Jornada não deixa registro. Aplicação de outra conta responde 404.",
+          parameters: [{ $ref: "#/components/parameters/ApplicationId" }],
+          responses: {
+            "200": {
+              description: "Histórico da aplicação.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["scans", "journeys"],
+                    properties: {
+                      scans: { type: "array", items: { type: "object", additionalProperties: true } },
+                      journeys: { type: "array", items: { $ref: "#/components/schemas/JourneySummary" } },
+                    },
+                  },
+                },
+              },
+            },
+            ...errorResponses([401, 403, 404, 500]),
+          },
+        },
+      },
       "/api/v1/scans": {
         post: {
           tags: ["Análises"],
@@ -300,6 +327,11 @@ export function createOpenApiDocument(): Record<string, unknown> {
                   properties: {
                     code: { type: "string", maxLength: 262144, description: "Conteúdo do arquivo .spec.ts." },
                     headed: { type: "boolean", default: true, description: "Ignorado em execução remota, que é sempre headless." },
+                    applicationId: {
+                      type: "string",
+                      format: "uuid",
+                      description: "Aplicação da conta onde guardar esta execução. Exige sessão; id de aplicação de outra conta responde 404.",
+                    },
                   },
                 },
               },
@@ -308,7 +340,7 @@ export function createOpenApiDocument(): Record<string, unknown> {
           responses: {
             "200": { description: "Jornada aprovada.", content: { "application/json": { schema: { $ref: "#/components/schemas/CodeExecution" } } } },
             "422": { description: "Jornada reprovada. O corpo traz o mesmo formato do 200.", content: { "application/json": { schema: { $ref: "#/components/schemas/CodeExecution" } } } },
-            ...errorResponses([400, 401, 403, 413, 429, 500, 503]),
+            ...errorResponses([400, 401, 403, 404, 413, 429, 500, 503]),
           },
         },
       },
@@ -470,6 +502,27 @@ export function createOpenApiDocument(): Record<string, unknown> {
         },
         ApplicationEnvelope: { type: "object", required: ["application"], properties: { application: { $ref: "#/components/schemas/Application" } } },
         ApplicationList: { type: "object", required: ["applications"], properties: { applications: { type: "array", items: { $ref: "#/components/schemas/Application" } } } },
+        JourneySummary: {
+          type: "object",
+          required: ["id", "status", "createdAt"],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            status: { type: "string", enum: ["passed", "failed"] },
+            createdAt: { type: "string", format: "date-time" },
+            title: { type: "string", description: "Título do primeiro teste do arquivo .spec.ts." },
+            durationMs: { type: "integer" },
+            tests: {
+              type: "object",
+              properties: {
+                expected: { type: "integer" },
+                unexpected: { type: "integer" },
+                flaky: { type: "integer" },
+                skipped: { type: "integer" },
+              },
+            },
+            applicationId: { type: "string", format: "uuid", nullable: true },
+          },
+        },
         ApplicationRequest: {
           type: "object",
           properties: {

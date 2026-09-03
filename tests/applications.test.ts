@@ -368,13 +368,15 @@ describe("histórico da conta", () => {
 
       const limpeza = await fetch(`${baseUrl}/api/v1/scans`, { method: "DELETE", headers: { cookie } });
       assert.equal(limpeza.status, 200);
-      assert.deepEqual(await limpeza.json(), { removed: 2 });
+      // `journeys` entra na conta porque limpar o histórico passou a alcançar
+      // também as execuções da Jornada; aqui não houve nenhuma.
+      assert.deepEqual(await limpeza.json(), { removed: 2, journeys: 0 });
       assert.equal(await historyOf(baseUrl, cookie), 0);
 
       // Repetir converge para o mesmo estado, então não é conflito.
       const denovo = await fetch(`${baseUrl}/api/v1/scans`, { method: "DELETE", headers: { cookie } });
       assert.equal(denovo.status, 200);
-      assert.deepEqual(await denovo.json(), { removed: 0 });
+      assert.deepEqual(await denovo.json(), { removed: 0, journeys: 0 });
     } finally {
       await close();
     }
