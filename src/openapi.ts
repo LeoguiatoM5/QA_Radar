@@ -248,6 +248,18 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      "/api/v1/alerts": {
+        get: {
+          tags: ["Relatórios"],
+          summary: "O que pede atenção agora, para a conta inteira",
+          description:
+            "Duas coisas, sobre a janela fixa de 7 dias: as execuções com falha mais recentes (até 20) e um alerta quando a taxa de sucesso caiu 15 pontos percentuais ou mais frente ao período anterior de igual duração, com pelo menos 5 execuções decididas no período anterior. Granularidade de conta: não quebra por aplicação. Sem persistência — computado a cada chamada sobre a mesma linha do tempo de `/api/v1/executions`.",
+          responses: {
+            "200": { description: "O que pede atenção agora.", content: { "application/json": { schema: { $ref: "#/components/schemas/AlertsSummary" } } } },
+            ...errorResponses([401, 405, 500]),
+          },
+        },
+      },
       "/api/v1/applications/{id}/collections": {
         get: {
           tags: ["Testes de API"],
@@ -685,6 +697,29 @@ export function createOpenApiDocument(): Record<string, unknown> {
               },
             },
             truncated: { type: "boolean", description: "O período tinha mais execuções do que o resumo somou; os números são aproximados." },
+          },
+        },
+        RegressionAlert: {
+          type: "object",
+          required: ["currentPassRate", "previousPassRate", "droppedPoints"],
+          properties: {
+            currentPassRate: { type: "integer", description: "0 a 100." },
+            previousPassRate: { type: "integer", description: "0 a 100." },
+            droppedPoints: { type: "integer", description: "previousPassRate menos currentPassRate, em pontos percentuais." },
+          },
+        },
+        AlertsSummary: {
+          type: "object",
+          required: ["failures", "windowDays", "truncated"],
+          properties: {
+            failures: { type: "array", description: "Até 20 execuções com falha, da mais recente para a mais antiga.", items: { $ref: "#/components/schemas/ExecutionEntry" } },
+            regression: {
+              allOf: [{ $ref: "#/components/schemas/RegressionAlert" }],
+              nullable: true,
+              description: "Ausente quando a taxa de sucesso não caiu o suficiente, ou a amostra anterior é pequena demais.",
+            },
+            windowDays: { type: "integer", description: "Tamanho da janela usada nos dois gatilhos." },
+            truncated: { type: "boolean", description: "O período tinha mais execuções do que o resumo cobriu; os números são aproximados." },
           },
         },
         ApiRunSummary: {

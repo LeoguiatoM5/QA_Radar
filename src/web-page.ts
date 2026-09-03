@@ -1,4 +1,5 @@
 import {
+  renderAlertsPage,
   renderApiPage,
   renderApplicationsPage,
   renderAuthPage,
@@ -688,6 +689,25 @@ export function createQualityPage(): string {
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - resumo de qualidade da conta"><title>QA Radar · Central de qualidade</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${QUALITY_STYLES}</style></head>
 <body>${renderQualityPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/quality.js"></script></body>
+</html>`;
+}
+
+const ALERTS_STYLES = `
+.alert-regression{border-color:#f0c869;background:#241c0c}
+.alert-regression strong{display:block;color:#f0c869;font-size:1rem;margin-bottom:4px}
+.alert-regression p{margin:0;color:var(--muted)}
+`;
+
+/**
+ * Alertas: reaproveita as classes de linha de `REPORTS_STYLES`
+ * (`.reports-entry` e companhia) — mesma forma de linha, mesmo `ExecutionEntry`
+ * — e soma só o banner de regressão, que é o que não existe em Relatórios.
+ */
+export function createAlertsPage(): string {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - alertas da conta"><title>QA Radar · Alertas</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${REPORTS_STYLES}${ALERTS_STYLES}</style></head>
+<body>${renderAlertsPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/alerts.js"></script></body>
 </html>`;
 }
 

@@ -20,7 +20,7 @@ describe("responsive integration", () => {
       browser = await chromium.launch({ headless: true });
       const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 
-      for (const path of ["/", "/scanner", "/journeys", "/relatorios", "/central-de-qualidade", "/docs"]) {
+      for (const path of ["/", "/scanner", "/journeys", "/relatorios", "/central-de-qualidade", "/alertas", "/docs"]) {
         await page.goto(`${appUrl}${path}`, { waitUntil: "domcontentloaded" });
         const layout = await page.evaluate(() => {
           const visibleControls = [...document.querySelectorAll<HTMLElement>("input, select, textarea, button")].filter((element) => element.getClientRects().length > 0);

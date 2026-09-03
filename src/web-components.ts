@@ -1,4 +1,4 @@
-export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "relatorios" | "qualidade" | "docs" | "construcao";
+export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "relatorios" | "qualidade" | "alertas" | "docs" | "construcao";
 
 /** Ambientes oferecidos no seletor da barra de contexto. */
 export const ENVIRONMENTS = [
@@ -10,8 +10,8 @@ export const ENVIRONMENTS = [
 /** Áreas de apoio que ainda não existem: a navegação leva ao aviso de construção. */
 export const CONSTRUCTION_AREAS = {
   // "Relatórios" saiu daqui quando `/relatorios` passou a existir de verdade,
-  // e "Central de qualidade" quando `/central-de-qualidade` passou a existir.
-  alertas: { label: "Alertas", summary: "Notificações automáticas quando uma execução falhar ou um indicador de qualidade piorar." },
+  // "Central de qualidade" quando `/central-de-qualidade` passou a existir, e
+  // "Alertas" quando `/alertas` passou a existir.
   // "Ambientes" saiu daqui quando Aplicações passou a existir de verdade: as
   // duas prometiam a mesma coisa — cadastrar o que se testa, com URL e ambiente
   // — e ficavam lado a lado na navegação, com o mesmo ícone, uma funcionando e
@@ -80,9 +80,9 @@ function renderAppNav(active: NavSection, area = ""): string {
         ${link("toolbox", "QA Toolbox", "/toolbox", "toolbox")}
         ${link("relatorios", "Relatórios", "/relatorios", "reports")}
         ${link("qualidade", "Central de qualidade", "/central-de-qualidade", "quality")}
+        ${link("alertas", "Alertas", "/alertas", "alerts")}
       </div>
       <div class="nav-group nav-group-support">
-        ${supportingLink("alertas", "Alertas", "alerts")}
         ${supportingLink("configuracoes", "Configurações", "settings")}
       </div>
     </nav>
@@ -377,7 +377,7 @@ export function renderHome(): string {
 }
 
 export function renderConstructionPage(area: string): string {
-  const slug: ConstructionArea = Object.hasOwn(CONSTRUCTION_AREAS, area) ? (area as ConstructionArea) : "alertas";
+  const slug: ConstructionArea = Object.hasOwn(CONSTRUCTION_AREAS, area) ? (area as ConstructionArea) : "configuracoes";
   const { label, summary } = CONSTRUCTION_AREAS[slug];
   return `${renderWorkspaceStart("construcao", label, slug)}
   <section class="panel construction-panel">
@@ -572,6 +572,33 @@ function qualityTile(id: string, label: string, value: string, deltaId = ""): st
   return `<div class="reports-tile quality-tile"><small>${label}</small><strong id="${id}">${value}</strong>${deltaId ? `<em class="quality-delta" id="${deltaId}"></em>` : ""}</div>`;
 }
 
+/**
+ * Alertas: o que pede atenção agora, para a conta inteira.
+ *
+ * Sem filtro nenhum de propósito: a granularidade é a conta, não a aplicação
+ * — decisão do usuário, registrada em `src/alerts.ts`. Os números vêm de
+ * `GET /api/v1/alerts`.
+ */
+export function renderAlertsPage(): string {
+  return `${renderWorkspaceStart("alertas", "Alertas")}
+  ${renderToolHeader("Monitoramento", "Alertas", "O que pede atenção agora: execuções que falharam e quedas na taxa de sucesso, para a conta inteira.")}
+  <section class="tool-layout alerts-layout">
+    <p class="form-unavailable" id="alerts-unavailable" hidden></p>
+    <div class="error-box" id="alerts-error" role="alert"></div>
+
+    <section class="panel alert-regression" id="alert-regression" hidden>
+      <strong id="alert-regression-title"></strong>
+      <p id="alert-regression-detail"></p>
+    </section>
+
+    <section class="panel" aria-label="Execuções com falha recentes">
+      <div class="reports-list-head"><h2>Falhas recentes</h2><span class="reports-count" id="alerts-count"></span></div>
+      <div class="reports-list" id="alerts-list"><p class="hint">Carregando...</p></div>
+    </section>
+  </section>
+  ${renderWorkspaceEnd()}`;
+}
+
 function authField(id: string, label: string, type: string, autocomplete: string, hint = "", attributes = ""): string {
   return `<label class="auth-field" for="${id}"><span>${label}</span><input id="${id}" name="${id}" type="${type}" autocomplete="${autocomplete}" ${attributes}>${hint ? `<small>${hint}</small>` : ""}</label>`;
 }
@@ -675,11 +702,11 @@ export function renderDocs(): string {
     ${faqItem("relatorios", "Onde vejo os relatórios das execuções?", "<p>Em <strong>Relatórios</strong>, que reúne Inspeção, Jornada e Testes de API numa linha do tempo só, com filtro por aplicação, tipo e período. Ela depende de conta: sem login o histórico fica em <strong>Execuções recentes</strong>, na Visão geral, guardado por navegador. A Inspeção gera relatório em HTML (leitura e compartilhamento) e em JSON (integração com CI), e a Jornada gera evidências em HTML com o passo a passo.</p>")}
     ${faqItem("central-de-qualidade", "O que é o índice de qualidade?", "<p>É a nota de 0 a 100 no centro do radar, na Visão geral. Ela é a média de cinco eixos — HTTP, performance, acessibilidade, DOM e JavaScript — calculada sobre as execuções mais recentes deste navegador. Acima de 85 é <em>Excelente</em>; de 70 a 84, <em>Estável</em>; de 50 a 69, <em>Atenção</em>; abaixo disso, <em>Crítico</em>.</p><p>Os quatro números ao redor do radar comparam as últimas 24h com as 24h anteriores — a seta indica se o indicador melhorou ou piorou.</p>")}
     ${faqItem("", "Qual a diferença entre o radar da Visão geral e a Central de qualidade?", "<p>O radar é por navegador: só o que rodou ali. A <strong>Central de qualidade</strong> soma a conta inteira — total de execuções, taxa de sucesso, tendência contra o período anterior, quebra por Inspeção/Jornada/Testes de API e por aplicação. Depende de conta, como Relatórios.</p>" + action("/central-de-qualidade", "Abrir Central de qualidade", "Ver o resumo de qualidade da conta."))}
+    ${faqItem("alertas", "Dá para receber alertas quando algo falha?", "<p><strong>Alertas</strong> lista as execuções com falha dos últimos 7 dias e avisa quando a taxa de sucesso da conta cai 15 pontos percentuais ou mais frente ao período anterior de igual duração. É por conta, não por aplicação, e só no painel nesta primeira entrega — nenhum e-mail sai daqui ainda.</p><p>Para bloquear uma entrega automaticamente, use o quality gate: o campo <strong>Reprovar a partir de</strong> define se a execução falha por erros, por avisos ou nunca — e o código de saída pode ser lido pela sua CI.</p>" + action("/alertas", "Abrir Alertas", "Ver o que pede atenção agora na sua conta."))}
     ${faqItem("", "Onde ficam salvos os meus dados?", "<p>O histórico do painel fica no seu navegador e também no servidor, associado à sua sessão, limitado às 40 execuções mais recentes. Collections, variáveis e credenciais dos Testes de API <strong>nunca saem do navegador</strong> — não são enviadas ao servidor.</p>")}
 
     <h2 class="faq-group">Configuração</h2>
     ${faqItem("ambientes", "Como separo staging de produção?", "<p>Na Inspeção, use os campos <strong>Projeto</strong> e <strong>Ambiente</strong>. Eles mantêm o histórico e o baseline separados por ambiente, de modo que uma análise de staging não interfira na de produção. Os campos ficam disponíveis quando o histórico está habilitado no servidor.</p>")}
-    ${faqItem("alertas", "Dá para receber alertas quando algo falha?", "<p>Ainda não nesta Beta. Hoje o acompanhamento é pelo painel: o <strong>Sinal ao vivo</strong> mostra erros, avisos e sucessos conforme as análises acontecem, em tempo real.</p><p>Para bloquear uma entrega automaticamente, use o quality gate: o campo <strong>Reprovar a partir de</strong> define se a execução falha por erros, por avisos ou nunca — e o código de saída pode ser lido pela sua CI.</p>")}
     ${faqItem("configuracoes", "Onde ficam as configurações?", "<p>As opções de execução ficam na própria Inspeção, em <strong>Configurações avançadas</strong>: timeout, tempo de observação, status HTTP ignorados e política de screenshot. Configurações de servidor (histórico, limite de páginas do sitemap, execução de código) são definidas por variáveis de ambiente na implantação.</p>")}
 
     <h2 class="faq-group">Limites</h2>

@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CONSTRUCTION_AREAS, renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
-import { createApiTestsPage, createApplicationsPage, createAuthPage, createConstructionPage, createDocsPage, createHomePage, createJourneyPage, createWebPage } from "../src/web-page.js";
+import {
+  createAlertsPage,
+  createApiTestsPage,
+  createApplicationsPage,
+  createAuthPage,
+  createConstructionPage,
+  createDocsPage,
+  createHomePage,
+  createJourneyPage,
+  createWebPage,
+} from "../src/web-page.js";
 
 describe("entrada e cadastro", () => {
   it("compõe os quatro formulários de conta numa página só", () => {
@@ -22,6 +32,15 @@ describe("entrada e cadastro", () => {
     const html = createApplicationsPage();
     assert.match(html, /<script type="module" src="\/assets\/js\/applications\.js"><\/script>/);
     assert.doesNotMatch(html, /application-form'\)/, "o cliente saiu da string e não pode voltar embutido");
+  });
+
+  it("carrega o cliente de alertas como módulo, sem script embutido", () => {
+    const html = createAlertsPage();
+    assert.match(html, /<script type="module" src="\/assets\/js\/alerts\.js"><\/script>/);
+    assert.match(html, /<script type="module" src="\/assets\/js\/shell\.js"><\/script>/);
+    assert.doesNotMatch(html, /<script(?! type="module")/, "nenhum script embutido nesta página");
+    assert.match(html, /id="alert-regression"/);
+    assert.match(html, /id="alerts-list"/);
   });
 
   it("carrega o cliente como módulo, sem script embutido", () => {
@@ -173,21 +192,21 @@ describe("dashboard components", () => {
   });
 
   it("compõe o aviso de construção com o nome da área e caminhos de volta", () => {
-    const html = createConstructionPage("alertas");
+    const html = createConstructionPage("configuracoes");
 
     assert.match(html, /<h1>Em construção<\/h1>/);
-    assert.match(html, /<div class="eyebrow">Alertas<\/div>/);
+    assert.match(html, /<div class="eyebrow">Configurações<\/div>/);
     assert.match(html, /href="\/">Voltar para a Visão geral</);
     assert.match(html, /href="\/scanner"/);
     assert.match(html, /class="app-sidebar"/);
     // A área aberta fica destacada na navegação lateral.
-    assert.match(html, /nav-link-supporting active" href="\/em-construcao\?area=alertas" aria-current="page"/);
+    assert.match(html, /nav-link-supporting active" href="\/em-construcao\?area=configuracoes" aria-current="page"/);
   });
 
-  it("cai em Alertas quando a área pedida não existe", () => {
+  it("cai em Configurações quando a área pedida não existe", () => {
     for (const area of ["", "inexistente", "<script>alert(1)</script>"]) {
       const html = createConstructionPage(area);
-      assert.match(html, /<div class="eyebrow">Alertas<\/div>/);
+      assert.match(html, /<div class="eyebrow">Configurações<\/div>/);
       assert.doesNotMatch(html, /<script>alert/);
     }
   });

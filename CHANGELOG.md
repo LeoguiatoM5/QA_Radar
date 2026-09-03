@@ -6,6 +6,19 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **`/alertas` existe de verdade.** Era um link para o aviso de construção.
+  Agora lista o que pede atenção agora na conta: as execuções com falha dos
+  últimos 7 dias e um alerta quando a taxa de sucesso geral caiu 15 pontos
+  percentuais ou mais frente ao período anterior de igual duração (com pelo
+  menos 5 execuções decididas no período anterior, para não nascer de amostra
+  pequena). Granularidade de conta, não de aplicação, e só painel nesta
+  primeira entrega — nenhum e-mail sai daqui ainda.
+
+  Novo `GET /api/v1/alerts` (`src/alerts.ts`), que reaproveita
+  `readExecutionHistory` e `computeQualitySummary` em vez de uma tabela nova:
+  sem canal de envio, não há "o que já foi notificado" para guardar, e a tela
+  computa o estado atual a cada chamada.
+
 - **`/central-de-qualidade` existe de verdade.** Era um link para o aviso de
   construção. Agora é o resumo da conta: total de execuções, taxa de sucesso e
   a comparação com o período anterior de igual duração, tendência diária, e a

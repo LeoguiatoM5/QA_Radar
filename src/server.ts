@@ -29,6 +29,7 @@ import { tryHandleLegacyJourneys } from "./routes/journeys-legacy.js";
 import { tryHandleScans } from "./routes/scans.js";
 import { tryHandleExecutions } from "./routes/executions.js";
 import { tryHandleQuality } from "./routes/quality.js";
+import { tryHandleAlerts } from "./routes/alerts.js";
 import { tryHandleHttpRequest } from "./routes/http-request.js";
 import { tryHandleToolbox } from "./routes/toolbox.js";
 import { tryHandleDashboardActivity } from "./routes/dashboard-activity.js";
@@ -204,6 +205,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   tryHandleScans,
   tryHandleExecutions,
   tryHandleQuality,
+  tryHandleAlerts,
   tryHandleHttpRequest,
   tryHandleToolbox,
 ];

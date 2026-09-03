@@ -724,7 +724,9 @@ Continuam como roadmap:
 - Executar jornadas completas em ambientes autenticados.
 - Comparar execuções e identificar regressões após deploys.
 - Associar resultados a versões, commits e ambientes.
-- Permitir testes agendados e alertas configuráveis.
+- Permitir testes agendados e alertas configuráveis (o gatilho, a janela e o
+  envio por e-mail hoje são fixos — veja "Alertas (`/alertas`)" mais abaixo,
+  em "Contas, aplicações e acesso").
 - Integrar o QA Radar com GitHub, Jira, Slack e pipelines CI/CD.
 
 ### Colaboração e histórico
@@ -1056,6 +1058,14 @@ isso e o histórico continua na Visão geral, por navegador. A API por trás é
 em vez de listá-la: total, taxa de sucesso, comparação com o período anterior
 de igual duração, tendência diária e a quebra por tipo e por aplicação.
 Depende de conta, como Relatórios. A API é `GET /api/v1/quality/summary`.
+
+**Alertas (`/alertas`)** lista o que pede atenção agora, para a conta inteira
+(não por aplicação): as execuções com falha dos últimos 7 dias e um alerta
+quando a taxa de sucesso caiu 15 pontos percentuais ou mais frente ao período
+anterior de igual duração, com pelo menos 5 execuções decididas nesse período
+anterior. Só painel nesta primeira entrega — nenhum e-mail sai daqui ainda,
+mesmo com Brevo configurado. A API é `GET /api/v1/alerts`, sem tabela nova:
+computa sobre a mesma linha do tempo de Relatórios a cada chamada.
 
 **Testes de API: o que sobe e o que não sobe.** Escolhida uma aplicação em
 `/api-tests`, a collection passa a viver na conta e cada execução entra no
