@@ -94,17 +94,17 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
       const registrada = await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://api.exemplo.com/x", status: 200, statusText: "OK", durationMs: 120 });
       assert.equal(registrada.status, 200);
       assert.deepEqual(
-        (await repository.listRuns(owner, application, 50)).map((run) => run.id),
+        (await repository.listRunHistory(owner, { applicationId: application, limit: 50 })).map((run) => run.id),
         [registrada.id],
       );
-      assert.deepEqual(await repository.listRuns(other, application, 50), []);
+      assert.deepEqual(await repository.listRunHistory(other, { applicationId: application, limit: 50 }), []);
     });
 
     it("guarda a execução que nem chegou a receber status", async () => {
       // Falha de conexão é justamente o que se quer ver no histórico depois.
       const { repository, owner, application } = await create();
       await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://api.exemplo.com/x", status: undefined, statusText: undefined, durationMs: undefined });
-      const [run] = await repository.listRuns(owner, application, 50);
+      const [run] = await repository.listRunHistory(owner, { applicationId: application, limit: 50 });
       assert.equal(run?.status, undefined);
       assert.equal(run?.durationMs, undefined);
     });
@@ -114,7 +114,7 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
       for (let index = 0; index < MAX_API_RUNS_PER_APPLICATION + 5; index += 1) {
         await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: `https://api.exemplo.com/${index}`, status: 200, statusText: "OK", durationMs: 10 });
       }
-      const runs = await repository.listRuns(owner, application, MAX_API_RUNS_PER_APPLICATION + 50);
+      const runs = await repository.listRunHistory(owner, { applicationId: application, limit: MAX_API_RUNS_PER_APPLICATION + 50 });
       assert.equal(runs.length, MAX_API_RUNS_PER_APPLICATION);
     });
 
@@ -123,8 +123,8 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
       await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 10 });
       await repository.recordRun({ ownerId: other, applicationId: application, method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 10 });
       assert.equal(await repository.removeRunsForOwner(owner), 1);
-      assert.deepEqual(await repository.listRuns(owner, application, 50), []);
-      assert.equal((await repository.listRuns(other, application, 50)).length, 1);
+      assert.deepEqual(await repository.listRunHistory(owner, { applicationId: application, limit: 50 }), []);
+      assert.equal((await repository.listRunHistory(other, { applicationId: application, limit: 50 })).length, 1);
     });
   });
 }

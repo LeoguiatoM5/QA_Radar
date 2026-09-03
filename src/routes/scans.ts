@@ -297,7 +297,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       jsonError(response, "unauthorized", "Entre com sua conta para ver seu histórico de análises.");
       return true;
     }
-    const scans = await context.scanJobs.listForOwner(viewer.id, MAX_HISTORY_ITEMS);
+    const scans = await context.scanJobs.listHistory(viewer.id, { limit: MAX_HISTORY_ITEMS });
     json(response, 200, { scans: scans.map((scan) => publicPersistedJob(scan)) });
     return true;
   }
@@ -311,7 +311,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       jsonError(response, "unauthorized", "Entre com sua conta para apagar seu histórico de análises.");
       return true;
     }
-    const scans = await context.scanJobs.listForOwner(viewer.id, MAX_HISTORY_ITEMS);
+    const scans = await context.scanJobs.listHistory(viewer.id, { limit: MAX_HISTORY_ITEMS });
     const removed = await context.scanJobs.removeForOwner(viewer.id);
     // Apagar a linha e deixar o relatório no disco não é apagar: o HTML
     // continuaria acessível por link. Só entram os que já terminaram — mexer no

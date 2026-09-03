@@ -6,6 +6,27 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **`/relatorios` existe de verdade.** Era um link para o aviso de construção
+  desde sempre. Agora é a linha do tempo consultável da conta: Inspeção, Jornada
+  e Testes de API numa lista só, com filtro por **aplicação**, **tipo** e
+  **período**, resumo do que foi carregado e "carregar mais". A pergunta que ela
+  responde — "o que aconteceu" — não podia mais exigir abrir três telas e cruzar
+  horários de cabeça.
+
+  Novo `GET /api/v1/executions`. Os filtros vão para o SQL de cada origem, não
+  para uma varredura em memória: o produto existe para quem roda muito teste. O
+  recorte comum virou `src/history-query.ts`, e as três listagens antigas
+  (`listByOwner`, `listByApplication`, `listRuns`) viraram **um** `listHistory`
+  por repositório — três assinaturas quase iguais divergem com o tempo.
+
+  A busca por texto refina o que já está carregado, e a tela diz isso em voz
+  alta. Um filtro que parece consultar tudo mas só olha a página carregada é
+  pior do que um filtro assumidamente local; o resumo também diz sobre quantas
+  execuções foi calculado.
+
+  Filtro inválido responde **400** em vez de ser ignorado: uma lista que parece
+  filtrada e não está é um erro silencioso com cara de resultado.
+
 - **Testes de API vinculados a uma aplicação — e a decisão de o que sobe.** A
   página guardava tudo em `localStorage` e prometia por escrito que nada saía do
   navegador. Compartilhar uma collection com a equipe exige quebrar metade dessa
@@ -126,6 +147,14 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   contrato publicado, entrou junto.
 
 ### Corrigido
+
+- **A paginação do histórico pulava execuções empatadas no mesmo instante.**
+  O cursor era só a data da última linha da página, e uma rajada de Testes de
+  API grava várias linhas no mesmo milissegundo: as que empatavam com o cursor
+  não cabiam na página e não passavam pelo `<` da seguinte — sumiam da lista
+  inteira. O cursor passou a carregar **data e id**, com a ordenação
+  `(created_at, id)` nas três origens. Pego por um teste que pagina a lista toda
+  e confere que o total bate com a consulta sem paginação.
 
 - **"Limpar histórico" deixava o resultado alcançável por link.** Ele apagava a
   linha do banco e o relatório do disco, mas não o cache do processo — e a

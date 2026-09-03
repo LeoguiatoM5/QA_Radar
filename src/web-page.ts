@@ -1,4 +1,4 @@
-import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
+import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage, renderReportsPage } from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
 import type { QaToolDefinition } from "./toolbox/catalog.js";
 import { WEB_STYLES } from "./web-styles.js";
@@ -593,11 +593,48 @@ export function createHomePage(): string {
 </html>`;
 }
 
+const REPORTS_STYLES = `
+.reports-layout{display:grid;gap:18px}
+.reports-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.reports-filters .tool-field label{margin-top:0}
+.reports-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.reports-tile{background:#07101d;border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.reports-tile small{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+.reports-tile strong{display:block;margin-top:6px;font-size:1.65rem;font-variant-numeric:tabular-nums}
+.reports-list-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px}
+.reports-list-head h2{margin:0}
+.reports-count{color:var(--muted);font-size:.78rem}
+.reports-list{margin-top:14px;display:grid;gap:8px}
+.reports-list p.hint{margin:0}
+.reports-entry{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:#07101d;color:inherit;text-decoration:none}
+.reports-entry:hover{border-color:var(--cyan)}
+.reports-entry i{width:8px;height:8px;border-radius:50%;background:#ff625c;flex:0 0 auto}
+.reports-entry i.pass{background:#35d495}
+.reports-entry i.running{background:#f0c869}
+.reports-main{min-width:0}
+.reports-title{display:block;font-size:.86rem;font-weight:600;color:#e7f1fa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reports-meta{display:block;margin-top:3px;color:var(--muted);font-size:.74rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reports-kind{padding:3px 9px;border:1px solid #2a4d66;border-radius:999px;background:#0f2537;color:var(--cyan);font-size:.66rem;font-weight:700;letter-spacing:.04em;white-space:nowrap}
+.reports-duration{color:#c6d5e8;font-size:.76rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.reports-more{margin-top:14px;text-align:center}
+.reports-more button{width:auto;margin:0;padding:9px 18px}
+@media(max-width:900px){.reports-filter-grid,.reports-summary{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.reports-filter-grid,.reports-summary{grid-template-columns:1fr}.reports-entry{grid-template-columns:auto minmax(0,1fr)}.reports-kind,.reports-duration{display:none}}
+`;
+
 export function createApplicationsPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - aplicações da sua conta"><title>QA Radar · Aplicações</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${APPLICATIONS_STYLES}</style></head>
 <body>${renderApplicationsPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/applications.js"></script></body>
+</html>`;
+}
+
+export function createReportsPage(): string {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - histórico de execuções"><title>QA Radar · Relatórios</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${REPORTS_STYLES}</style></head>
+<body>${renderReportsPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/reports.js"></script></body>
 </html>`;
 }
 

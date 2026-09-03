@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Database } from "./database.js";
 import { MAX_API_RUNS_PER_APPLICATION, type ApiRequestDefinition } from "./api-collection.js";
+import { compareHistory, historyClauses, matchesHistory, type HistoryQuery } from "./history-query.js";
 
 /**
  * Collections de Testes de API e o histórico de execuções, por aplicação.
@@ -72,8 +73,8 @@ export interface ApiCollectionRepository {
   remove(ownerId: string, id: string): Promise<boolean>;
 
   recordRun(run: NewApiRun): Promise<ApiRun>;
-  /** Histórico de execuções de uma aplicação, das mais recentes para as antigas. */
-  listRuns(ownerId: string, applicationId: string, limit: number): Promise<ApiRun[]>;
+  /** Histórico de execuções da conta, com o recorte pedido. */
+  listRunHistory(ownerId: string, query: HistoryQuery): Promise<ApiRun[]>;
   /** Apaga o histórico de execuções da conta e devolve quantos saíram. */
   removeRunsForOwner(ownerId: string): Promise<number>;
 }
@@ -148,10 +149,11 @@ export class InMemoryApiCollectionRepository implements ApiCollectionRepository 
     return { ...created };
   }
 
-  async listRuns(ownerId: string, applicationId: string, limit: number): Promise<ApiRun[]> {
+  async listRunHistory(ownerId: string, query: HistoryQuery): Promise<ApiRun[]> {
     return this.#runs
-      .filter((run) => run.ownerId === ownerId && run.applicationId === applicationId)
-      .slice(0, limit)
+      .filter((run) => matchesHistory(run, ownerId, query))
+      .sort(compareHistory)
+      .slice(0, query.limit)
       .map((run) => ({ ...run }));
   }
 
@@ -295,12 +297,9 @@ export class PostgresApiCollectionRepository implements ApiCollectionRepository 
     return runFromRow(rows[0] as RunRow);
   }
 
-  async listRuns(ownerId: string, applicationId: string, limit: number): Promise<ApiRun[]> {
-    const rows = await this.database.query<RunRow>(`select ${RUN_COLUMNS} from api_runs where owner_id = $1 and application_id = $2 order by created_at desc limit $3`, [
-      ownerId,
-      applicationId,
-      limit,
-    ]);
+  async listRunHistory(ownerId: string, query: HistoryQuery): Promise<ApiRun[]> {
+    const { where, values, limitPlaceholder } = historyClauses(ownerId, query);
+    const rows = await this.database.query<RunRow>(`select ${RUN_COLUMNS} from api_runs where ${where} order by created_at desc, id desc limit ${limitPlaceholder}`, values);
     return rows.map(runFromRow);
   }
 

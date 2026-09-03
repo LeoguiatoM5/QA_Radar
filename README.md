@@ -1047,6 +1047,11 @@ só. O histórico de `GET /api/v1/scans` devolve exclusivamente o que pertence a
 quem pediu. Aplicação de outra conta responde `404`, e não `403`: responder
 proibido confirmaria que aquele identificador existe.
 
+**Relatórios (`/relatorios`)** reúne as três origens numa linha do tempo só, com
+filtro por aplicação, tipo e período. Depende de conta — sem banco a página diz
+isso e o histórico continua na Visão geral, por navegador. A API por trás é
+`GET /api/v1/executions`, paginada por cursor (`nextCursor`).
+
 **Testes de API: o que sobe e o que não sobe.** Escolhida uma aplicação em
 `/api-tests`, a collection passa a viver na conta e cada execução entra no
 histórico da aplicação. Sobem nome, método, URL, params, headers e body, mais o

@@ -132,13 +132,13 @@ export const tryHandleApplications: RouteHandler = async (context, request, resp
     // 404 e não 403 pelo mesmo motivo do GET de uma aplicação: responder
     // "proibido" confirmaria que aquele id existe na conta de outra pessoa.
     if (!(await repository.get(user.id, historyMatch[1]))) throw new ApiError("not_found", "Aplicação não encontrada.");
-    const scans = await context.scanJobs.listForApplication(user.id, historyMatch[1], MAX_APPLICATION_HISTORY);
+    const scans = await context.scanJobs.listHistory(user.id, { applicationId: historyMatch[1], limit: MAX_APPLICATION_HISTORY });
     // A Jornada entra na mesma resposta, e não num endpoint próprio: o histórico
     // de uma aplicação é uma pergunta só — "o que rodou aqui" — e dividi-la em
     // duas chamadas obrigaria a tela a costurar duas linhas do tempo. Vazio
     // quando não há banco, que é quando a Jornada não deixa registro.
-    const journeys = (await context.codeExecutions?.listByApplication(user.id, historyMatch[1], MAX_APPLICATION_HISTORY)) ?? [];
-    const apiRuns = (await context.apiCollections?.listRuns(user.id, historyMatch[1], MAX_APPLICATION_HISTORY)) ?? [];
+    const journeys = (await context.codeExecutions?.listHistory(user.id, { applicationId: historyMatch[1], limit: MAX_APPLICATION_HISTORY })) ?? [];
+    const apiRuns = (await context.apiCollections?.listRunHistory(user.id, { applicationId: historyMatch[1], limit: MAX_APPLICATION_HISTORY })) ?? [];
     json(response, 200, {
       scans: scans.map((scan) => publicPersistedJob(scan)),
       journeys: journeys.map((journey) => publicCodeExecution(journey)),

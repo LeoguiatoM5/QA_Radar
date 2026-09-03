@@ -72,7 +72,7 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
       await repository.insert(minha);
       await repository.insert(execution({ ownerId: other }));
       await repository.insert(execution());
-      const lista = await repository.listByOwner(owner, 50);
+      const lista = await repository.listHistory(owner, { limit: 50 });
       assert.deepEqual(
         lista.map((item) => item.id),
         [minha.id],
@@ -88,10 +88,10 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
       await repository.insert(daAplicacao);
       await repository.insert(execution({ ownerId: owner }));
       assert.deepEqual(
-        (await repository.listByApplication(owner, application, 50)).map((item) => item.id),
+        (await repository.listHistory(owner, { applicationId: application, limit: 50 })).map((item) => item.id),
         [daAplicacao.id],
       );
-      assert.deepEqual(await repository.listByApplication(other, application, 50), []);
+      assert.deepEqual(await repository.listHistory(other, { applicationId: application, limit: 50 }), []);
     });
 
     it("ordena da mais recente para a mais antiga e respeita o limite", async () => {
@@ -101,11 +101,11 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
       await repository.insert(antiga);
       await repository.insert(recente);
       assert.deepEqual(
-        (await repository.listByOwner(owner, 50)).map((item) => item.id),
+        (await repository.listHistory(owner, { limit: 50 })).map((item) => item.id),
         [recente.id, antiga.id],
       );
       assert.deepEqual(
-        (await repository.listByOwner(owner, 1)).map((item) => item.id),
+        (await repository.listHistory(owner, { limit: 1 })).map((item) => item.id),
         [recente.id],
       );
     });
@@ -148,7 +148,7 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
       const original = execution({ ownerId: owner });
       await repository.insert(original);
       await repository.insert({ ...original, status: "failed" });
-      assert.equal((await repository.listByOwner(owner, 50)).length, 1);
+      assert.equal((await repository.listHistory(owner, { limit: 50 })).length, 1);
     });
   });
 }

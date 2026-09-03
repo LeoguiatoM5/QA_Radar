@@ -187,6 +187,45 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      "/api/v1/executions": {
+        get: {
+          tags: ["Relatórios"],
+          summary: "Linha do tempo de execuções da conta",
+          description:
+            "Inspeções, Jornadas e Testes de API numa lista só, da mais recente para a mais antiga. Os filtros vão para a consulta de cada origem. A paginação usa `nextCursor`, que carrega data **e** id — duas execuções cabem no mesmo milissegundo, e um cursor só de data pularia as empatadas com a última linha da página.",
+          parameters: [
+            { name: "aplicacao", in: "query", required: false, schema: { type: "string", format: "uuid" }, description: "Só desta aplicação. De outra conta responde 404." },
+            {
+              name: "tipo",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description: "Origens separadas por vírgula: `scan`, `journey`, `api`. Ausente inclui todas; valor desconhecido responde 400.",
+            },
+            { name: "de", in: "query", required: false, schema: { type: "string", format: "date-time" }, description: "Início do período, inclusivo." },
+            { name: "cursor", in: "query", required: false, schema: { type: "string" }, description: "O `nextCursor` da resposta anterior, tal e qual." },
+            { name: "limite", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } },
+          ],
+          responses: {
+            "200": {
+              description: "Uma página da linha do tempo.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["executions"],
+                    properties: {
+                      executions: { type: "array", items: { $ref: "#/components/schemas/ExecutionEntry" } },
+                      nextCursor: { type: "string", nullable: true, description: "Ausente quando a lista acabou." },
+                    },
+                  },
+                },
+              },
+            },
+            ...errorResponses([400, 401, 403, 404, 405, 500]),
+          },
+        },
+      },
       "/api/v1/applications/{id}/collections": {
         get: {
           tags: ["Testes de API"],
@@ -557,6 +596,23 @@ export function createOpenApiDocument(): Record<string, unknown> {
         },
         ApplicationEnvelope: { type: "object", required: ["application"], properties: { application: { $ref: "#/components/schemas/Application" } } },
         ApplicationList: { type: "object", required: ["applications"], properties: { applications: { type: "array", items: { $ref: "#/components/schemas/Application" } } } },
+        ExecutionEntry: {
+          type: "object",
+          required: ["id", "kind", "createdAt", "title", "detail", "outcome", "href"],
+          description: "Uma linha da linha do tempo, já normalizada: as três origens chegam aqui com a mesma forma.",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            kind: { type: "string", enum: ["scan", "journey", "api"] },
+            createdAt: { type: "string", format: "date-time" },
+            title: { type: "string", description: "URL analisada, nome do teste, ou método e rota." },
+            detail: { type: "string", description: "Contagem de erros, de testes, ou o status HTTP." },
+            outcome: { type: "string", enum: ["passed", "failed", "running"] },
+            durationMs: { type: "integer", nullable: true },
+            applicationId: { type: "string", format: "uuid", nullable: true },
+            applicationName: { type: "string", nullable: true },
+            href: { type: "string", description: "Para onde a linha leva." },
+          },
+        },
         ApiRunSummary: {
           type: "object",
           required: ["id", "method", "url", "createdAt"],

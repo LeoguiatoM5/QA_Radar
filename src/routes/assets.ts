@@ -7,7 +7,7 @@ import type { RouteHandler } from "./context.js";
  * A lista fecha a rota: sem ela, o nome vindo da URL viraria leitura de arquivo
  * arbitrária dentro do diretório.
  */
-const MODULES = new Set(["api-tests", "applications", "auth", "dashboard", "docs", "journey", "scanner", "shared", "shell"]);
+const MODULES = new Set(["api-tests", "applications", "auth", "dashboard", "docs", "journey", "reports", "scanner", "shared", "shell"]);
 
 /**
  * Módulos das telas do QA Toolbox, de `src/browser/toolbox/`.

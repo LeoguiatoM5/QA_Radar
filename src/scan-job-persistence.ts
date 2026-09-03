@@ -1,5 +1,6 @@
 import type { ScanJob } from "./job-queue.js";
 import type { PersistedScanJob, ScanJobRepository } from "./scan-job-repository.js";
+import type { HistoryQuery } from "./history-query.js";
 
 /**
  * Persistência write-through dos jobs de análise.
@@ -21,8 +22,8 @@ export interface ScanJobPersistence {
   removed(id: string): Promise<void>;
   /** Apaga o histórico inteiro de uma conta e devolve os ids removidos. */
   removeForOwner(ownerId: string): Promise<string[]>;
-  /** Histórico de uma aplicação da conta, do mais recente para o mais antigo. */
-  listForApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedScanJob[]>;
+  /** Histórico da conta, com o recorte pedido. Vazio sem banco. */
+  listHistory(ownerId: string, query: HistoryQuery): Promise<PersistedScanJob[]>;
   /** Busca um job que não está mais em memória. */
   load(id: string): Promise<PersistedScanJob | undefined>;
   /**
@@ -40,8 +41,6 @@ export interface ScanJobPersistence {
    * indefinidamente, o que é pior do que falhar.
    */
   pending(): Promise<PersistedScanJob[]>;
-  /** Histórico de uma conta. Vazio sem banco: não há o que listar. */
-  listForOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]>;
   /** Sondagem barata para o readiness. Nunca lança. */
   status(): Promise<"disabled" | "ok" | "unreachable">;
 }
@@ -51,11 +50,10 @@ export const NO_SCAN_JOB_PERSISTENCE: ScanJobPersistence = {
   updated: async () => {},
   removed: async () => {},
   removeForOwner: async () => [],
-  listForApplication: async () => [],
+  listHistory: async () => [],
   load: async () => undefined,
   recoverOrphans: async () => [],
   pending: async () => [],
-  listForOwner: async () => [],
   status: async () => "disabled",
 };
 
@@ -140,17 +138,9 @@ export function createScanJobPersistence({ repository, retentionMs, onError }: S
         return [];
       }
     },
-    async listForApplication(ownerId, applicationId, limit) {
+    async listHistory(ownerId, query) {
       try {
-        return await repository.listByApplication(ownerId, applicationId, limit);
-      } catch (error) {
-        onError("list", error);
-        return [];
-      }
-    },
-    async listForOwner(ownerId, limit) {
-      try {
-        return await repository.listByOwner(ownerId, limit);
+        return await repository.listHistory(ownerId, query);
       } catch (error) {
         onError("list", error);
         return [];

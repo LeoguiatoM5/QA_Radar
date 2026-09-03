@@ -187,7 +187,7 @@ function contractFor(name: string, create: () => Promise<ScanJobRepository>, hoo
       const anonima = job();
       for (const entry of [daContaA, outraDaContaA, daContaB, anonima]) await repository.insert(entry);
 
-      const historico = await repository.listByOwner(OWNER_A, 50);
+      const historico = await repository.listHistory(OWNER_A, { limit: 50 });
       assert.deepEqual(
         historico.map((entry) => entry.id),
         [outraDaContaA.id, daContaA.id],
@@ -198,13 +198,13 @@ function contractFor(name: string, create: () => Promise<ScanJobRepository>, hoo
     it("respeita o teto do histórico", async () => {
       const repository = await create();
       for (let i = 0; i < 5; i += 1) await repository.insert(job({ ownerId: OWNER_A, createdAt: `2026-08-0${i + 1}T10:00:00.000Z` }));
-      assert.equal((await repository.listByOwner(OWNER_A, 2)).length, 2);
+      assert.equal((await repository.listHistory(OWNER_A, { limit: 2 })).length, 2);
     });
 
     it("não devolve nada para uma conta sem análises", async () => {
       const repository = await create();
       await repository.insert(job({ ownerId: OWNER_A }));
-      assert.deepEqual(await repository.listByOwner(OWNER_B, 50), []);
+      assert.deepEqual(await repository.listHistory(OWNER_B, { limit: 50 }), []);
     });
 
     it("lista o histórico de uma aplicação, e só dela", async () => {
@@ -218,12 +218,12 @@ function contractFor(name: string, create: () => Promise<ScanJobRepository>, hoo
       for (const entry of [daLoja, outraDaLoja, semAplicacao, deOutraConta]) await repository.insert(entry);
 
       assert.deepEqual(
-        (await repository.listByApplication(OWNER_A, APPLICATION_A, 50)).map((entry) => entry.id),
+        (await repository.listHistory(OWNER_A, { applicationId: APPLICATION_A, limit: 50 })).map((entry) => entry.id),
         [outraDaLoja.id, daLoja.id],
         "só as da aplicação, mais recente primeiro",
       );
-      assert.deepEqual(await repository.listByApplication(OWNER_B, APPLICATION_A, 50), [], "o dono errado não alcança a aplicação alheia");
-      assert.equal((await repository.listByApplication(OWNER_A, APPLICATION_A, 1)).length, 1, "o teto vale");
+      assert.deepEqual(await repository.listHistory(OWNER_B, { applicationId: APPLICATION_A, limit: 50 }), [], "o dono errado não alcança a aplicação alheia");
+      assert.equal((await repository.listHistory(OWNER_A, { applicationId: APPLICATION_A, limit: 1 })).length, 1, "o teto vale");
     });
 
     it("apaga o histórico de uma conta sem tocar no das outras", async () => {
@@ -238,8 +238,8 @@ function contractFor(name: string, create: () => Promise<ScanJobRepository>, hoo
 
       const removidos = await repository.deleteByOwner(OWNER_A);
       assert.deepEqual([...removidos].sort(), [daContaA.id, outraDaContaA.id].sort());
-      assert.deepEqual(await repository.listByOwner(OWNER_A, 50), []);
-      assert.equal((await repository.listByOwner(OWNER_B, 50)).length, 1);
+      assert.deepEqual(await repository.listHistory(OWNER_A, { limit: 50 }), []);
+      assert.equal((await repository.listHistory(OWNER_B, { limit: 50 })).length, 1);
       assert.ok(await repository.get(anonima.id), "análise anônima não tem dono e não entra na limpeza");
     });
 
@@ -247,7 +247,7 @@ function contractFor(name: string, create: () => Promise<ScanJobRepository>, hoo
       const repository = await create();
       await repository.insert(job({ ownerId: OWNER_A }));
       assert.deepEqual(await repository.deleteByOwner(OWNER_B), []);
-      assert.equal((await repository.listByOwner(OWNER_A, 50)).length, 1);
+      assert.equal((await repository.listHistory(OWNER_A, { limit: 50 })).length, 1);
     });
 
     it("preserva o dono na volta do armazenamento", async () => {

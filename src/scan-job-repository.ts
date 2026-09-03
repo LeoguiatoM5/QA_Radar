@@ -1,4 +1,5 @@
 import type { Database } from "./database.js";
+import { compareHistory, historyClauses, matchesHistory, type HistoryQuery } from "./history-query.js";
 import type { JobStatus } from "./job-state.js";
 import { canTransitionJob } from "./job-state.js";
 import type { ScanOptions, ScanProgress, ScanReport } from "./types.js";
@@ -43,16 +44,14 @@ export interface ScanJobRepository {
   runningJobs(): Promise<PersistedScanJob[]>;
   /** Jobs ainda `queued`, em ordem de chegada, para reenfileirar no boot. */
   queuedJobs(): Promise<PersistedScanJob[]>;
-  /** Histórico de uma conta, do mais recente para o mais antigo. */
-  listByOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]>;
   /**
-   * Histórico de uma aplicação, do mais recente para o mais antigo.
+   * Histórico de uma conta, do mais recente para o mais antigo.
    *
    * O dono entra na própria consulta, e não numa checagem antes dela: com o
    * `ownerId` só no chamador, um id de aplicação vazado devolveria o histórico
    * de outra conta.
    */
-  listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedScanJob[]>;
+  listHistory(ownerId: string, query: HistoryQuery): Promise<PersistedScanJob[]>;
   delete(id: string): Promise<void>;
   /**
    * Apaga o histórico inteiro de uma conta e devolve os ids removidos.
@@ -156,25 +155,17 @@ export class InMemoryScanJobRepository implements ScanJobRepository {
     });
   }
 
-  async listByOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]> {
-    return [...this.#jobs.values()]
-      .filter((job) => job.ownerId === ownerId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit)
-      .map((job) => ({ ...job }));
-  }
-
   async delete(id: string): Promise<void> {
     this.#jobs.delete(id);
     const index = this.#order.indexOf(id);
     if (index >= 0) this.#order.splice(index, 1);
   }
 
-  async listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedScanJob[]> {
+  async listHistory(ownerId: string, query: HistoryQuery): Promise<PersistedScanJob[]> {
     return [...this.#jobs.values()]
-      .filter((job) => job.ownerId === ownerId && job.applicationId === applicationId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit)
+      .filter((job) => matchesHistory(job, ownerId, query))
+      .sort(compareHistory)
+      .slice(0, query.limit)
       .map((job) => ({ ...job }));
   }
 
@@ -338,21 +329,13 @@ export class PostgresScanJobRepository implements ScanJobRepository {
     return rows.map(fromRow);
   }
 
-  async listByOwner(ownerId: string, limit: number): Promise<PersistedScanJob[]> {
-    const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where owner_id = $1 order by created_at desc limit $2`, [ownerId, limit]);
-    return rows.map(fromRow);
-  }
-
   async delete(id: string): Promise<void> {
     await this.database.query("delete from scan_jobs where id = $1", [id]);
   }
 
-  async listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedScanJob[]> {
-    const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where owner_id = $1 and application_id = $2 order by created_at desc limit $3`, [
-      ownerId,
-      applicationId,
-      limit,
-    ]);
+  async listHistory(ownerId: string, query: HistoryQuery): Promise<PersistedScanJob[]> {
+    const { where, values, limitPlaceholder } = historyClauses(ownerId, query);
+    const rows = await this.database.query<ScanJobRow>(`select ${COLUMNS} from scan_jobs where ${where} order by created_at desc, id desc limit ${limitPlaceholder}`, values);
     return rows.map(fromRow);
   }
 

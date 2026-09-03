@@ -1,4 +1,4 @@
-export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "docs" | "construcao";
+export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "relatorios" | "docs" | "construcao";
 
 /** Ambientes oferecidos no seletor da barra de contexto. */
 export const ENVIRONMENTS = [
@@ -9,7 +9,7 @@ export const ENVIRONMENTS = [
 
 /** Áreas de apoio que ainda não existem: a navegação leva ao aviso de construção. */
 export const CONSTRUCTION_AREAS = {
-  relatorios: { label: "Relatórios", summary: "Uma área dedicada a consolidar os relatórios de todas as execuções, com filtros por projeto, período e ambiente." },
+  // "Relatórios" saiu daqui quando `/relatorios` passou a existir de verdade.
   "central-de-qualidade": { label: "Central de qualidade", summary: "O painel de padrões, tendências e evolução da qualidade do projeto ao longo do tempo." },
   alertas: { label: "Alertas", summary: "Notificações automáticas quando uma execução falhar ou um indicador de qualidade piorar." },
   // "Ambientes" saiu daqui quando Aplicações passou a existir de verdade: as
@@ -78,7 +78,7 @@ function renderAppNav(active: NavSection, area = ""): string {
         ${link("api", "Testes de API", "/api-tests", "api")}
         ${link("aplicacoes", "Aplicações", "/aplicacoes", "environments")}
         ${link("toolbox", "QA Toolbox", "/toolbox", "toolbox")}
-        ${supportingLink("relatorios", "Relatórios", "reports")}
+        ${link("relatorios", "Relatórios", "/relatorios", "reports")}
         ${supportingLink("central-de-qualidade", "Central de qualidade", "quality")}
       </div>
       <div class="nav-group nav-group-support">
@@ -356,7 +356,7 @@ export function renderHome(): string {
         <a class="execution-card" href="/journeys"><span class="execution-icon"><em class="tool-icon icon-journey"><i></i></em></span><span class="execution-copy"><strong>Jornada</strong><small>Execute fluxos automatizados com Playwright e valide experiências reais.</small></span><span class="execution-action"><b>Executar jornada</b><small id="dashboard-last-journey">Sem execuções recentes</small></span></a>
         <a class="execution-card" href="/api-tests"><span class="execution-icon execution-icon-plain"><em class="tool-icon icon-api"><i></i></em></span><span class="execution-copy"><strong>Testes de API</strong><small>Valide contratos, respostas e regras de negócio das suas APIs.</small></span><span class="execution-action"><b>Executar testes</b><small id="dashboard-last-api">Sem execuções recentes</small></span></a>
       </div>
-      <a class="executions-link" href="/em-construcao?area=relatorios">Ver todas as execuções <span>→</span></a>
+      <a class="executions-link" href="/relatorios">Ver todas as execuções <span>→</span></a>
       </div>
       </section>
       <section class="recent-runs">
@@ -435,6 +435,74 @@ export function renderApplicationsPage(): string {
     </section>
   </section>
   ${renderWorkspaceEnd()}`;
+}
+
+/**
+ * Relatórios: a linha do tempo consultável das três origens.
+ *
+ * Os filtros nascem no HTML e não são montados pelo cliente porque a página tem
+ * de ser legível — e navegável por teclado — antes de qualquer JavaScript rodar.
+ * O que o cliente preenche é o seletor de aplicação, que depende da conta.
+ */
+export function renderReportsPage(): string {
+  return `${renderWorkspaceStart("relatorios", "Relatórios")}
+  ${renderToolHeader("Histórico", "Relatórios", "Tudo o que rodou na sua conta, em uma linha do tempo só: Inspeção, Jornada e Testes de API.")}
+  <section class="tool-layout reports-layout">
+    <p class="form-unavailable" id="reports-unavailable" hidden></p>
+    <section class="panel reports-filters" aria-label="Filtros do histórico">
+      <div class="reports-filter-grid">
+        <div class="tool-field">
+          <label for="reports-application">Aplicação</label>
+          <select id="reports-application"><option value="">Todas</option></select>
+        </div>
+        <div class="tool-field">
+          <label for="reports-kind">Tipo</label>
+          <select id="reports-kind">
+            <option value="">Todos</option>
+            <option value="scan">Inspeção</option>
+            <option value="journey">Jornada</option>
+            <option value="api">Teste de API</option>
+          </select>
+        </div>
+        <div class="tool-field">
+          <label for="reports-period">Período</label>
+          <select id="reports-period">
+            <option value="7">Últimos 7 dias</option>
+            <option value="30" selected>Últimos 30 dias</option>
+            <option value="90">Últimos 90 dias</option>
+            <option value="">Desde o começo</option>
+          </select>
+        </div>
+        <div class="tool-field">
+          <label for="reports-search">Buscar</label>
+          <input id="reports-search" type="search" placeholder="URL, nome do teste, rota...">
+        </div>
+      </div>
+      <small class="hint">A busca refina o que já está carregado. Os demais filtros são aplicados na consulta.</small>
+    </section>
+
+    <section class="panel reports-summary-panel" aria-label="Resumo do período">
+      <div class="reports-summary" id="reports-summary">
+        ${reportTile("reports-total", "Execuções", "—")}
+        ${reportTile("reports-passed", "Sem falha", "—")}
+        ${reportTile("reports-failed", "Com falha", "—")}
+        ${reportTile("reports-rate", "Taxa de sucesso", "—")}
+      </div>
+      <small class="hint" id="reports-summary-note">Calculado sobre as execuções carregadas.</small>
+    </section>
+
+    <section class="panel">
+      <div class="reports-list-head"><h2>Linha do tempo</h2><span class="reports-count" id="reports-count"></span></div>
+      <div class="error-box" id="reports-error" role="alert"></div>
+      <div class="reports-list" id="reports-list"><p class="hint">Carregando execuções...</p></div>
+      <div class="reports-more"><button id="reports-more" class="secondary" type="button" hidden>Carregar mais</button></div>
+    </section>
+  </section>
+  ${renderWorkspaceEnd()}`;
+}
+
+function reportTile(id: string, label: string, value: string): string {
+  return `<div class="reports-tile"><small>${label}</small><strong id="${id}">${value}</strong></div>`;
 }
 
 function authField(id: string, label: string, type: string, autocomplete: string, hint = "", attributes = ""): string {
@@ -537,7 +605,7 @@ export function renderDocs(): string {
     ${faqItem("", "Por que as chamadas de API saem do servidor e não do meu navegador?", "<p>Para evitar bloqueios de CORS, que impediriam testar boa parte das APIs direto do navegador. As chamadas passam pela mesma proteção contra redes privadas aplicada ao restante do produto.</p>")}
 
     <h2 class="faq-group">Resultados e dados</h2>
-    ${faqItem("relatorios", "Onde vejo os relatórios das execuções?", "<p>Cada execução aparece em <strong>Execuções recentes</strong>, na Visão geral — clique na linha para abrir o resultado completo. A Inspeção gera relatório em HTML (leitura e compartilhamento) e em JSON (integração com CI), e a Jornada gera evidências em HTML com o passo a passo.</p>")}
+    ${faqItem("relatorios", "Onde vejo os relatórios das execuções?", "<p>Em <strong>Relatórios</strong>, que reúne Inspeção, Jornada e Testes de API numa linha do tempo só, com filtro por aplicação, tipo e período. Ela depende de conta: sem login o histórico fica em <strong>Execuções recentes</strong>, na Visão geral, guardado por navegador. A Inspeção gera relatório em HTML (leitura e compartilhamento) e em JSON (integração com CI), e a Jornada gera evidências em HTML com o passo a passo.</p>")}
     ${faqItem("central-de-qualidade", "O que é o índice de qualidade?", "<p>É a nota de 0 a 100 no centro do radar. Ela é a média de cinco eixos — HTTP, performance, acessibilidade, DOM e JavaScript — calculada sobre as execuções mais recentes. Acima de 85 é <em>Excelente</em>; de 70 a 84, <em>Estável</em>; de 50 a 69, <em>Atenção</em>; abaixo disso, <em>Crítico</em>.</p><p>Os quatro números ao redor do radar comparam as últimas 24h com as 24h anteriores — a seta indica se o indicador melhorou ou piorou.</p>")}
     ${faqItem("", "Onde ficam salvos os meus dados?", "<p>O histórico do painel fica no seu navegador e também no servidor, associado à sua sessão, limitado às 40 execuções mais recentes. Collections, variáveis e credenciais dos Testes de API <strong>nunca saem do navegador</strong> — não são enviadas ao servidor.</p>")}
 

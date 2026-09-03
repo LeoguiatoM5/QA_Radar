@@ -1,4 +1,5 @@
 import type { Database } from "./database.js";
+import { compareHistory, historyClauses, matchesHistory, type HistoryQuery } from "./history-query.js";
 
 /**
  * Execuções do Modo Jornada de Playwright como registro durável.
@@ -36,10 +37,8 @@ export interface PersistedCodeExecution {
 export interface CodeExecutionRepository {
   insert(execution: PersistedCodeExecution): Promise<void>;
   get(id: string): Promise<PersistedCodeExecution | undefined>;
-  /** Histórico de uma conta, do mais recente para o mais antigo. */
-  listByOwner(ownerId: string, limit: number): Promise<PersistedCodeExecution[]>;
-  /** Histórico de uma aplicação, com o dono dentro da consulta. */
-  listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedCodeExecution[]>;
+  /** Histórico da conta, com o recorte pedido, do mais recente para o mais antigo. */
+  listHistory(ownerId: string, query: HistoryQuery): Promise<PersistedCodeExecution[]>;
   delete(id: string): Promise<void>;
   /**
    * Apaga o histórico inteiro de uma conta e devolve os ids removidos.
@@ -53,8 +52,6 @@ export interface CodeExecutionRepository {
   deleteExpired(now: Date): Promise<string[]>;
 }
 
-const byNewest = (a: PersistedCodeExecution, b: PersistedCodeExecution): number => b.createdAt.localeCompare(a.createdAt);
-
 export class InMemoryCodeExecutionRepository implements CodeExecutionRepository {
   readonly #executions = new Map<string, PersistedCodeExecution>();
 
@@ -67,19 +64,11 @@ export class InMemoryCodeExecutionRepository implements CodeExecutionRepository 
     return found ? { ...found } : undefined;
   }
 
-  async listByOwner(ownerId: string, limit: number): Promise<PersistedCodeExecution[]> {
+  async listHistory(ownerId: string, query: HistoryQuery): Promise<PersistedCodeExecution[]> {
     return [...this.#executions.values()]
-      .filter((execution) => execution.ownerId === ownerId)
-      .sort(byNewest)
-      .slice(0, limit)
-      .map((execution) => ({ ...execution }));
-  }
-
-  async listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedCodeExecution[]> {
-    return [...this.#executions.values()]
-      .filter((execution) => execution.ownerId === ownerId && execution.applicationId === applicationId)
-      .sort(byNewest)
-      .slice(0, limit)
+      .filter((execution) => matchesHistory(execution, ownerId, query))
+      .sort(compareHistory)
+      .slice(0, query.limit)
       .map((execution) => ({ ...execution }));
   }
 
@@ -167,17 +156,9 @@ export class PostgresCodeExecutionRepository implements CodeExecutionRepository 
     return rows[0] ? fromRow(rows[0]) : undefined;
   }
 
-  async listByOwner(ownerId: string, limit: number): Promise<PersistedCodeExecution[]> {
-    const rows = await this.database.query<CodeExecutionRow>(`select ${COLUMNS} from code_executions where owner_id = $1 order by created_at desc limit $2`, [ownerId, limit]);
-    return rows.map(fromRow);
-  }
-
-  async listByApplication(ownerId: string, applicationId: string, limit: number): Promise<PersistedCodeExecution[]> {
-    const rows = await this.database.query<CodeExecutionRow>(`select ${COLUMNS} from code_executions where owner_id = $1 and application_id = $2 order by created_at desc limit $3`, [
-      ownerId,
-      applicationId,
-      limit,
-    ]);
+  async listHistory(ownerId: string, query: HistoryQuery): Promise<PersistedCodeExecution[]> {
+    const { where, values, limitPlaceholder } = historyClauses(ownerId, query);
+    const rows = await this.database.query<CodeExecutionRow>(`select ${COLUMNS} from code_executions where ${where} order by created_at desc, id desc limit ${limitPlaceholder}`, values);
     return rows.map(fromRow);
   }
 
