@@ -17,6 +17,7 @@ import type { RateLimiter } from "../rate-limit.js";
 import type { ApplicationRepository } from "../application-repository.js";
 import type { CodeExecutionRepository } from "../code-execution-repository.js";
 import type { ApiCollectionRepository } from "../api-collection-repository.js";
+import type { AccountSettingsRepository } from "../account-settings-repository.js";
 
 /**
  * Shared state and helpers threaded into every route module's tryHandle().
@@ -49,6 +50,8 @@ export interface RequestContext {
   codeExecutions: CodeExecutionRepository | undefined;
   /** Ausente sem banco: as collections de API ficam só no navegador, como antes. */
   apiCollections: ApiCollectionRepository | undefined;
+  /** Ausente sem banco: Alertas e a Inspeção voltam aos padrões fixos do produto. */
+  accountSettings: AccountSettingsRepository | undefined;
   /**
    * Limite próprio das rotas de conta, separado do limite geral de análises.
    *

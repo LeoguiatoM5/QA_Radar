@@ -1,6 +1,7 @@
 import { json, jsonError } from "../http-helpers.js";
 import { ApiError } from "../api-error.js";
 import { computeAlerts } from "../alerts.js";
+import { resolveAccountSettings } from "../account-settings.js";
 import type { RouteHandler } from "./context.js";
 
 /**
@@ -18,7 +19,16 @@ export const tryHandleAlerts: RouteHandler = async (context, request, response, 
   const viewer = await context.currentUser(request);
   if (!viewer) throw new ApiError("unauthorized", "Entre com sua conta para ver os Alertas.");
 
-  const summary = await computeAlerts({ scanJobs: context.scanJobs, codeExecutions: context.codeExecutions, apiCollections: context.apiCollections, applications: context.applications }, viewer.id);
+  // Os limiares vêm de Configurações quando a conta ajustou algo; sem ajuste,
+  // ou sem banco, `resolveAccountSettings` já devolve o padrão do produto.
+  const stored = await context.accountSettings?.get(viewer.id);
+  const { alerts: thresholds } = resolveAccountSettings(stored);
+
+  const summary = await computeAlerts(
+    { scanJobs: context.scanJobs, codeExecutions: context.codeExecutions, apiCollections: context.apiCollections, applications: context.applications },
+    viewer.id,
+    thresholds,
+  );
 
   json(response, 200, summary);
   return true;

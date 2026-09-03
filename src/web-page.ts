@@ -3,13 +3,13 @@ import {
   renderApiPage,
   renderApplicationsPage,
   renderAuthPage,
-  renderConstructionPage,
   renderDashboard,
   renderDocs,
   renderHome,
   renderJourneyPage,
   renderQualityPage,
   renderReportsPage,
+  renderSettingsPage,
 } from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
 import type { QaToolDefinition } from "./toolbox/catalog.js";
@@ -719,11 +719,26 @@ export function createAuthPage(): string {
 </html>`;
 }
 
-export function createConstructionPage(area: string): string {
+const SETTINGS_STYLES = `
+.form-unavailable{margin:0 0 20px;padding:11px 13px;border:1px solid #3c5470;border-radius:10px;background:#0b1a2a;color:var(--muted);font-size:.8rem;line-height:1.5}
+.settings-badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:.7rem;font-weight:800;background:#064e3b;color:var(--green)}
+.settings-badge-warn{background:#713f12;color:var(--yellow)}
+.error-box.ok{background:#064e3b66;border-color:#22c55e66;color:#bbf7d0}
+.settings-layout h3{margin:0 0 4px;font-size:.95rem;color:#d9e7f7}
+.settings-layout form{margin-top:18px}
+`;
+
+/**
+ * Configurações: conta, limiares de Alertas e padrões de execução da Inspeção
+ * — ver `src/account-settings.ts`. Três formulários independentes na mesma
+ * página, cada um com o próprio botão salvar e a própria caixa de erro, no
+ * molde do formulário + lista de `createApplicationsPage`.
+ */
+export function createSettingsPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - área em construção"><title>QA Radar · Em construção</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}</style></head>
-<body>${renderConstructionPage(area)}<script type="module" src="/assets/js/shell.js"></script></body>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - configurações da conta"><title>QA Radar · Configurações</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${SETTINGS_STYLES}</style></head>
+<body>${renderSettingsPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/settings.js"></script></body>
 </html>`;
 }
 

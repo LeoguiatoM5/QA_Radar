@@ -30,6 +30,7 @@ import { tryHandleScans } from "./routes/scans.js";
 import { tryHandleExecutions } from "./routes/executions.js";
 import { tryHandleQuality } from "./routes/quality.js";
 import { tryHandleAlerts } from "./routes/alerts.js";
+import { tryHandleSettings } from "./routes/settings.js";
 import { tryHandleHttpRequest } from "./routes/http-request.js";
 import { tryHandleToolbox } from "./routes/toolbox.js";
 import { tryHandleDashboardActivity } from "./routes/dashboard-activity.js";
@@ -46,6 +47,7 @@ import { NO_EMAIL_SENDER, type EmailSender } from "./email.js";
 import type { ApplicationRepository } from "./application-repository.js";
 import type { CodeExecutionRepository } from "./code-execution-repository.js";
 import type { ApiCollectionRepository } from "./api-collection-repository.js";
+import type { AccountSettingsRepository } from "./account-settings-repository.js";
 import { tryHandleApplications } from "./routes/applications.js";
 import { tryHandleAuth, sessionTokenFrom } from "./routes/auth.js";
 
@@ -147,6 +149,11 @@ export interface ServerOptions {
    * tudo em `localStorage`, sem vínculo com aplicação nem com conta.
    */
   apiCollections: ApiCollectionRepository | undefined;
+  /**
+   * Preferências da conta (limiares de Alertas, padrões da Inspeção). Ausente
+   * = comportamento antigo: os padrões fixos do produto valem para todo mundo.
+   */
+  accountSettings: AccountSettingsRepository | undefined;
   /** Assina o estado do OAuth e nada mais. */
   sessionSecret: string;
   operationalLogger: (event: OperationalEvent) => void;
@@ -189,6 +196,7 @@ const DEFAULT_OPTIONS: ServerOptions = {
   applications: undefined,
   codeExecutions: undefined,
   apiCollections: undefined,
+  accountSettings: undefined,
   sessionSecret: randomBytes(32).toString("base64url"),
   operationalLogger: defaultOperationalLogger,
 };
@@ -206,6 +214,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   tryHandleExecutions,
   tryHandleQuality,
   tryHandleAlerts,
+  tryHandleSettings,
   tryHandleHttpRequest,
   tryHandleToolbox,
 ];
@@ -730,6 +739,7 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
     applications: config.applications,
     codeExecutions: config.codeExecutions,
     apiCollections: config.apiCollections,
+    accountSettings: config.accountSettings,
     authRateLimiter,
     currentUser,
     accessTokens: config.accessTokens,

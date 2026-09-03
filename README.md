@@ -724,9 +724,11 @@ Continuam como roadmap:
 - Executar jornadas completas em ambientes autenticados.
 - Comparar execuções e identificar regressões após deploys.
 - Associar resultados a versões, commits e ambientes.
-- Permitir testes agendados e alertas configuráveis (o gatilho, a janela e o
-  envio por e-mail hoje são fixos — veja "Alertas (`/alertas`)" mais abaixo,
-  em "Contas, aplicações e acesso").
+- Permitir testes agendados. Os limiares de Alertas (janela, queda mínima,
+  amostra mínima) já são ajustáveis por conta em `/configuracoes`; o que
+  falta é o envio por e-mail, que continua só no painel — veja "Alertas
+  (`/alertas`)" e "Configurações (`/configuracoes`)" mais abaixo, em "Contas,
+  aplicações e acesso".
 - Integrar o QA Radar com GitHub, Jira, Slack e pipelines CI/CD.
 
 ### Colaboração e histórico
@@ -1060,12 +1062,25 @@ de igual duração, tendência diária e a quebra por tipo e por aplicação.
 Depende de conta, como Relatórios. A API é `GET /api/v1/quality/summary`.
 
 **Alertas (`/alertas`)** lista o que pede atenção agora, para a conta inteira
-(não por aplicação): as execuções com falha dos últimos 7 dias e um alerta
-quando a taxa de sucesso caiu 15 pontos percentuais ou mais frente ao período
-anterior de igual duração, com pelo menos 5 execuções decididas nesse período
-anterior. Só painel nesta primeira entrega — nenhum e-mail sai daqui ainda,
-mesmo com Brevo configurado. A API é `GET /api/v1/alerts`, sem tabela nova:
-computa sobre a mesma linha do tempo de Relatórios a cada chamada.
+(não por aplicação): as execuções com falha dentro da janela e um alerta
+quando a taxa de sucesso caiu o limiar configurado ou mais frente ao período
+anterior de igual duração, com pelo menos a amostra mínima configurada de
+execuções decididas nesse período anterior. Padrão de 7 dias / 15 pontos
+percentuais / 5 execuções, ajustável em `/configuracoes`. Só painel nesta
+primeira entrega — nenhum e-mail sai daqui ainda, mesmo com Brevo
+configurado. A API é `GET /api/v1/alerts`, sem tabela nova para o alerta em
+si: computa sobre a mesma linha do tempo de Relatórios a cada chamada.
+
+**Configurações (`/configuracoes`)** reúne o que depende de conta: trocar
+senha (exige a atual; conta que só entra pelo GitHub pode definir uma sem
+"atual" nenhuma) e ver o e-mail cadastrado com o status de verificação, os
+três limiares de Alertas acima, e os padrões de execução da Inspeção
+(timeout, tempo de observação, status ignorados, screenshot) que
+pré-preenchem o formulário de uma nova análise — preencher o campo lá
+continua vencendo o padrão. `GET`/`PATCH /api/v1/account/settings`
+(`src/account-settings.ts`) e `POST /api/v1/auth/password/change`. Uma linha
+por conta em `account_settings`, toda coluna opcional: sem ajuste, ou sem
+banco, vale o padrão fixo do produto.
 
 **Testes de API: o que sobe e o que não sobe.** Escolhida uma aplicação em
 `/api-tests`, a collection passa a viver na conta e cada execução entra no

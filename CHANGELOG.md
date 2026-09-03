@@ -6,6 +6,32 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
+- **`/configuracoes` existe de verdade — e fecha a Fase 4.** Era o último
+  link para o aviso de construção; com ele saindo, a navegação não tem mais
+  nenhuma área "em construção", e todo o mecanismo do aviso
+  (`CONSTRUCTION_AREAS`, `/em-construcao`) saiu do código. Três coisas nesta
+  primeira entrega:
+
+  - **Conta:** trocar senha (exige a atual, e derruba as outras sessões da
+    conta) e ver o e-mail cadastrado com status de verificação e reenvio.
+    Conta que só entra pelo GitHub pode definir uma senha sem precisar de uma
+    "atual" — não existe uma ainda. Novo
+    `POST /api/v1/auth/password/change`.
+  - **Alertas ajustáveis:** a janela, a queda mínima e a amostra mínima que
+    disparam o alerta de regressão — fixas até aqui — agora são preferência
+    da conta.
+  - **Padrões de execução da Inspeção:** timeout, tempo de observação, status
+    ignorados e política de screenshot ganham um valor por conta que
+    pré-preenche o formulário da análise; preencher o campo lá continua
+    vencendo o padrão.
+
+  Novo `GET`/`PATCH /api/v1/account/settings` (`src/account-settings.ts`,
+  `src/account-settings-repository.ts`), tabela nova `account_settings`
+  (migration 0008) — uma linha por conta, toda coluna opcional: linha ausente
+  ou campo ausente significa "use o padrão do produto". `computeAlerts` e
+  `scanOptions()` passam a aceitar esses padrões como parâmetro em vez de
+  constante fixa.
+
 - **`/alertas` existe de verdade.** Era um link para o aviso de construção.
   Agora lista o que pede atenção agora na conta: as execuções com falha dos
   últimos 7 dias e um alerta quando a taxa de sucesso geral caiu 15 pontos

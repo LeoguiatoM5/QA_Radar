@@ -1,17 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { CONSTRUCTION_AREAS, renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
-import {
-  createAlertsPage,
-  createApiTestsPage,
-  createApplicationsPage,
-  createAuthPage,
-  createConstructionPage,
-  createDocsPage,
-  createHomePage,
-  createJourneyPage,
-  createWebPage,
-} from "../src/web-page.js";
+import { renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
+import { createAlertsPage, createApiTestsPage, createApplicationsPage, createAuthPage, createDocsPage, createHomePage, createJourneyPage, createSettingsPage, createWebPage } from "../src/web-page.js";
 
 describe("entrada e cadastro", () => {
   it("compõe os quatro formulários de conta numa página só", () => {
@@ -122,7 +112,6 @@ describe("dashboard components", () => {
     assert.match(html, /class="home-dashboard"/);
     assert.match(html, /class="nav-icon icon-overview"/);
     assert.match(html, /class="nav-group"/);
-    assert.match(html, /nav-group-support/);
     assert.match(html, /class="sidebar-help/);
     assert.match(html, />Ajuda</);
     assert.match(html, /class="app-sidebar"/);
@@ -181,34 +170,24 @@ describe("dashboard components", () => {
     }
   });
 
-  it("leva as áreas ainda não construídas para o aviso de construção", () => {
+  it("não leva a navegação a nenhum aviso de construção", () => {
+    // Configurações foi a última área "em construção" a virar página de
+    // verdade — não sobra nenhum link de aviso na navegação principal.
     const html = createHomePage();
-
-    // Nenhuma dessas áreas existe: a navegação precisa avisar em vez de fingir uma página.
-    for (const area of Object.keys(CONSTRUCTION_AREAS)) {
-      assert.match(html, new RegExp(`href="/em-construcao\\?area=${area}"`), `link ausente: ${area}`);
-    }
+    assert.doesNotMatch(html, /em-construcao/);
+    assert.doesNotMatch(html, /nav-link-supporting/);
     assert.doesNotMatch(html, /href="\/docs#/);
+    assert.match(html, /href="\/configuracoes"/);
   });
 
-  it("compõe o aviso de construção com o nome da área e caminhos de volta", () => {
-    const html = createConstructionPage("configuracoes");
-
-    assert.match(html, /<h1>Em construção<\/h1>/);
-    assert.match(html, /<div class="eyebrow">Configurações<\/div>/);
-    assert.match(html, /href="\/">Voltar para a Visão geral</);
-    assert.match(html, /href="\/scanner"/);
-    assert.match(html, /class="app-sidebar"/);
-    // A área aberta fica destacada na navegação lateral.
-    assert.match(html, /nav-link-supporting active" href="\/em-construcao\?area=configuracoes" aria-current="page"/);
-  });
-
-  it("cai em Configurações quando a área pedida não existe", () => {
-    for (const area of ["", "inexistente", "<script>alert(1)</script>"]) {
-      const html = createConstructionPage(area);
-      assert.match(html, /<div class="eyebrow">Configurações<\/div>/);
-      assert.doesNotMatch(html, /<script>alert/);
-    }
+  it("carrega o cliente de configurações como módulo, sem script embutido", () => {
+    const html = createSettingsPage();
+    assert.match(html, /<script type="module" src="\/assets\/js\/settings\.js"><\/script>/);
+    assert.match(html, /<script type="module" src="\/assets\/js\/shell\.js"><\/script>/);
+    assert.doesNotMatch(html, /<script(?! type="module")/, "nenhum script embutido nesta página");
+    assert.match(html, /id="settings-password-form"/);
+    assert.match(html, /id="settings-alerts-form"/);
+    assert.match(html, /id="settings-scan-form"/);
   });
 
   it("oferece Produção, Homologação e Local no seletor de ambiente", () => {

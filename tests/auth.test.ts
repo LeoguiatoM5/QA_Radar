@@ -425,6 +425,95 @@ describe("cadastro e entrada por senha", () => {
       await close();
     }
   });
+
+  describe("trocar senha logado", () => {
+    async function changePassword(baseUrl: string, cookie: string, body: Record<string, unknown>) {
+      return fetch(`${baseUrl}/api/v1/auth/password/change`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
+    }
+
+    it("exige sessão", async () => {
+      const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+      try {
+        const response = await fetch(`${baseUrl}/api/v1/auth/password/change`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ newPassword: "outra-senha-comprida" }),
+        });
+        assert.equal(response.status, 401);
+      } finally {
+        await close();
+      }
+    });
+
+    it("recusa senha atual errada e não mexe na senha", async () => {
+      const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+      try {
+        const cadastro = await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida");
+        const cookie = (cadastro.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+
+        const troca = await changePassword(baseUrl, cookie, { currentPassword: "senha-errada-mas-longa", newPassword: "senha-nova-comprida" });
+        assert.equal(troca.status, 401);
+        assert.equal((await login(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida")).status, 200, "a senha antiga continua valendo");
+      } finally {
+        await close();
+      }
+    });
+
+    it("troca a senha, derruba outras sessões e a nova senha já vale", async () => {
+      const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+      try {
+        const cadastro = await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida");
+        const cookieAntigo = (cadastro.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+
+        const troca = await changePassword(baseUrl, cookieAntigo, { currentPassword: "uma-senha-comprida", newPassword: "senha-nova-comprida" });
+        assert.equal(troca.status, 200);
+        // Uma sessão nova vem no cookie da própria resposta.
+        const cookieNovo = (troca.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+        assert.match(cookieNovo, /^qa_radar_session=/);
+
+        const antiga = (await (await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie: cookieAntigo } })).json()) as { authenticated: boolean };
+        assert.equal(antiga.authenticated, false, "a sessão anterior à troca cai");
+
+        assert.equal((await login(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida")).status, 401, "a senha antiga tem de morrer");
+        assert.equal((await login(baseUrl, "pessoa@exemplo.com", "senha-nova-comprida")).status, 200);
+      } finally {
+        await close();
+      }
+    });
+
+    it("recusa senha nova fraca com 400", async () => {
+      const { baseUrl, close } = await startServer({ identity: new InMemoryIdentityStore() });
+      try {
+        const cadastro = await register(baseUrl, "pessoa@exemplo.com", "uma-senha-comprida");
+        const cookie = (cadastro.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+        const troca = await changePassword(baseUrl, cookie, { currentPassword: "uma-senha-comprida", newPassword: "curta" });
+        assert.equal(troca.status, 400);
+      } finally {
+        await close();
+      }
+    });
+
+    it("conta só do GitHub define uma senha sem precisar da atual", async () => {
+      const identity = new InMemoryIdentityStore();
+      const provider = fakeProvider({
+        profileFor: async () => ({ providerAccountId: "42", login: "leo", name: "Leo", avatarUrl: undefined, verifiedEmail: "leo@exemplo.com" }),
+      });
+      const { baseUrl, close } = await startServer({ identity, oauthProvider: provider });
+      try {
+        const state = issueOAuthState(SECRET);
+        const callback = await fetch(`${baseUrl}/api/v1/auth/github/callback?code=codigo-bom&state=${encodeURIComponent(state)}`, { redirect: "manual" });
+        const cookie = (callback.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+        const antes = (await (await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie } })).json()) as { user?: { hasPassword: boolean } };
+        assert.equal(antes.user?.hasPassword, false);
+
+        const definir = await changePassword(baseUrl, cookie, { newPassword: "senha-definida-agora" });
+        assert.equal(definir.status, 200);
+        assert.equal((await login(baseUrl, "leo@exemplo.com", "senha-definida-agora")).status, 200);
+      } finally {
+        await close();
+      }
+    });
+  });
 });
 
 describe("isolamento entre contas", () => {

@@ -37,14 +37,28 @@ export const REGRESSION_THRESHOLD_POINTS = 15;
 /** Execuções decididas mínimas no período anterior — evita alerta nascido de amostra pequena. */
 export const REGRESSION_MIN_SAMPLE = 5;
 
+/**
+ * Os três números que definem os gatilhos de Alertas para uma conta.
+ *
+ * Ajustável por conta desde Configurações (`src/account-settings.ts`); os
+ * valores acima continuam sendo o padrão de quem nunca ajustou nada.
+ */
+export interface AlertThresholds {
+  windowDays: number;
+  thresholdPoints: number;
+  minSample: number;
+}
+
+export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = { windowDays: ALERT_WINDOW_DAYS, thresholdPoints: REGRESSION_THRESHOLD_POINTS, minSample: REGRESSION_MIN_SAMPLE };
+
 /** Deriva o alerta de regressão de um resumo já calculado, sem refazer a consulta. */
-export function evaluateRegression(summary: QualitySummary): RegressionAlert | undefined {
+export function evaluateRegression(summary: QualitySummary, thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS): RegressionAlert | undefined {
   const previous = summary.previous;
   const current = summary.current;
   if (!previous || previous.passRate === undefined || current.passRate === undefined) return undefined;
-  if (previous.passed + previous.failed < REGRESSION_MIN_SAMPLE) return undefined;
+  if (previous.passed + previous.failed < thresholds.minSample) return undefined;
   const droppedPoints = previous.passRate - current.passRate;
-  if (droppedPoints < REGRESSION_THRESHOLD_POINTS) return undefined;
+  if (droppedPoints < thresholds.thresholdPoints) return undefined;
   return { currentPassRate: current.passRate, previousPassRate: previous.passRate, droppedPoints };
 }
 
@@ -68,8 +82,8 @@ async function collectFailures(sources: ExecutionHistorySources, ownerId: string
   return { failures: failures.slice(0, MAX_ALERT_FAILURES), truncated };
 }
 
-export async function computeAlerts(sources: ExecutionHistorySources, ownerId: string): Promise<AlertsSummary> {
-  const since = new Date(Date.now() - ALERT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+export async function computeAlerts(sources: ExecutionHistorySources, ownerId: string, thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS): Promise<AlertsSummary> {
+  const since = new Date(Date.now() - thresholds.windowDays * 24 * 60 * 60 * 1000).toISOString();
   const [quality, { failures, truncated }] = await Promise.all([computeQualitySummary(sources, ownerId, { since }), collectFailures(sources, ownerId, since)]);
-  return { failures, regression: evaluateRegression(quality), windowDays: ALERT_WINDOW_DAYS, truncated: truncated || quality.truncated };
+  return { failures, regression: evaluateRegression(quality, thresholds), windowDays: thresholds.windowDays, truncated: truncated || quality.truncated };
 }

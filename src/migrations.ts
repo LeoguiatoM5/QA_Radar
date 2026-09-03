@@ -229,6 +229,28 @@ export const MIGRATIONS: Migration[] = [
       `create index if not exists api_runs_owner_idx on api_runs (owner_id, created_at desc)`,
     ],
   },
+  {
+    id: "0008_account_settings",
+    statements: [
+      // Uma linha por conta, não uma tabela de aplicação: são preferências da
+      // conta inteira. Toda coluna é opcional — linha ausente ou coluna nula
+      // significa "use o padrão do produto", resolvido em
+      // `src/account-settings.ts`. `owner_id` é a própria chave primária: não
+      // existe "a segunda linha de configurações" de uma conta.
+      `create table if not exists account_settings (
+         owner_id uuid primary key references users (id) on delete cascade,
+         alert_window_days integer,
+         alert_threshold_points integer,
+         alert_min_sample integer,
+         scan_timeout_ms integer,
+         scan_settle_ms integer,
+         scan_ignored_statuses text,
+         scan_screenshot text,
+         created_at timestamptz not null default now(),
+         updated_at timestamptz not null default now()
+       )`,
+    ],
+  },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `create table if not exists schema_migrations (

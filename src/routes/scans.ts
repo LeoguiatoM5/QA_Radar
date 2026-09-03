@@ -12,6 +12,7 @@ import { ApiError, invalidRequest, validating } from "../api-error.js";
 import { isTerminalJobStatus } from "../job-state.js";
 import { MAX_IDEMPOTENCY_KEY_LENGTH, idempotencyScope, requestFingerprint } from "../idempotency-store.js";
 import type { PersistedScanJob } from "../scan-job-repository.js";
+import { resolveAccountSettings, type ScanDefaults } from "../account-settings.js";
 
 /** Teto do histórico devolvido de uma vez. */
 const MAX_HISTORY_ITEMS = 50;
@@ -20,7 +21,12 @@ import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import type { ServerOptions } from "../server.js";
 import type { RouteHandler } from "./context.js";
 
-export function scanOptions(body: Record<string, unknown>, outputDir: string, config: ServerOptions): ScanOptions {
+/**
+ * @param scanDefaults Padrão da conta (Configurações), usado só quando o
+ * corpo da requisição não trouxe o campo. Ausente = comportamento antigo, o
+ * padrão fixo do produto (aplicado dentro de `parseCli`).
+ */
+export function scanOptions(body: Record<string, unknown>, outputDir: string, config: ServerOptions, scanDefaults?: ScanDefaults): ScanOptions {
   const url = textField(body, "url");
   if (!url) throw invalidRequest("Informe a URL da aplicação.");
   const args = [url, "--output", outputDir, "--format", "all"];
@@ -28,10 +34,10 @@ export function scanOptions(body: Record<string, unknown>, outputDir: string, co
   const fields: Array<[string, string | undefined]> = [
     ["--browser", textField(body, "browser")],
     ["--fail-on", textField(body, "failOn")],
-    ["--timeout", numberField(body, "timeoutMs")],
-    ["--settle", numberField(body, "settleMs")],
-    ["--screenshot", textField(body, "screenshot")],
-    ["--ignore-status", textField(body, "ignoredStatuses")],
+    ["--timeout", numberField(body, "timeoutMs") ?? (scanDefaults ? String(scanDefaults.timeoutMs) : undefined)],
+    ["--settle", numberField(body, "settleMs") ?? (scanDefaults ? String(scanDefaults.settleMs) : undefined)],
+    ["--screenshot", textField(body, "screenshot") ?? (scanDefaults ? scanDefaults.screenshot : undefined)],
+    ["--ignore-status", textField(body, "ignoredStatuses") ?? (scanDefaults?.ignoredStatuses ? scanDefaults.ignoredStatuses : undefined)],
     ["--ignore-url", textField(body, "ignoredUrl")],
     ["--project", project],
     // Ambiente e baseline só existem dentro de um projeto: é o par
@@ -242,7 +248,10 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
     // acima e enfileirariam dois jobs.
     if (idempotency) await context.idempotencyKeys.reserve(idempotency.scope, idempotency.fingerprint);
     try {
-      const options = scanOptions(body, join(config.resultsDir, id), config);
+      // Padrão da conta só entra quando o corpo não trouxe o campo — quem
+      // preenche "Configurações avançadas" continua vencendo o próprio padrão.
+      const scanDefaults = owner && context.accountSettings ? resolveAccountSettings(await context.accountSettings.get(owner.id)).scanDefaults : undefined;
+      const options = scanOptions(body, join(config.resultsDir, id), config, scanDefaults);
       if (!config.allowPrivateTargets) {
         await assertPublicUrl(options.url);
         options.publicNetworkOnly = true;

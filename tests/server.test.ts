@@ -1490,6 +1490,26 @@ describe("opções da análise", () => {
     assert.equal(options.environment, "staging");
     assert.equal(options.acceptBaseline, true);
   });
+
+  it("usa o padrão da conta quando o corpo não traz o campo", () => {
+    const scanDefaults = { timeoutMs: 45_000, settleMs: 5_000, ignoredStatuses: "401,404", screenshot: "always" as const };
+    const options = scanOptions({ url: "https://exemplo.com" }, "/tmp/saida", config, scanDefaults);
+
+    assert.equal(options.timeoutMs, 45_000);
+    assert.equal(options.settleMs, 5_000);
+    assert.deepEqual([...options.ignoredStatuses], [401, 404]);
+    assert.equal(options.screenshot, "always");
+  });
+
+  it("o campo enviado no corpo sempre vence o padrão da conta", () => {
+    const scanDefaults = { timeoutMs: 45_000, settleMs: 5_000, ignoredStatuses: "401,404", screenshot: "always" as const };
+    const options = scanOptions({ url: "https://exemplo.com", timeoutMs: 10_000, screenshot: "never" }, "/tmp/saida", config, scanDefaults);
+
+    assert.equal(options.timeoutMs, 10_000);
+    assert.equal(options.screenshot, "never");
+    // Campos não enviados continuam caindo para o padrão da conta.
+    assert.equal(options.settleMs, 5_000);
+  });
 });
 
 describe("módulos de navegador", () => {
@@ -1525,7 +1545,7 @@ describe("módulos de navegador", () => {
     await new Promise<void>((resolve) => cspServer.listen(0, "127.0.0.1", resolve));
     const base = `http://127.0.0.1:${(cspServer.address() as AddressInfo).port}`;
     try {
-      const paginas = ["/", "/scanner", "/journeys", "/api-tests", "/docs", "/aplicacoes", "/entrar", "/em-construcao", "/toolbox", "/toolbox/json-diff"];
+      const paginas = ["/", "/scanner", "/journeys", "/api-tests", "/docs", "/aplicacoes", "/entrar", "/configuracoes", "/toolbox", "/toolbox/json-diff"];
       let comModulo = 0;
       for (const caminho of paginas) {
         const response = await fetch(`${base}${caminho}`);

@@ -253,10 +253,56 @@ export function createOpenApiDocument(): Record<string, unknown> {
           tags: ["Relatórios"],
           summary: "O que pede atenção agora, para a conta inteira",
           description:
-            "Duas coisas, sobre a janela fixa de 7 dias: as execuções com falha mais recentes (até 20) e um alerta quando a taxa de sucesso caiu 15 pontos percentuais ou mais frente ao período anterior de igual duração, com pelo menos 5 execuções decididas no período anterior. Granularidade de conta: não quebra por aplicação. Sem persistência — computado a cada chamada sobre a mesma linha do tempo de `/api/v1/executions`.",
+            "Duas coisas, sobre a janela de `GET /api/v1/account/settings` (7 dias por padrão): as execuções com falha mais recentes (até 20) e um alerta quando a taxa de sucesso caiu o limiar configurado ou mais frente ao período anterior de igual duração, com pelo menos a amostra mínima configurada de execuções decididas no período anterior. Granularidade de conta: não quebra por aplicação. Sem persistência — computado a cada chamada sobre a mesma linha do tempo de `/api/v1/executions`.",
           responses: {
             "200": { description: "O que pede atenção agora.", content: { "application/json": { schema: { $ref: "#/components/schemas/AlertsSummary" } } } },
             ...errorResponses([401, 405, 500]),
+          },
+        },
+      },
+      "/api/v1/account/settings": {
+        get: {
+          tags: ["Conta"],
+          summary: "Preferências da conta",
+          description: "Os limiares de Alertas e os padrões de execução da Inspeção. Campo nunca ajustado volta com o padrão do produto — não existe 'ausente' na resposta, só na gravação.",
+          responses: {
+            "200": { description: "As preferências da conta, resolvidas com o padrão.", content: { "application/json": { schema: { $ref: "#/components/schemas/AccountSettings" } } } },
+            ...errorResponses([401, 405, 500]),
+          },
+        },
+        patch: {
+          tags: ["Conta"],
+          summary: "Ajustar preferências da conta",
+          description:
+            "Campo ausente do corpo não é alterado. `alerts.windowDays` (1-90), `alerts.thresholdPoints` (1-100), `alerts.minSample` (1-500), `scanDefaults.timeoutMs` (1000-120000), `scanDefaults.settleMs` (0-30000), `scanDefaults.ignoredStatuses` (até 200 caracteres), `scanDefaults.screenshot` (`never`/`on-failure`/`always`). Corpo sem nenhum campo responde 400. Exige `QA_RADAR_DATABASE_URL` configurado — sem banco responde `feature_disabled`.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    alerts: {
+                      type: "object",
+                      properties: { windowDays: { type: "integer" }, thresholdPoints: { type: "integer" }, minSample: { type: "integer" } },
+                    },
+                    scanDefaults: {
+                      type: "object",
+                      properties: {
+                        timeoutMs: { type: "integer" },
+                        settleMs: { type: "integer" },
+                        ignoredStatuses: { type: "string" },
+                        screenshot: { type: "string", enum: ["never", "on-failure", "always"] },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "As preferências, já mescladas com o padrão.", content: { "application/json": { schema: { $ref: "#/components/schemas/AccountSettings" } } } },
+            ...errorResponses([400, 401, 403, 405, 500]),
           },
         },
       },
@@ -720,6 +766,28 @@ export function createOpenApiDocument(): Record<string, unknown> {
             },
             windowDays: { type: "integer", description: "Tamanho da janela usada nos dois gatilhos." },
             truncated: { type: "boolean", description: "O período tinha mais execuções do que o resumo cobriu; os números são aproximados." },
+          },
+        },
+        AccountSettings: {
+          type: "object",
+          required: ["alerts", "scanDefaults"],
+          description: "Sempre resolvido com o padrão: campo nunca ajustado pela conta aparece aqui com o valor de fábrica, não ausente.",
+          properties: {
+            alerts: {
+              type: "object",
+              required: ["windowDays", "thresholdPoints", "minSample"],
+              properties: { windowDays: { type: "integer" }, thresholdPoints: { type: "integer" }, minSample: { type: "integer" } },
+            },
+            scanDefaults: {
+              type: "object",
+              required: ["timeoutMs", "settleMs", "ignoredStatuses", "screenshot"],
+              properties: {
+                timeoutMs: { type: "integer" },
+                settleMs: { type: "integer" },
+                ignoredStatuses: { type: "string" },
+                screenshot: { type: "string", enum: ["never", "on-failure", "always"] },
+              },
+            },
           },
         },
         ApiRunSummary: {

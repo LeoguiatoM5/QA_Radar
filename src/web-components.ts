@@ -1,4 +1,4 @@
-export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "relatorios" | "qualidade" | "alertas" | "docs" | "construcao";
+export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "relatorios" | "qualidade" | "alertas" | "configuracoes" | "docs";
 
 /** Ambientes oferecidos no seletor da barra de contexto. */
 export const ENVIRONMENTS = [
@@ -6,20 +6,6 @@ export const ENVIRONMENTS = [
   { slug: "homologacao", label: "Homologação" },
   { slug: "producao", label: "Produção" },
 ] as const;
-
-/** Áreas de apoio que ainda não existem: a navegação leva ao aviso de construção. */
-export const CONSTRUCTION_AREAS = {
-  // "Relatórios" saiu daqui quando `/relatorios` passou a existir de verdade,
-  // "Central de qualidade" quando `/central-de-qualidade` passou a existir, e
-  // "Alertas" quando `/alertas` passou a existir.
-  // "Ambientes" saiu daqui quando Aplicações passou a existir de verdade: as
-  // duas prometiam a mesma coisa — cadastrar o que se testa, com URL e ambiente
-  // — e ficavam lado a lado na navegação, com o mesmo ícone, uma funcionando e
-  // a outra sendo um aviso. O ambiente agora é um campo da aplicação.
-  configuracoes: { label: "Configurações", summary: "As preferências do projeto e da conta reunidas em um só lugar." },
-} as const;
-
-type ConstructionArea = keyof typeof CONSTRUCTION_AREAS;
 
 export interface DashboardOptions {
   allowHistory: boolean;
@@ -61,13 +47,9 @@ export function renderDashboard(options: DashboardOptions): string {
   ${renderWorkspaceEnd()}`;
 }
 
-function renderAppNav(active: NavSection, area = ""): string {
+function renderAppNav(active: NavSection): string {
   const link = (id: NavSection, label: string, href: string, icon: string) =>
     `<a class="nav-link ${active === id ? "active" : ""}" href="${href}"${active === id ? ' aria-current="page"' : ""}><span class="nav-icon icon-${icon}" aria-hidden="true"><i></i></span><span>${label}</span></a>`;
-  // As áreas de apoio ainda não existem: todas levam ao aviso de construção, e a
-  // que estiver aberta é destacada pelo slug da área.
-  const supportingLink = (slug: string, label: string, icon: string) =>
-    `<a class="nav-link nav-link-supporting ${area === slug ? "active" : ""}" href="/em-construcao?area=${slug}"${area === slug ? ' aria-current="page"' : ""}><span class="nav-icon icon-${icon}" aria-hidden="true"><i></i></span><span>${label}</span></a>`;
   return `<aside class="app-sidebar">
     <div class="sidebar-brand"><a class="logo" href="/"><i class="radar"></i><span>QA RADAR</span></a><button class="mobile-nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation" aria-label="Abrir menu"><i></i></button></div>
     <nav class="nav-links" id="primary-navigation" aria-label="Navegação principal">
@@ -81,9 +63,7 @@ function renderAppNav(active: NavSection, area = ""): string {
         ${link("relatorios", "Relatórios", "/relatorios", "reports")}
         ${link("qualidade", "Central de qualidade", "/central-de-qualidade", "quality")}
         ${link("alertas", "Alertas", "/alertas", "alerts")}
-      </div>
-      <div class="nav-group nav-group-support">
-        ${supportingLink("configuracoes", "Configurações", "settings")}
+        ${link("configuracoes", "Configurações", "/configuracoes", "settings")}
       </div>
     </nav>
     <a class="sidebar-help ${active === "docs" ? "active" : ""}" href="/docs"><span class="help-mark">?</span><span>Ajuda</span></a>
@@ -114,9 +94,9 @@ function renderVerifyBanner(): string {
   return `<div class="verify-banner" id="verify-banner" hidden><span>Confirme seu e-mail para poder recuperar a senha depois.</span><button type="button" id="verify-resend">Reenviar</button><span class="verify-state" id="verify-state" hidden></span></div>`;
 }
 
-export function renderWorkspaceStart(active: NavSection, section: string, area = ""): string {
+export function renderWorkspaceStart(active: NavSection, section: string): string {
   return `<main class="shell ${active === "home" ? "home-shell" : ""}">
-  ${renderAppNav(active, area)}
+  ${renderAppNav(active)}
   <div class="app-main">
     <header class="context-bar">
       <div class="context-item context-project"><small>Projeto</small><strong>QA Radar Web</strong></div>
@@ -376,25 +356,6 @@ export function renderHome(): string {
   ${renderWorkspaceEnd()}`;
 }
 
-export function renderConstructionPage(area: string): string {
-  const slug: ConstructionArea = Object.hasOwn(CONSTRUCTION_AREAS, area) ? (area as ConstructionArea) : "configuracoes";
-  const { label, summary } = CONSTRUCTION_AREAS[slug];
-  return `${renderWorkspaceStart("construcao", label, slug)}
-  <section class="panel construction-panel">
-    <span class="construction-mark" aria-hidden="true"><i></i></span>
-    <div class="eyebrow">${label}</div>
-    <h1>Em construção</h1>
-    <p class="lead">${summary}</p>
-    <p class="construction-note">Esta área ainda não foi montada. Enquanto isso, as três ferramentas do QA Radar já estão disponíveis e alimentam a Visão geral.</p>
-    <div class="construction-actions">
-      <a href="/">Voltar para a Visão geral</a>
-      <a href="/scanner">Executar uma inspeção</a>
-      <a href="/docs">Ver perguntas frequentes</a>
-    </div>
-  </section>
-  ${renderWorkspaceEnd()}`;
-}
-
 /**
  * Aplicações da conta.
  *
@@ -599,6 +560,69 @@ export function renderAlertsPage(): string {
   ${renderWorkspaceEnd()}`;
 }
 
+function settingsField(id: string, label: string, hint: string, inputHtml: string): string {
+  return `<div class="tool-field"><label for="${id}">${label}</label>${inputHtml}<small class="hint">${hint}</small></div>`;
+}
+
+/**
+ * Configurações: as três coisas que o usuário escolheu para a primeira entrega
+ * — conta (senha, e-mail), limiares de Alertas e padrões de execução da
+ * Inspeção. Tudo nasce vazio e sem valor: o cliente busca `/api/v1/auth/me` e
+ * `/api/v1/account/settings` e preenche, porque o documento é servido igual
+ * para todo mundo.
+ */
+export function renderSettingsPage(): string {
+  return `${renderWorkspaceStart("configuracoes", "Configurações")}
+  ${renderToolHeader("Preferências", "Configurações", "A conta, os limiares de Alertas e os padrões de execução da Inspeção, reunidos em um só lugar.")}
+  <section class="tool-layout settings-layout">
+    <p class="form-unavailable" id="settings-unavailable" hidden></p>
+
+    <section class="panel" aria-label="Conta">
+      <h2>Conta</h2>
+      <p class="sub"><span id="settings-email">—</span> <span class="settings-badge" id="settings-verified" hidden>verificado</span> <span class="settings-badge settings-badge-warn" id="settings-unverified" hidden>não verificado</span></p>
+      <button type="button" class="secondary" id="settings-resend" hidden>Reenviar confirmação</button>
+
+      <form id="settings-password-form">
+        <h3 id="settings-password-title">Trocar senha</h3>
+        ${settingsField("settings-current-password", "Senha atual", "Só pedida se a conta já tem senha.", '<input id="settings-current-password" type="password" autocomplete="current-password">')}
+        ${settingsField("settings-new-password", "Nova senha", "Pelo menos 10 caracteres.", '<input id="settings-new-password" type="password" autocomplete="new-password" required>')}
+        <button type="submit">Salvar senha</button>
+        <div class="error-box" id="settings-password-error"></div>
+      </form>
+    </section>
+
+    <section class="panel" aria-label="Alertas">
+      <h2>Alertas</h2>
+      <p class="sub">Quando um alerta de queda na taxa de sucesso nasce.</p>
+      <form id="settings-alerts-form">
+        <div class="row">
+          ${settingsField("settings-window-days", "Janela (dias)", "1 a 90.", '<input id="settings-window-days" type="number" min="1" max="90" required>')}
+          ${settingsField("settings-threshold-points", "Queda mínima (pp)", "1 a 100.", '<input id="settings-threshold-points" type="number" min="1" max="100" required>')}
+          ${settingsField("settings-min-sample", "Amostra mínima", "1 a 500.", '<input id="settings-min-sample" type="number" min="1" max="500" required>')}
+        </div>
+        <button type="submit">Salvar limiares</button>
+        <div class="error-box" id="settings-alerts-error"></div>
+      </form>
+    </section>
+
+    <section class="panel" aria-label="Execução padrão da Inspeção">
+      <h2>Execução padrão da Inspeção</h2>
+      <p class="sub">Pré-preenche o formulário de uma nova análise. Preencher o campo lá continua vencendo este padrão.</p>
+      <form id="settings-scan-form">
+        <div class="row">
+          ${settingsField("settings-timeout-ms", "Timeout (ms)", "1000 a 120000.", '<input id="settings-timeout-ms" type="number" min="1000" max="120000" required>')}
+          ${settingsField("settings-settle-ms", "Observação (ms)", "0 a 30000.", '<input id="settings-settle-ms" type="number" min="0" max="30000" required>')}
+        </div>
+        ${settingsField("settings-ignored-statuses", "Status ignorados", "Códigos HTTP separados por vírgula.", '<input id="settings-ignored-statuses" placeholder="401,404" maxlength="200">')}
+        ${settingsField("settings-screenshot", "Screenshot", "Política padrão de captura.", '<select id="settings-screenshot"><option value="on-failure">Quando reprovar</option><option value="always">Sempre</option><option value="never">Nunca</option></select>')}
+        <button type="submit">Salvar padrões</button>
+        <div class="error-box" id="settings-scan-error"></div>
+      </form>
+    </section>
+  </section>
+  ${renderWorkspaceEnd()}`;
+}
+
 function authField(id: string, label: string, type: string, autocomplete: string, hint = "", attributes = ""): string {
   return `<label class="auth-field" for="${id}"><span>${label}</span><input id="${id}" name="${id}" type="${type}" autocomplete="${autocomplete}" ${attributes}>${hint ? `<small>${hint}</small>` : ""}</label>`;
 }
@@ -707,7 +731,7 @@ export function renderDocs(): string {
 
     <h2 class="faq-group">Configuração</h2>
     ${faqItem("ambientes", "Como separo staging de produção?", "<p>Na Inspeção, use os campos <strong>Projeto</strong> e <strong>Ambiente</strong>. Eles mantêm o histórico e o baseline separados por ambiente, de modo que uma análise de staging não interfira na de produção. Os campos ficam disponíveis quando o histórico está habilitado no servidor.</p>")}
-    ${faqItem("configuracoes", "Onde ficam as configurações?", "<p>As opções de execução ficam na própria Inspeção, em <strong>Configurações avançadas</strong>: timeout, tempo de observação, status HTTP ignorados e política de screenshot. Configurações de servidor (histórico, limite de páginas do sitemap, execução de código) são definidas por variáveis de ambiente na implantação.</p>")}
+    ${faqItem("configuracoes", "Onde ficam as configurações?", "<p><strong>Configurações</strong> reúne o que depende de conta: trocar senha e ver o e-mail cadastrado, os limiares que disparam um Alerta (janela, queda mínima e amostra mínima) e os padrões de execução da Inspeção — timeout, tempo de observação, status HTTP ignorados e política de screenshot, que pré-preenchem o formulário e continuam podendo ser ajustados por análise. Configurações de servidor (histórico, limite de páginas do sitemap, execução de código) continuam por variável de ambiente na implantação.</p>" + action("/configuracoes", "Abrir Configurações", "Ajustar conta, Alertas e padrões de execução."))}
 
     <h2 class="faq-group">Limites</h2>
     ${faqItem("", "Posso analisar localhost ou uma rede interna?", "<p>Não na versão pública: endereços locais e faixas de rede privada são bloqueados por segurança. O alvo precisa ser um endereço público iniciado por <code>http://</code> ou <code>https://</code>. Em uma implantação própria, dentro da sua rede, essa restrição pode ser ajustada.</p>")}

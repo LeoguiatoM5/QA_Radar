@@ -13,6 +13,7 @@ import { PostgresIdentityStore, type IdentityStore } from "./identity.js";
 import { PostgresApplicationRepository, type ApplicationRepository } from "./application-repository.js";
 import { PostgresCodeExecutionRepository, type CodeExecutionRepository } from "./code-execution-repository.js";
 import { PostgresApiCollectionRepository, type ApiCollectionRepository } from "./api-collection-repository.js";
+import { PostgresAccountSettingsRepository, type AccountSettingsRepository } from "./account-settings-repository.js";
 import { createGitHubOAuthProvider } from "./oauth.js";
 import { NO_EMAIL_SENDER, createBrevoEmailSender } from "./email.js";
 import { randomBytes } from "node:crypto";
@@ -31,6 +32,7 @@ try {
   let applications: ApplicationRepository | undefined;
   let codeExecutions: CodeExecutionRepository | undefined;
   let apiCollections: ApiCollectionRepository | undefined;
+  let accountSettings: AccountSettingsRepository | undefined;
   if (database) {
     const result = await runMigrations(database);
     console.log(`Banco conectado. Migrations aplicadas agora: ${result.applied.length > 0 ? result.applied.join(", ") : "nenhuma"}.`);
@@ -53,6 +55,7 @@ try {
     applications = new PostgresApplicationRepository(database);
     codeExecutions = new PostgresCodeExecutionRepository(database);
     apiCollections = new PostgresApiCollectionRepository(database);
+    accountSettings = new PostgresAccountSettingsRepository(database);
   } else {
     console.log("Sem QA_RADAR_DATABASE_URL: estado em memória, perdido a cada reinício.");
   }
@@ -104,6 +107,7 @@ try {
     applications,
     codeExecutions,
     apiCollections,
+    accountSettings,
     sessionSecret,
   });
   server.listen(env.port, env.host, () => {

@@ -311,6 +311,45 @@ export const tryHandleAuth: RouteHandler = async (context, request, response, ur
     return true;
   }
 
+  if (request.method === "POST" && url.pathname === "/api/auth/password/change") {
+    const store = requireIdentity(context);
+    const viewer = await context.currentUser(request);
+    if (!viewer) throw new ApiError("unauthorized", "Entre com sua conta para trocar a senha.");
+    enforceAuthRate(context, request, "password_change", viewer.email);
+    const body = await readJson(request, MAX_AUTH_BODY_BYTES);
+    const newPassword = typeof body.newPassword === "string" ? body.newPassword : undefined;
+    if (!newPassword) throw invalidRequest("Informe a nova senha.");
+    // Sem e-mail não há como entrar de novo com senha: a conta só existe pelo
+    // provedor externo, e uma senha sem onde ser digitada não serve para nada.
+    if (!viewer.email) throw new ApiError("forbidden", "Esta conta entra só pelo GitHub e não tem e-mail para autenticar por senha.");
+
+    if (viewer.hasPassword) {
+      const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : undefined;
+      const credentials = await store.credentialsByEmail(viewer.email);
+      if (!currentPassword) throw invalidRequest("Informe a senha atual.");
+      if (!credentials || !(await verifyPassword(currentPassword, credentials.passwordHash))) {
+        throw new ApiError("unauthorized", "Senha atual incorreta.");
+      }
+    }
+    // Conta sem senha (só GitHub): não há "atual" para conferir — isto é
+    // definir uma senha pela primeira vez, não trocar uma existente.
+
+    try {
+      assertPasswordAcceptable(newPassword, viewer.email);
+    } catch (error) {
+      if (error instanceof WeakPasswordError) throw invalidRequest(error.message);
+      throw error;
+    }
+
+    await store.setPassword(viewer.id, await hashPassword(newPassword));
+    // Mesma razão do reset: se a senha trocou porque alguém já estava na
+    // conta, deixar outras sessões vivas tornaria a troca inútil.
+    await store.destroySessionsFor(viewer.id);
+    await startSession(context, request, response, store, viewer.id);
+    json(response, 200, { authenticated: true });
+    return true;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/auth/github") {
     if (!oauthProvider || !identity) {
       jsonError(response, "feature_disabled", "Login por GitHub não está configurado neste servidor.");
