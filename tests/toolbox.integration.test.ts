@@ -87,8 +87,12 @@ describe("toolbox integration · rotas", () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") ?? "", /text\/html/);
     // Os módulos das ferramentas vêm da própria origem: sem `script-src 'self'`
-    // a página carrega e nenhuma ferramenta funciona.
-    assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self' 'unsafe-inline'/);
+    // a página carrega e nenhuma ferramenta funciona. E `'unsafe-inline'` saiu
+    // junto com o último script embutido — voltar a embutir reabriria a brecha
+    // em todas as telas do Toolbox de uma vez.
+    const csp = response.headers.get("content-security-policy") ?? "";
+    assert.match(csp, /script-src 'self';/);
+    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/);
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.match(html, /Daily tools for Software Quality/);
   });

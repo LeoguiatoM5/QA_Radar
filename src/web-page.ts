@@ -1,6 +1,5 @@
 import { renderApiPage, renderApplicationsPage, renderAuthPage, renderConstructionPage, renderDashboard, renderDocs, renderHome, renderJourneyPage } from "./web-components.js";
 import { renderTool, renderToolboxHome } from "./web-toolbox.js";
-import { TOOLBOX_HOME_SCRIPT, TOOLBOX_SCRIPTS } from "./toolbox-client.js";
 import type { QaToolDefinition } from "./toolbox/catalog.js";
 import { WEB_STYLES } from "./web-styles.js";
 
@@ -643,7 +642,7 @@ export function createToolboxHomePage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Toolbox - ferramentas rápidas para QA, automação, APIs e design de testes"><title>QA Radar · QA Toolbox</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${TOOLBOX_STYLES}</style></head>
-<body>${renderToolboxHome()}<script type="module" src="/assets/js/shell.js"></script><script type="module">${TOOLBOX_HOME_SCRIPT}</script></body>
+<body>${renderToolboxHome()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/toolbox/home.js"></script></body>
 </html>`;
 }
 
@@ -656,11 +655,10 @@ export function createToolboxHomePage(): string {
  */
 export function createToolPage(tool: QaToolDefinition): string | undefined {
   const body = renderTool(tool);
-  const script = TOOLBOX_SCRIPTS[tool.id];
-  if (body === undefined || script === undefined) return undefined;
+  if (body === undefined) return undefined;
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="${escapeAttribute(`QA Toolbox - ${tool.description}`)}"><title>QA Radar · ${escapeAttribute(tool.name)}</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${TOOLBOX_STYLES}</style></head>
-<body>${body}<script type="module" src="/assets/js/shell.js"></script><script type="module">${script}</script></body>
+<body>${body}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/toolbox/${tool.id}.js"></script></body>
 </html>`;
 }

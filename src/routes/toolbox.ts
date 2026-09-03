@@ -15,12 +15,13 @@ import { guardedFetch } from "./http-request.js";
 import type { RouteHandler } from "./context.js";
 
 /**
- * As páginas do Toolbox carregam módulos ES de `/assets/toolbox/`, então elas —
- * e só elas — precisam de `script-src 'self'`. As demais continuam sem, para
- * que nenhum script externo consiga ser carregado nelas.
+ * As páginas do Toolbox carregam módulos ES de `/assets/js/toolbox/` (a tela) e
+ * de `/assets/toolbox/` (a regra de negócio). Enquanto a tela vivia embutida na
+ * página, esta era a última rota do produto com `'unsafe-inline'` no
+ * `script-src`; agora nenhuma tem.
  */
 const TOOLBOX_CSP =
-  "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'";
+  "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob:; connect-src 'self'";
 
 function html(response: Parameters<RouteHandler>[2], body: string): void {
   response.writeHead(200, {

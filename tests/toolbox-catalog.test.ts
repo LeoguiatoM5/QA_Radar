@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import { AVAILABLE_TOOLS, categoryLabel, findTool, normalizeSearchTerm, QA_TOOLS, searchTools, TOOL_CATEGORIES } from "../src/toolbox/catalog.js";
 import { createToolPage, createToolboxHomePage } from "../src/web-page.js";
 import { escapeHtml } from "../src/web-toolbox.js";
-import { TOOLBOX_SCRIPTS } from "../src/toolbox-client.js";
+import { TOOLBOX_MODULES } from "../src/routes/assets.js";
+import { browserModule } from "../src/browser-assets.js";
 
 describe("toolbox · catálogo", () => {
   it("mantém id, rota e categoria coerentes em toda ferramenta", () => {
@@ -46,14 +47,32 @@ describe("toolbox · catálogo", () => {
       const page = createToolPage(tool);
       if (tool.status === "soon") {
         assert.equal(page, undefined, `${tool.id} está anunciada como em breve mas tem página`);
-        assert.equal(TOOLBOX_SCRIPTS[tool.id], undefined);
+        assert.equal(TOOLBOX_MODULES.has(tool.id), false, `${tool.id} é "em breve" mas tem módulo servido`);
       } else {
         assert.ok(page, `${tool.id} não tem página`);
-        assert.ok(TOOLBOX_SCRIPTS[tool.id], `${tool.id} não tem script`);
+        assert.ok(page.includes(`src="/assets/js/toolbox/${tool.id}.js"`), `${tool.id} não carrega o módulo da própria tela`);
       }
     }
     assert.equal(AVAILABLE_TOOLS.length, QA_TOOLS.length, "no 1.2 todas as ferramentas anunciadas ganharam página");
     assert.equal(AVAILABLE_TOOLS.length, 13, "seis do MVP, quatro do 1.1 e três do 1.2");
+  });
+
+  // A página aponta para o módulo pelo id da ferramenta, e a rota só serve o que
+  // está na lista fechada. Sem esta conferência, acrescentar uma ferramenta com
+  // painel e esquecer a lista renderia uma tela morta com um 404 no console —
+  // e nenhum outro teste olharia para isso.
+  it("serve o módulo de tela de toda ferramenta anunciada", async () => {
+    for (const tool of AVAILABLE_TOOLS) {
+      const code = await browserModule("browser/toolbox", TOOLBOX_MODULES, tool.id);
+      assert.ok(code, `${tool.id} não tem módulo servível em /assets/js/toolbox/`);
+      // O caminho relativo é o mesmo no código-fonte e na URL servida:
+      // `../../toolbox/` sai de `/assets/js/toolbox/` e chega em
+      // `/assets/toolbox/`, que é onde a regra de negócio testada é servida.
+      assert.match(code, /from "\.\.\/\.\.\/toolbox\//, `${tool.id} não importa a regra de negócio servida`);
+    }
+    for (const shared of ["home", "ui"]) {
+      assert.ok(await browserModule("browser/toolbox", TOOLBOX_MODULES, shared), `${shared} não é servível`);
+    }
   });
 });
 
@@ -143,8 +162,8 @@ describe("toolbox · páginas", () => {
     for (const tool of AVAILABLE_TOOLS) {
       const html = createToolPage(tool) as string;
       assert.match(html, /<script type="module" src="\/assets\/js\/shell\.js"><\/script>/, `${tool.id} não carrega o shell comum`);
-      assert.match(html, /<script type="module">/, `${tool.id} não carrega o módulo da ferramenta`);
-      assert.match(html, /\/assets\/toolbox\//, `${tool.id} não importa a regra de negócio servida`);
+      assert.ok(html.includes(`<script type="module" src="/assets/js/toolbox/${tool.id}.js"></script>`), `${tool.id} não carrega o módulo da própria tela`);
+      assert.doesNotMatch(html, /<script type="module">/, `${tool.id} voltou a embutir script na página`);
       assert.equal((html.match(/<h1>/g) ?? []).length, 1, `${tool.id} deve ter um único h1`);
       assert.match(html, /class="tool-breadcrumb"/, `${tool.id} sem trilha de volta ao Toolbox`);
     }

@@ -42,6 +42,17 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   `shared`. **Com isso nenhuma página do produto tem script embutido**, e o
   `'unsafe-inline'` saiu do `script-src` de todas — só o Toolbox mantém,
   porque os módulos dele ainda são declarados dentro da página.
+- **O Toolbox foi o último, e com ele o `'unsafe-inline'` acabou.** As 14 telas
+  viviam em `src/toolbox-client.ts`, mil linhas de JavaScript dentro de
+  `String.raw` — o maior bloco de código que nenhuma ferramenta do projeto
+  conseguia ler. Cada uma virou um módulo em `src/browser/toolbox/`, servido em
+  `/assets/js/toolbox/<id da ferramenta>.js`, com o que elas compartilham em
+  `ui.ts` em vez de um prefixo colado em cada script. O caminho relativo para a
+  regra de negócio é o mesmo no código-fonte e na URL — `../../toolbox/` sai de
+  `/assets/js/toolbox/` e chega em `/assets/toolbox/` —, então a divisão entre
+  o que decide e o que desenha continua igual, agora com o `tsc` conferindo os
+  dois lados. `src/toolbox-client.ts` foi apagado e **nenhuma página do produto
+  tem mais `'unsafe-inline'` no `script-src`**.
 
 - **"Limpar histórico" na Visão geral.** As execuções recentes se acumulavam
   sem nenhuma forma de apagar, e a mesma lista tinha **três** cópias: a do
