@@ -326,11 +326,11 @@ export function renderHome(): string {
         ${renderRadarSvg()}
         <div class="radar-center"><div><strong id="dashboard-quality-index">—</strong><span>/100</span></div><small>Índice de qualidade</small><em id="dashboard-quality-label">Sem dados</em></div>
       </div>
-      <div class="section-kicker map-legend">Mapa de qualidade</div>
+      <h2 class="section-kicker map-legend">Mapa de qualidade</h2>
       <p class="map-status"><span class="live-dot"></span> Índice calculado a partir das execuções deste navegador.</p>
       </div>
       <div class="execution-panel">
-      <div class="section-kicker">O que deseja executar?</div>
+      <h2 class="section-kicker">O que deseja executar?</h2>
       <div class="execution-list">
         <a class="execution-card" href="/scanner"><span class="execution-icon"><em class="tool-icon icon-overview"><i></i></em></span><span class="execution-copy"><strong>Inspeção</strong><small>Verifique páginas, fluxos e componentes em busca de problemas de qualidade.</small></span><span class="execution-action"><b>Executar inspeção</b><small id="dashboard-last-scan">Sem execuções recentes</small></span></a>
         <a class="execution-card" href="/journeys"><span class="execution-icon"><em class="tool-icon icon-journey"><i></i></em></span><span class="execution-copy"><strong>Jornada</strong><small>Execute fluxos automatizados com Playwright e valide experiências reais.</small></span><span class="execution-action"><b>Executar jornada</b><small id="dashboard-last-journey">Sem execuções recentes</small></span></a>
@@ -340,13 +340,13 @@ export function renderHome(): string {
       </div>
       </section>
       <section class="recent-runs">
-        <div class="recent-head"><div class="section-kicker">Execuções recentes <span class="run-count" id="dashboard-run-count">Dados locais</span><span class="run-source" id="dashboard-source" hidden>Da sua conta</span></div><div class="recent-controls"><div class="dashboard-filters" role="group" aria-label="Filtrar execuções"><button class="active" type="button" data-dashboard-filter="all">Todas</button><button type="button" data-dashboard-filter="scan">Inspeção</button><button type="button" data-dashboard-filter="journey">Jornada</button><button type="button" data-dashboard-filter="api">API</button></div><button class="history-toggle" id="dashboard-history-toggle" type="button" aria-expanded="false" hidden>Ver histórico completo</button><button class="history-clear" id="dashboard-clear" type="button" hidden>Limpar histórico</button></div></div>
+        <div class="recent-head"><h2 class="section-kicker">Execuções recentes <span class="run-count" id="dashboard-run-count">Dados locais</span><span class="run-source" id="dashboard-source" hidden>Da sua conta</span></h2><div class="recent-controls"><div class="dashboard-filters" role="group" aria-label="Filtrar execuções"><button class="active" type="button" data-dashboard-filter="all">Todas</button><button type="button" data-dashboard-filter="scan">Inspeção</button><button type="button" data-dashboard-filter="journey">Jornada</button><button type="button" data-dashboard-filter="api">API</button></div><button class="history-toggle" id="dashboard-history-toggle" type="button" aria-expanded="false" hidden>Ver histórico completo</button><button class="history-clear" id="dashboard-clear" type="button" hidden>Limpar histórico</button></div></div>
         <div class="dashboard-runs" id="dashboard-recent-list"></div>
         <div class="recent-empty" id="dashboard-recent-empty"><span class="icon-overview"><i></i></span><div><strong>Nenhuma execução encontrada</strong><p>Comece por uma inspeção, uma jornada ou uma requisição de API.</p></div><a href="/scanner">Executar agora</a></div>
       </section>
     </div>
     <aside class="live-signal">
-      <div class="section-kicker signal-kicker"><span>Sinal ao vivo</span><span class="live-state" id="dashboard-live-state" data-state="connecting" title="Conectando ao sinal ao vivo" aria-live="polite"><span class="live-dot"></span><span class="sr-only">Conectando ao sinal ao vivo</span></span></div>
+      <h2 class="section-kicker signal-kicker"><span>Sinal ao vivo</span><span class="live-state" id="dashboard-live-state" data-state="connecting" title="Conectando ao sinal ao vivo" aria-live="polite"><span class="live-dot"></span><span class="sr-only">Conectando ao sinal ao vivo</span></span></h2>
       <div class="signal-list" id="dashboard-signal-list"></div>
       <div class="signal-empty" id="dashboard-signal-empty"><i aria-hidden="true">⌁</i><strong>Aguardando execução</strong><p>Erros, avisos e sucessos aparecerão aqui durante as análises.</p></div>
       <a class="signals-link" href="/scanner">Ver todos os sinais <span>→</span></a>

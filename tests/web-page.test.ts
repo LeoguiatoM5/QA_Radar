@@ -77,6 +77,15 @@ describe("dashboard components", () => {
 
     assert.match(html, /^<!doctype html>/);
     assert.match(html, /<h1>Visão geral<\/h1>/);
+    // BUG-19 do relatório de 04/09/2026: a página tinha só o <h1> — os
+    // títulos de seção eram <div>/<span>, invisíveis para quem navega por
+    // headings no leitor de tela. Agora cada seção é um <h2> de verdade.
+    assert.match(html, /<h2 class="section-kicker map-legend">Mapa de qualidade<\/h2>/);
+    assert.match(html, /<h2 class="section-kicker">O que deseja executar\?<\/h2>/);
+    assert.match(html, /<h2 class="section-kicker">Execuções recentes /);
+    assert.match(html, /<h2 class="section-kicker signal-kicker">/);
+    assert.equal((html.match(/<h1[ >]/g) ?? []).length, 1);
+    assert.equal((html.match(/<h2[ >]/g) ?? []).length, 4);
     assert.match(html, /Mapa de qualidade/);
     assert.match(html, /Executar inspeção/);
     assert.match(html, /id="dashboard-last-scan"/);
