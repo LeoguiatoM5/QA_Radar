@@ -66,7 +66,10 @@ describe("toolbox · curl converter · leitura do comando", () => {
       { name: "q", value: "nota fiscal" },
       { name: "lang", value: "pt-BR" },
     ]);
-    assert.match(convertCurl(request, "playwright"), /search\?q=nota%20fiscal&lang=pt-BR/);
+    const playwrightCode = convertCurl(request, "playwright");
+    assert.match(playwrightCode, /'https:\/\/api\.example\.com\/search'/);
+    assert.match(playwrightCode, /'q': 'nota fiscal',/);
+    assert.match(playwrightCode, /'lang': 'pt-BR',/);
   });
 
   it("soma os dados de -G aos parâmetros que já estavam na URL", () => {
@@ -150,6 +153,19 @@ describe("toolbox · curl converter · geração de código", () => {
     assert.match(code, /await request\.post\(/);
     assert.match(code, /expect\(response\.status\(\)\)\.toBe\(200\);/);
     assert.match(code, /'Content-Type': 'application\/json'/);
+  });
+
+  // BUG-09 do relatório de 04/09/2026: a URL já trazia `?page=2` e o código
+  // gerado também colocava `page` em `params`, então o Playwright anexava a
+  // query de novo — `?page=2&page=2` — e o backend podia tratar isso como
+  // array, 400 ou comportamento indefinido.
+  it("não duplica a query string quando a URL do cURL já tem parâmetros", () => {
+    const code = convertCurl(request, "playwright");
+
+    assert.match(code, /await request\.post\('https:\/\/api\.example\.com\/users'/);
+    assert.doesNotMatch(code, /users\?page=2'/);
+    assert.match(code, /params: \{\n\s*'page': '2',\n\s*\},/);
+    assert.equal((code.match(/page/g) ?? []).length, 1);
   });
 
   it("gera Cypress com cy.request", () => {

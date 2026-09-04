@@ -750,6 +750,22 @@ export function createDocsPage(): string {
 </html>`;
 }
 
+/**
+ * Página de rota inexistente.
+ *
+ * Autocontida, de propósito: o catch-all do servidor precisa dela mesmo
+ * quando nenhuma rota casou, então ela não pode depender de nada que uma
+ * rota específica monte (nav, dados da conta). Um link quebrado ou favorito
+ * antigo cai aqui em vez de num JSON cru sem `<title>`, layout ou saída.
+ */
+export function createNotFoundPage(): string {
+  return `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Página não encontrada · QA Radar</title>
+<style>:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#07101d;color:#e7eef8}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px}.card{max-width:440px;text-align:center;background:#0e1a2b;border:1px solid #263953;border-radius:16px;padding:40px 32px}.brand{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:900;letter-spacing:.12em;margin-bottom:24px}.radar{width:26px;height:26px;border:2px solid #67e8f9;border-radius:50%;position:relative;box-shadow:0 0 18px #67e8f955}.radar:before{content:"";position:absolute;inset:6px;border:1px solid #67e8f999;border-radius:50%}.radar:after{content:"";position:absolute;width:4px;height:4px;left:10px;top:10px;border-radius:50%;background:#67e8f9}.eyebrow{color:#67e8f9;text-transform:uppercase;letter-spacing:.15em;font-size:12px;font-weight:800}h1{margin:10px 0 8px;font-size:28px}p{color:#91a4bd;margin:0 0 24px;line-height:1.5}a.home{display:inline-block;color:#07101d;background:#67e8f9;text-decoration:none;font-weight:700;border-radius:8px;padding:11px 20px}a.home:hover{background:#8ff0fc}</style>
+</head><body><main class="card"><div class="brand"><i class="radar"></i>QA RADAR</div><div class="eyebrow">Erro 404</div><h1>Página não encontrada</h1><p>O endereço que você abriu não existe ou mudou de lugar.</p><a class="home" href="/">Voltar para o início</a></main></body></html>`;
+}
+
 export function createJourneyPage(allowCodeMode = false): string {
   return `<!doctype html>
 <html lang="pt-BR">

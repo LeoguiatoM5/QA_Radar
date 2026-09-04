@@ -384,7 +384,7 @@ function playwrightCode(request: ParsedCurlRequest): string {
   return `import { test, expect } from '@playwright/test';
 
 ${jsSecretPreamble(headers)}test('${request.method} ${new URL(request.url).pathname}', async ({ request }) => {
-  const response = await ${call}(${quote(urlWithQuery(request))}${options ? `, {\n${options}  }` : ""});
+  const response = await ${call}(${quote(request.url)}${options ? `, {\n${options}  }` : ""});
 
   expect(response.status()).toBe(200);
 });`;

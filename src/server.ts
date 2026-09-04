@@ -15,6 +15,7 @@ import type { JourneyRunResult } from "./journey-runner.js";
 import { runPlaywrightCodeWorker } from "./code-worker-client.js";
 import type { HostedCodeRunner } from "./sandbox-client.js";
 import { bearerToken, jsonError, storedAccessHash, tokenHash, tokenMatches } from "./http-helpers.js";
+import { createNotFoundPage } from "./web-page.js";
 import { toApiError } from "./api-error.js";
 import { transitionJob, type TerminalJobStatus } from "./job-state.js";
 import { CodegenSessionStore, type CodegenSession } from "./codegen-session-store.js";
@@ -826,6 +827,14 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       const requestContext: RequestContext = apiPrefix === UNVERSIONED_API_PREFIX ? context : { ...context, apiPrefix };
       for (const handler of ROUTE_HANDLERS) {
         if (await handler(requestContext, request, response, url)) return;
+      }
+      // Um link quebrado ou favorito antigo é navegação, não chamada de API:
+      // merece uma página com título, marca e caminho de volta — não um JSON
+      // cru que o navegador só sabe mostrar como texto solto.
+      if (request.method === "GET" && !url.pathname.startsWith(UNVERSIONED_API_PREFIX) && !url.pathname.startsWith("/assets/")) {
+        response.writeHead(404, { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer" });
+        response.end(createNotFoundPage());
+        return;
       }
       jsonError(response, "not_found", "Rota não encontrada.");
     } catch (error) {

@@ -545,7 +545,10 @@ describe("web server", () => {
   });
 
   it("acompanha toda resposta de erro de um código estável de contrato", async () => {
-    const notFound = await fetch(`${baseUrl}/rota-inexistente`);
+    // Fora de /api, uma rota desconhecida é navegação e ganhou página própria
+    // (ver BUG-15 em `mostra uma página com marca...`); o contrato de erro
+    // estável que este teste acompanha é o da API.
+    const notFound = await fetch(`${baseUrl}/api/rota-inexistente`);
     assert.equal(notFound.status, 404);
     assert.deepEqual(await notFound.json(), { error: "Rota não encontrada.", code: "not_found" });
 
@@ -1020,6 +1023,25 @@ describe("web server", () => {
   it("responde 404 para rotas desconhecidas", async () => {
     const response = await fetch(`${baseUrl}/nao-existe`);
     assert.equal(response.status, 404);
+  });
+
+  // BUG-15 do relatório de 04/09/2026: um link quebrado ou favorito antigo
+  // caía num JSON cru, sem <title>, layout ou link de volta — um beco sem
+  // saída. Uma navegação (GET fora de /api) agora recebe uma página; a API
+  // continua devolvendo JSON, porque é isso que o cliente dela espera.
+  it("mostra uma página com marca e link de volta para navegação em rota desconhecida, mas mantém JSON na API", async () => {
+    const page = await fetch(`${baseUrl}/rota-que-nao-existe-123`);
+    assert.equal(page.status, 404);
+    assert.match(page.headers.get("content-type") ?? "", /text\/html/);
+    const html = await page.text();
+    assert.match(html, /<title>Página não encontrada/);
+    assert.match(html, /href="\/"/);
+    assert.match(html, /QA RADAR/);
+
+    const api = await fetch(`${baseUrl}/api/v1/rota-que-nao-existe-123`);
+    assert.equal(api.status, 404);
+    assert.match(api.headers.get("content-type") ?? "", /application\/json/);
+    assert.equal(((await api.json()) as { code?: string }).code, "not_found");
   });
 
   it("aplica rate limit por cliente e publica os cabeçalhos da janela", async () => {
