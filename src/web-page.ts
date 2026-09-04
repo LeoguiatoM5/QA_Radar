@@ -223,7 +223,7 @@ const CODE_MODE_STYLES = `.journey-workspace{max-width:860px;margin:0 auto}#code
 // relação com CODE_MODE_STYLES/#code-mode-panel, que continuam exclusivos
 // da Jornada Playwright.
 const API_TESTS_STYLES = `
-.http-application-picker{margin-bottom:14px}.http-shared-warning{margin-bottom:14px;padding:10px 13px;border:1px solid #2a4d66;border-radius:10px;background:#0d2030;color:#bcd4e6;font-size:.76rem;line-height:1.5}.http-shared-warning[hidden]{display:none}.http-shared-warning b{color:#e7f1fa}.http-shared-warning code{color:var(--cyan)}
+.http-application-picker{margin:14px 20px 0}.http-shared-warning{margin:14px 20px 0;padding:10px 13px;border:1px solid #2a4d66;border-radius:10px;background:#0d2030;color:#bcd4e6;font-size:.76rem;line-height:1.5}.http-shared-warning[hidden]{display:none}.http-shared-warning b{color:#e7f1fa}.http-shared-warning code{color:var(--cyan)}
 .api-workspace{max-width:1120px;margin:0 auto}
 #http-client-panel{max-width:none;margin:0;padding:0;overflow:hidden}
 .http-request-line{display:grid;grid-template-columns:110px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:20px;border-bottom:1px solid var(--line);background:#0b1727}
