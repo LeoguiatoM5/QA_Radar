@@ -120,7 +120,7 @@ on("webhook-auto", "click", (botao) => {
 on("webhook-clear", "click", () => {
   void (async () => {
     if (!binId) return;
-    await fetch(`/api/v1/toolbox/webhooks/${binId}`, { method: "DELETE" }).catch(() => {});
+    await fetch(`/api/v1/toolbox/webhooks/${binId}/clear`, { method: "POST" }).catch(() => {});
     await atualizar();
   })();
 });

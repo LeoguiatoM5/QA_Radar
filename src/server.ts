@@ -558,8 +558,11 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
 
   const expireJob = (job: ScanJob): void => {
     const timer = setTimeout(() => {
+      // Só o artefato pesado vence aqui — HTML, screenshot, o diretório em
+      // disco. O registro no banco (status, contadores, aprovado/reprovado)
+      // fica: é dele que Relatórios e Central de qualidade tiram os KPIs, e um
+      // indicador não pode se recalcular sozinho só porque uma hora passou.
       jobQueue.delete(job.id);
-      void config.scanJobs.removed(job.id);
       void config.artifacts.remove(job.id).catch(() => {
         /* A limpeza do disco abaixo é o que importa; o objeto vence sozinho. */
       });
@@ -594,10 +597,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
 
   const expireCodeExecution = (job: CodeExecutionJob): void => {
     const timer = setTimeout(() => {
+      // Mesma separação de `expireJob`: o relatório de evidências (HTML,
+      // screenshots) é ephemeral e some daqui a pouco; o registro no banco —
+      // o que Relatórios usa para listar a Jornada no histórico — fica.
       codeExecutionJobs.delete(job.id);
-      void config.codeExecutions?.delete(job.id).catch(() => {
-        // A varredura por vencimento no boot pega o que ficar para trás.
-      });
       void config.artifacts.remove(codeArtifactPrefix(job.id)).catch(() => {
         /* A limpeza do disco abaixo é o que importa; o objeto vence sozinho. */
       });
@@ -797,28 +800,12 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       );
     }
 
-    // A expiração de uma execução da Jornada é um `setTimeout` do processo que a
-    // rodou: se ele morre, o timer morre junto e a linha ficaria no banco para
-    // sempre. Esta varredura no boot é o que fecha essa conta.
-    try {
-      const expired = (await config.codeExecutions?.deleteExpired(new Date())) ?? [];
-      for (const id of expired) {
-        void config.artifacts.remove(codeArtifactPrefix(id)).catch(() => {});
-        void rm(codeOutputDir(id), { recursive: true, force: true });
-      }
-      if (expired.length > 0) {
-        console.log(JSON.stringify({ source: "qa-radar", event: "code_execution.expired_swept", timestamp: new Date().toISOString(), removed: expired.length }));
-      }
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          source: "qa-radar",
-          event: "code_execution.sweep_failed",
-          timestamp: new Date().toISOString(),
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    }
+    // Não há mais varredura de vencimento aqui: o registro da Jornada no banco
+    // não expira sozinho (é dele que Relatórios tira o histórico da conta), só
+    // o relatório de evidências no disco, e esse já vence pelo `setTimeout` de
+    // `expireCodeExecution` no processo que rodou a execução. Um processo que
+    // morre antes desse timer disparar deixa artefatos órfãos no disco — um
+    // custo de armazenamento, não uma perda de histórico do usuário.
   })();
 
   return createServer(async (request, response) => {

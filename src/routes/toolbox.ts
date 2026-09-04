@@ -196,7 +196,11 @@ export const tryHandleToolbox: RouteHandler = async (context, request, response,
       return true;
     }
 
-    if (request.method === "DELETE" && subPath === "") {
+    // Limpar mora numa sub-rota, não na URL pública: quem só conhece a caixa
+    // porque a viu chegar de outro lugar não deve conseguir apagar evidência
+    // já capturada. E DELETE deixa de ser um comando escondido — vira, como
+    // qualquer outro verbo, uma chamada capturada (ver ramo abaixo).
+    if (request.method === "POST" && subPath === "/clear") {
       if (!webhookBins.clear(binId)) throw new ApiError("not_found", "Esta caixa não existe ou já expirou.");
       json(response, 200, { cleared: true });
       return true;

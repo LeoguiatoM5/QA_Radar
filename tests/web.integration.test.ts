@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
 import { createQaRadarServer } from "../src/server.js";
+import { InMemoryScanJobRepository } from "../src/scan-job-repository.js";
+import { createScanJobPersistence } from "../src/scan-job-persistence.js";
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -168,6 +170,58 @@ describe("web scan integration", () => {
 
       const screenshotLink = page.getByRole("link", { name: /Ver evidência anotada/ });
       assert.match((await screenshotLink.getAttribute("href")) ?? "", /^blob:/);
+    } finally {
+      await browser?.close();
+      await close(app);
+      await close(target);
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reabre uma análise do histórico pelo link /scanner?execucao=…, e avisa quando o id não existe", async () => {
+    const target = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end('<!doctype html><html lang="pt-BR"><title>Alvo Restaurado</title><main>Conteúdo</main>');
+    });
+    const resultsDir = await mkdtemp(join(tmpdir(), "qa-radar-web-restore-"));
+    // Retenção padrão, de propósito: a análise aqui é anônima, e para uma
+    // análise anônima o cookie de acesso é o único jeito de voltar a ela — seu
+    // `Max-Age` usa a mesma retenção. A garantia de que o *histórico* sobrevive
+    // à expiração do artefato (BUG-02) já está coberta, para o dono de conta,
+    // em `tests/applications.test.ts`; aqui o alvo é só a restauração do
+    // formulário pelo link (BUG-03), com a análise ainda dentro da validade.
+    const app = createQaRadarServer({
+      resultsDir,
+      concurrency: 1,
+      allowPrivateTargets: true,
+      scanJobs: createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 3_600_000, onError: () => {} }),
+    });
+    const targetUrl = await listen(target);
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(`${appUrl}/scanner`);
+      await page.locator("#url").fill(targetUrl);
+      const [response] = await Promise.all([page.waitForResponse((res) => res.url().endsWith("/api/scans") && res.request().method() === "POST"), page.locator("#submit").click()]);
+      const created = (await response.json()) as { id: string };
+      await page.locator("#status.pass").waitFor({ timeout: 20_000 });
+      await embeddedReportOf(page, "Alvo Restaurado");
+
+      // Simula exatamente o clique num link de `Relatórios`: navegação nova,
+      // formulário do zero, só o `execucao` na URL para reconstruir o resultado.
+      await page.goto(`${appUrl}/scanner?execucao=${created.id}`);
+      await page.locator("#status.pass").waitFor({ timeout: 20_000 });
+      assert.equal(await page.locator("#status").textContent(), "APROVADO");
+      assert.equal(await page.locator("#errors").textContent(), "0");
+      assert.match((await page.locator("#result-title").textContent()) ?? "", /Alvo Restaurado|target/i);
+
+      await page.goto(`${appUrl}/scanner?execucao=00000000-0000-0000-0000-000000000000`);
+      await page.locator("#status.fail").waitFor({ timeout: 20_000 });
+      assert.equal(await page.locator("#status").textContent(), "NÃO DISPONÍVEL");
+      assert.match((await page.locator("#error").textContent()) ?? "", /não está mais disponível|não encontrada/i);
     } finally {
       await browser?.close();
       await close(app);

@@ -407,6 +407,62 @@ describe("histórico da conta", () => {
       await close();
     }
   });
+
+  /**
+   * BUG-02 do relatório de 04/09/2026: o registro da execução (status,
+   * contadores, aprovado/reprovado) some do histórico ~1h depois de criado,
+   * porque `expireJob` apagava a linha do banco junto com o relatório em
+   * disco. O efeito visível era a "Taxa de sucesso" subir sozinha conforme
+   * falhas antigas saíam da base antes de sucessos novos entrarem.
+   */
+  it("o registro sobrevive à expiração do relatório: só o artefato em disco vence, não o histórico", async () => {
+    const { baseUrl, close } = await startServer({
+      ...withAccounts(),
+      concurrency: 1,
+      retentionMs: 300,
+      scanJobs: createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 300, onError: () => {} }),
+    });
+    try {
+      const cookie = await signUp(baseUrl, "dono@exemplo.com");
+      const created = await fetch(`${baseUrl}/api/v1/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ url: baseUrl, screenshot: "never" }),
+      });
+      assert.equal(created.status, 202);
+      const { id } = (await created.json()) as { id: string };
+
+      let finished: { status: string; report?: { summary: { errors: number; warnings: number } } } | undefined;
+      for (let attempt = 0; attempt < 200 && !finished; attempt += 1) {
+        const response = await fetch(`${baseUrl}/api/v1/scans/${id}`, { headers: { cookie } });
+        const job = (await response.json()) as { status: string; report?: { summary: { errors: number; warnings: number } } };
+        if (job.status === "completed" || job.status === "failed") finished = job;
+        else await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!finished) throw new Error("A análise não terminou a tempo.");
+      const originalSummary = finished.report?.summary;
+      assert.ok(originalSummary);
+
+      // Espera a retenção passar: é quando `expireJob` limpa o artefato em disco.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // O registro continua no histórico da conta — Relatórios não perde a linha...
+      assert.equal(await historyOf(baseUrl, cookie), 1);
+
+      // ...com o mesmo resultado, não um "não encontrada" que apagaria o dado do KPI.
+      const afterExpiry = await fetch(`${baseUrl}/api/v1/scans/${id}`, { headers: { cookie } });
+      assert.equal(afterExpiry.status, 200);
+      const afterJob = (await afterExpiry.json()) as { status: string; report?: { summary: { errors: number; warnings: number } } };
+      assert.equal(afterJob.status, finished.status);
+      assert.deepEqual(afterJob.report?.summary, originalSummary);
+
+      // Só o artefato pesado vence: o HTML baixável já não está mais lá.
+      const artifact = await fetch(`${baseUrl}/api/v1/scans/${id}/report.html`, { headers: { cookie } });
+      assert.equal(artifact.status, 404);
+    } finally {
+      await close();
+    }
+  });
 });
 
 describe("histórico da aplicação", () => {

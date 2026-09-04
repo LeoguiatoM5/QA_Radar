@@ -362,6 +362,45 @@ async function poll(id: string): Promise<void> {
   }
 }
 
+/**
+ * Reabre uma análise do histórico (`/scanner?execucao=…`, vindo de Relatórios).
+ *
+ * Reusa `poll`: para uma análise já concluída, a primeira leitura já vem
+ * `completed` e ele renderiza direto — não precisa de um caminho à parte.
+ */
+async function restoreExecution(id: string): Promise<void> {
+  results?.classList.add("visible");
+  results?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (errorBox) errorBox.style.display = "none";
+  const status = document.querySelector<HTMLElement>("#status");
+  if (status) {
+    status.className = "status running";
+    status.innerHTML = '<i class="loader"></i>Carregando';
+  }
+  text("#result-title", "Carregando análise salva…");
+  const progress = document.querySelector<HTMLElement>("#progress");
+  if (progress) progress.hidden = false;
+  text("#progress-text", "Buscando o resultado salvo…");
+  try {
+    await poll(id);
+  } catch (error) {
+    // Estado terminal e explícito, nunca "carregando" ao lado de "falhou": quem
+    // clicou num link do histórico precisa saber que o resultado sumiu, não
+    // ficar olhando para um formulário em branco sem explicação.
+    if (progress) progress.hidden = true;
+    if (status) {
+      status.className = "status fail";
+      status.textContent = "NÃO DISPONÍVEL";
+    }
+    text("#result-title", "Análise não encontrada");
+    const message = error instanceof Error ? error.message : "Não foi possível carregar esta análise.";
+    showError(/não encontrada|expirad/i.test(message) ? "Esta análise não está mais disponível — o histórico guarda o resultado só por um tempo limitado." : message);
+  }
+}
+
+const wantedExecution = new URLSearchParams(location.search).get("execucao");
+if (wantedExecution) void restoreExecution(wantedExecution);
+
 cancelButton?.addEventListener("click", () => {
   if (!currentJobId) return;
   cancelButton.disabled = true;

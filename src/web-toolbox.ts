@@ -482,7 +482,7 @@ function renderWebhookInspector(tool: QaToolDefinition): string {
   return renderToolShell(
     tool,
     `<section class="tool-panel panel">
-    <p class="tool-note tool-note-server">A caixa é uma <strong>URL pública</strong>: qualquer um que a descubra pode escrever nela. Ela vive ${Math.round(WEBHOOK_TTL_MS / 60000)} minutos, guarda as ${MAX_REQUESTS_PER_BIN} últimas chamadas e corta o corpo em ${Math.round(MAX_WEBHOOK_BODY_BYTES / 1024)} KB. Cabeçalho de credencial é redigido antes de virar registro, e nada é gravado em banco — um reinício leva tudo junto. Não use com dado real de produção.</p>
+    <p class="tool-note tool-note-server">A caixa é uma <strong>URL pública</strong>: qualquer um que a descubra pode escrever nela e ler as chamadas capturadas. Ela vive ${Math.round(WEBHOOK_TTL_MS / 60000)} minutos, guarda as ${MAX_REQUESTS_PER_BIN} últimas chamadas e corta o corpo em ${Math.round(MAX_WEBHOOK_BODY_BYTES / 1024)} KB. Cabeçalho de credencial é redigido antes de virar registro, e nada é gravado em banco — um reinício leva tudo junto. Não use com dado real de produção.</p>
     ${renderToolActions([{ id: "webhook-create", label: "Abrir uma caixa", primary: true }])}
     <div class="error-box" id="webhook-error" role="alert"></div>
     <div id="webhook-bin" hidden>

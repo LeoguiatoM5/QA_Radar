@@ -171,6 +171,32 @@ describe("toolbox integration · rotas", () => {
     assert.equal((await fetch(`${appUrl}/api/v1/toolbox/webhooks/nao-existe`, { method: "POST" })).status, 404);
   });
 
+  it("captura DELETE como uma chamada normal e só limpa a caixa pela sub-rota /clear", async () => {
+    const criada = await fetch(`${appUrl}/api/v1/toolbox/webhooks`, { method: "POST" });
+    const bin = (await criada.json()) as { id: string };
+
+    // DELETE na URL pública da caixa não é mais um comando escondido: é só
+    // mais um verbo de webhook, como qualquer outro.
+    const apagar = await fetch(`${appUrl}/api/v1/toolbox/webhooks/${bin.id}`, { method: "DELETE" });
+    assert.equal(apagar.status, 200);
+    assert.equal(((await apagar.json()) as { received?: boolean }).received, true);
+
+    const lida = await fetch(`${appUrl}/api/v1/toolbox/webhooks/${bin.id}`);
+    const conteudo = (await lida.json()) as { requests: Array<{ method: string }> };
+    assert.equal(conteudo.requests.length, 1);
+    assert.equal(conteudo.requests[0]?.method, "DELETE");
+
+    // Limpar exige a sub-rota /clear, não a URL pública que o provedor externo recebe.
+    const limpar = await fetch(`${appUrl}/api/v1/toolbox/webhooks/${bin.id}/clear`, { method: "POST" });
+    assert.equal(limpar.status, 200);
+    assert.deepEqual(await limpar.json(), { cleared: true });
+
+    const depois = await fetch(`${appUrl}/api/v1/toolbox/webhooks/${bin.id}`);
+    assert.equal(((await depois.json()) as { requests: unknown[] }).requests.length, 0);
+
+    assert.equal((await fetch(`${appUrl}/api/v1/toolbox/webhooks/nao-existe/clear`, { method: "POST" })).status, 404);
+  });
+
   it("classifica 200, 404, 500 e resposta lenta", async () => {
     const response = await fetch(`${appUrl}/api/v1/toolbox/health-checks`, {
       method: "POST",
