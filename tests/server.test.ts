@@ -46,9 +46,29 @@ describe("web server", () => {
     assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self';/);
     assert.doesNotMatch(response.headers.get("content-security-policy") ?? "", /script-src[^;]*'unsafe-inline'/);
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    // Conexão HTTP pura de teste, sem proxy confiável na frente: prometer
+    // "sempre HTTPS" aqui seria falso, então HSTS fica de fora (ver o teste
+    // dedicado abaixo para quando a conexão é HTTPS de verdade).
+    assert.equal(response.headers.get("strict-transport-security"), null);
     assert.match(html, /Executar inspeção/);
     assert.match(html, /Executar jornada/);
     assert.doesNotMatch(html, /id="scan-form"/);
+  });
+
+  // BUG-20 do relatório de 04/09/2026: HSTS ausente numa aplicação servida só
+  // por HTTPS. Só faz sentido mandar o cabeçalho quando a conexão realmente é
+  // HTTPS — daí depender do mesmo sinal (`X-Forwarded-Proto` + `trustProxy`)
+  // que `accessCookie` já usa para decidir o `Secure` do cookie.
+  it("manda HSTS quando a conexão, via proxy confiável, é HTTPS de verdade", async () => {
+    const secureServer = createQaRadarServer({ trustProxy: true });
+    await new Promise<void>((resolve) => secureServer.listen(0, "127.0.0.1", resolve));
+    const address = secureServer.address() as AddressInfo;
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}`, { headers: { "x-forwarded-proto": "https" } });
+      assert.equal(response.headers.get("strict-transport-security"), "max-age=31536000; includeSubDomains");
+    } finally {
+      await new Promise<void>((resolve, reject) => secureServer.close((error) => (error ? reject(error) : resolve())));
+    }
   });
 
   it("entrega o scanner em rota própria", async () => {

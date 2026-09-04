@@ -813,6 +813,17 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
 
   return createServer(async (request, response) => {
     try {
+      // Vale para toda resposta, por isso fica antes do despacho: HSTS é o
+      // cabeçalho que faltava na varredura de segurança do relatório de
+      // 04/09/2026 (BUG-20) — os outros (CSP, X-Content-Type-Options,
+      // Referrer-Policy, Permissions-Policy) cada rota já grava por conta
+      // própria. Só sai numa conexão HTTPS de verdade; numa conexão HTTP
+      // pura o navegador ignora o cabeçalho de qualquer forma, mas não faz
+      // sentido prometer "sempre HTTPS" sobre uma conexão que não é.
+      const forwardedProto = request.headers["x-forwarded-proto"];
+      const secure = Boolean((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted) || (config.trustProxy && forwardedProto === "https");
+      if (secure) response.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
+
       const url = new URL(request.url ?? "/", "http://localhost");
       // O prefixo versionado é retirado antes do despacho, então cada rota
       // continua casando um caminho só. O que a rota não pode ignorar é qual
