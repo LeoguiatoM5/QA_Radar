@@ -162,6 +162,80 @@ describe("journey evidence HTML", () => {
     assert.match(html, /dados desta requisição não estão mais disponíveis/);
   });
 
+  // BUG-06 do relatório de 04/09/2026: "Gerado em" usava o fuso do processo
+  // Node (UTC em produção), enquanto o resto do app mostra horário local
+  // (BRT) renderizado no navegador — um relatório que serve de prova
+  // "datado" 3h à frente do resto da conta.
+  it("mostra 'Gerado em' no horário de Brasília, não no fuso do servidor", async () => {
+    const html = await createJourneyEvidenceHtml(
+      { schemaVersion: "1.0", name: "Jornada", status: "passed", startedAt: "2026-07-22T00:00:00Z", durationMs: 100, steps: [] },
+      { testerName: "QA", testType: "smoke" },
+      readFakeAsset,
+      // 12:00 UTC = 09:00 em America/Sao_Paulo (UTC-3, sem horário de verão desde 2019).
+      new Date("2026-07-22T12:00:00Z"),
+    );
+    assert.match(html, /09:00/);
+    assert.doesNotMatch(html, /\b12:00\b/);
+  });
+
+  // BUG-05 do relatório de 04/09/2026: o passo reprovado só mostrava uma
+  // mensagem genérica por tipo de ação, descartando o `error.message` real do
+  // Playwright — exatamente a informação que explica por que o passo falhou.
+  it("mostra a mensagem de erro real do passo reprovado, não só uma genérica", async () => {
+    const html = await createJourneyEvidenceHtml(
+      {
+        schemaVersion: "1.0",
+        name: "Jornada reprovada",
+        status: "failed",
+        startedAt: "2026-07-22T00:00:00Z",
+        durationMs: 100,
+        steps: [
+          {
+            index: 0,
+            action: "assertText",
+            description: "Confirmar título",
+            status: "failed",
+            durationMs: 50,
+            error: 'Expected substring: "Nao Existe"\nReceived string:   "Example Domain"',
+          },
+        ],
+      },
+      { testerName: "QA", testType: "smoke" },
+      readFakeAsset,
+      new Date("2026-07-22T12:00:00Z"),
+    );
+    assert.match(html, /Expected substring: &quot;Nao Existe&quot;/);
+    assert.match(html, /Received string:\s*&quot;Example Domain&quot;/);
+    // A mensagem amigável continua, como orientação de leitura — só não é mais a única coisa mostrada.
+    assert.match(html, /texto esperado não foi encontrado/);
+  });
+
+  // BUG-04 do relatório de 04/09/2026: os passos sintéticos do Modo Código
+  // mostravam a duração total dividida igualmente entre eles, uma média
+  // inventada apresentada como se fosse medição real.
+  it("omite a duração do passo quando ela não foi medida de verdade, em vez de inventar uma média", async () => {
+    const html = await createJourneyEvidenceHtml(
+      {
+        schemaVersion: "1.0",
+        name: "Teste Playwright (.spec.ts)",
+        status: "passed",
+        startedAt: "2026-07-22T00:00:00Z",
+        durationMs: 37_086,
+        steps: [
+          { index: 0, action: "goto", description: "Abrir página", status: "passed" },
+          { index: 1, action: "assertText", description: "Confirmar texto", status: "passed" },
+        ],
+      },
+      { testerName: "QA", testType: "smoke" },
+      readFakeAsset,
+      new Date("2026-07-22T12:00:00Z"),
+    );
+    assert.doesNotMatch(html, /undefined ms/);
+    assert.doesNotMatch(html, /NaN ms/);
+    assert.doesNotMatch(html, / ms<\/p>/);
+    assert.match(html, /Ação: <code>goto<\/code><\/p>/);
+  });
+
   it("valida e aplica descrições de passo informadas pelo usuário", () => {
     assert.equal(parseStepDescriptionOverrides(undefined), undefined);
     assert.deepEqual(parseStepDescriptionOverrides(["Clicar no botão de busca", "", "  "]), ["Clicar no botão de busca", undefined, undefined]);

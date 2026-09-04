@@ -387,7 +387,6 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
       else if (apiRequest) sourceSteps.push({ action: "apiRequest", description: `Requisição ${(apiRequest[1] ?? "").toUpperCase()} ${apiRequest[3]}` });
     }
     const stepDefinitions = sourceSteps.length > 0 ? sourceSteps : [{ action: "assertVisible" as const, description: `${expected} teste(s) executado(s)` }];
-    const stepDuration = durationMs / stepDefinitions.length;
     let screenshotPath: string | undefined;
     let videoPath: string | undefined;
     const stepCaptures: string[] = [];
@@ -435,7 +434,10 @@ export function createQaRadarServer(overrides: Partial<ServerOptions> = {}): Ser
         action: step.action,
         description: step.description,
         status: job.status === "passed" || index < stepDefinitions.length - 1 ? ("passed" as const) : ("failed" as const),
-        durationMs: stepDuration,
+        // Sem duração por passo aqui: o Modo Código só tem a duração total da
+        // suíte (stats.duration), e repartir isso igualmente entre os passos
+        // seria uma média inventada, não uma medição — ver o comentário em
+        // `JourneyStepResult.durationMs`.
         ...(job.status === "failed" && isLastStep && job.failureDetails ? { error: job.failureDetails } : {}),
         ...(image || api || (isLastStep && videoPath)
           ? {

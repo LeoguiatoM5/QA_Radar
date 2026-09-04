@@ -8,7 +8,13 @@ export interface JourneyStepResult {
   action: JourneyStep["action"];
   description?: string;
   status: "passed" | "failed";
-  durationMs: number;
+  /**
+   * Ausente quando não foi medida de verdade — como nos passos sintéticos do
+   * Modo Código, reconstruídos do código-fonte sem instrumentação por passo.
+   * Melhor omitir do que repartir a duração total igualmente entre eles: um
+   * número por passo que na prática é uma média inventada não é confiável.
+   */
+  durationMs?: number;
   error?: string;
   evidence?: {
     before?: string;
