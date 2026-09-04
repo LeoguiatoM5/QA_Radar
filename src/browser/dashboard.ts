@@ -22,7 +22,10 @@ interface Activity {
   createdAt?: number | string | undefined;
   href?: string;
   scores?: Partial<Record<Axis, number>>;
+  environment?: string;
 }
+
+const ENVIRONMENT_LABELS: Record<string, string> = { local: "Local", homologacao: "Homologação", producao: "Produção" };
 
 const AXES: readonly Axis[] = ["http", "performance", "accessibility", "dom", "javascript"];
 const AXIS_NAMES: Record<Axis, string> = { http: "HTTP", performance: "Performance", accessibility: "Acessibilidade", dom: "DOM", javascript: "JavaScript" };
@@ -202,7 +205,7 @@ function renderRun(item: Activity): string {
   return (
     `<div class="dashboard-run"><span class="run-kind icon-${meta.icon}"><i></i></span>` +
     `<a class="run-title" href="${href}"><strong>${title}</strong><small>${dashboardEsc(item.detail ?? meta.label)}</small></a>` +
-    `<span class="run-environment">Local</span>` +
+    `<span class="run-environment">${dashboardEsc(ENVIRONMENT_LABELS[item.environment ?? ""] ?? "—")}</span>` +
     `<span class="run-status ${failed ? "error" : "success"}"><i></i>${failed ? "ERRO" : "SUCESSO"}</span>` +
     `<span class="run-errors ${errors ? "has-value" : ""}">${dashboardCount(errors, "erro", "erros")}</span>` +
     `<span class="run-warnings ${warnings ? "has-value" : ""}">${dashboardCount(warnings, "aviso", "avisos")}</span>` +
@@ -309,11 +312,16 @@ function renderDashboard(): void {
 
   if (emptyRecent) emptyRecent.hidden = filtered.length > 0;
   if (emptySignals) emptySignals.hidden = true;
-  if (recent)
+  if (recent) {
+    // Rolagem própria a partir da lista expandida: sem isso o "Sinal ao vivo" e a
+    // Central de qualidade, na coluna ao lado, eram empurrados para muito abaixo
+    // da dobra sempre que "Ver histórico completo" trazia dezenas de linhas.
+    recent.classList.toggle("scrollable", dashboardShowAll);
     recent.innerHTML = filtered
       .slice(0, dashboardShowAll ? 40 : 6)
       .map(renderRun)
       .join("");
+  }
   if (signals) signals.innerHTML = activities.slice(0, 7).map(renderSignal).join("");
 
   const values = renderRadar(activities);
