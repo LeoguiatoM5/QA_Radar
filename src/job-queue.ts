@@ -18,6 +18,8 @@ export interface ScanJob {
   ownerId: string | undefined;
   /** Aplicação a que a análise pertence. Ausente = análise avulsa. */
   applicationId: string | undefined;
+  /** Slug do ambiente selecionado na barra superior no momento da criação. */
+  environment: string | undefined;
 }
 
 export interface QueueStats {

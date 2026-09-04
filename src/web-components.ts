@@ -1,11 +1,8 @@
+import { ENVIRONMENTS } from "./environments.js";
+
 export type NavSection = "home" | "scanner" | "journeys" | "api" | "aplicacoes" | "toolbox" | "relatorios" | "qualidade" | "alertas" | "configuracoes" | "docs";
 
-/** Ambientes oferecidos no seletor da barra de contexto. */
-export const ENVIRONMENTS = [
-  { slug: "local", label: "Local" },
-  { slug: "homologacao", label: "Homologação" },
-  { slug: "producao", label: "Produção" },
-] as const;
+export { ENVIRONMENTS };
 
 export interface DashboardOptions {
   allowHistory: boolean;

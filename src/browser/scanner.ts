@@ -1,4 +1,4 @@
-import { activityTarget, esc, recordActivity, signInAndReturn, sleep } from "./shared.js";
+import { activityTarget, currentEnvironment, esc, recordActivity, signInAndReturn, sleep } from "./shared.js";
 
 /**
  * Cliente da Inspeção: formulário, acompanhamento da execução e resultado.
@@ -430,6 +430,9 @@ form?.addEventListener("submit", (event) => {
   data.settleMs = Number(data.settleMs);
   data.maxPages = Number(data.maxPages);
   for (const flag of ["sitemap", "accessibility", "regressionsOnly", "acceptBaseline"]) data[flag] = formData.has(flag);
+  // O campo "Ambiente" do Projeto/Baseline vem desabilitado neste servidor: sem
+  // ele no FormData, a análise não carregava o ambiente da barra de contexto.
+  if (!data.environment) data.environment = currentEnvironment();
   void (async () => {
     try {
       const response = await fetch("/api/scans", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });

@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { DashboardActivity, DashboardActivityStatus, DashboardActivityType } from "../dashboard-activity-store.js";
 import { json, jsonError, readJson } from "../http-helpers.js";
 import { invalidRequest } from "../api-error.js";
+import { parseEnvironment } from "../environments.js";
 import type { RouteHandler } from "./context.js";
 
 const COOKIE_NAME = "qa_radar_dashboard";
@@ -61,6 +62,7 @@ function activityFromBody(body: Record<string, unknown>): DashboardActivity {
     const value = rawScores[name];
     if (value !== undefined) scores[name] = limitedNumber(value, `Score ${name}`, 100);
   }
+  const environment = parseEnvironment(body.environment);
   return {
     id: limitedText(body.id, "ID", 120),
     type: type as DashboardActivityType,
@@ -73,6 +75,7 @@ function activityFromBody(body: Record<string, unknown>): DashboardActivity {
     createdAt: Date.now(),
     href: safeHref(body.href),
     scores,
+    ...(environment ? { environment } : {}),
   };
 }
 

@@ -37,6 +37,7 @@ function scanJob(overrides: Partial<PersistedScanJob> = {}): PersistedScanJob {
     accessTokenHash: "a".repeat(64),
     ownerId: undefined,
     applicationId: undefined,
+    environment: undefined,
     ...overrides,
   };
 }
@@ -52,6 +53,7 @@ function codeExecution(overrides: Partial<PersistedCodeExecution> = {}): Persist
     failureDetails: undefined,
     ownerId: undefined,
     applicationId: undefined,
+    environment: undefined,
     ...overrides,
   };
 }
@@ -109,7 +111,7 @@ describe("linha do tempo das três origens", () => {
     const owner = randomUUID();
     await scans.insert(scanJob({ ownerId: owner, createdAt: ago(30) }));
     await journeys.insert(codeExecution({ ownerId: owner, createdAt: ago(20) }));
-    await api.recordRun({ ownerId: owner, applicationId: randomUUID(), method: "GET", url: "https://api.exemplo.com/pedidos", status: 200, statusText: "OK", durationMs: 90 });
+    await api.recordRun({ ownerId: owner, applicationId: randomUUID(), method: "GET", url: "https://api.exemplo.com/pedidos", status: 200, statusText: "OK", durationMs: 90, environment: undefined });
 
     const page = await readExecutionHistory(sources, owner, { limit: 10 });
     assert.deepEqual(
@@ -124,7 +126,16 @@ describe("linha do tempo das três origens", () => {
     const application = await applications.create({ ownerId: owner, name: "Loja Web", baseUrl: "https://loja.exemplo.com", environments: [] });
     await scans.insert(scanJob({ ownerId: owner, applicationId: application.id, createdAt: ago(30) }));
     await journeys.insert(codeExecution({ ownerId: owner, applicationId: application.id, createdAt: ago(20) }));
-    await api.recordRun({ ownerId: owner, applicationId: application.id, method: "POST", url: "https://api.exemplo.com/pedidos", status: 500, statusText: "Server Error", durationMs: 900 });
+    await api.recordRun({
+      ownerId: owner,
+      applicationId: application.id,
+      method: "POST",
+      url: "https://api.exemplo.com/pedidos",
+      status: 500,
+      statusText: "Server Error",
+      durationMs: 900,
+      environment: undefined,
+    });
 
     const entries = (await readExecutionHistory(sources, owner, { limit: 10 })).entries;
     const byKind = new Map(entries.map((entry) => [entry.kind, entry]));
@@ -161,7 +172,7 @@ describe("linha do tempo das três origens", () => {
     const other = randomUUID();
     await scans.insert(scanJob({ ownerId: other }));
     await journeys.insert(codeExecution({ ownerId: other }));
-    await api.recordRun({ ownerId: other, applicationId: randomUUID(), method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 5 });
+    await api.recordRun({ ownerId: other, applicationId: randomUUID(), method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 5, environment: undefined });
     await scans.insert(scanJob({ ownerId: owner }));
 
     const page = await readExecutionHistory(sources, owner, { limit: 10 });
@@ -205,6 +216,24 @@ describe("linha do tempo das três origens", () => {
     );
   });
 
+  it("filtra pelo ambiente escolhido na barra de contexto, nas três origens", async () => {
+    const { sources, scans, journeys, api } = fixture();
+    const owner = randomUUID();
+    const producao = scanJob({ ownerId: owner, environment: "producao" });
+    await scans.insert(producao);
+    await scans.insert(scanJob({ ownerId: owner, environment: "local" }));
+    await scans.insert(scanJob({ ownerId: owner, environment: undefined }));
+    await journeys.insert(codeExecution({ ownerId: owner, environment: "producao" }));
+    await journeys.insert(codeExecution({ ownerId: owner, environment: "local" }));
+    await api.recordRun({ ownerId: owner, applicationId: randomUUID(), method: "GET", url: "https://api.exemplo.com/x", status: 200, statusText: "OK", durationMs: 10, environment: "producao" });
+    await api.recordRun({ ownerId: owner, applicationId: randomUUID(), method: "GET", url: "https://api.exemplo.com/y", status: 200, statusText: "OK", durationMs: 10, environment: "local" });
+
+    const page = await readExecutionHistory(sources, owner, { environment: "producao", limit: 10 });
+    assert.equal(page.entries.length, 3);
+    assert.ok(page.entries.every((entry) => entry.environment === "producao"));
+    assert.ok(page.entries.some((entry) => entry.id === producao.id));
+  });
+
   it("pagina pelo cursor sem repetir nem pular linha", async () => {
     // O ponto do cursor por data: a paginação tem de continuar correta com as
     // três origens intercaladas, e nenhuma linha pode aparecer duas vezes.
@@ -214,7 +243,16 @@ describe("linha do tempo das três origens", () => {
     for (let index = 0; index < 4; index += 1) {
       await scans.insert(scanJob({ ownerId: owner, createdAt: ago(100 - index * 10) }));
       await journeys.insert(codeExecution({ ownerId: owner, createdAt: ago(95 - index * 10) }));
-      await api.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: `https://api.exemplo.com/${index}`, status: 200, statusText: "OK", durationMs: 10 });
+      await api.recordRun({
+        ownerId: owner,
+        applicationId: application,
+        method: "GET",
+        url: `https://api.exemplo.com/${index}`,
+        status: 200,
+        statusText: "OK",
+        durationMs: 10,
+        environment: undefined,
+      });
     }
 
     const vistos: string[] = [];

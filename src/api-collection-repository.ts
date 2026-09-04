@@ -42,6 +42,8 @@ export interface ApiRun {
   statusText: string | undefined;
   durationMs: number | undefined;
   createdAt: string;
+  /** Slug do ambiente selecionado na barra superior no momento da criação. */
+  environment: string | undefined;
 }
 
 export interface NewApiRun {
@@ -52,6 +54,7 @@ export interface NewApiRun {
   status: number | undefined;
   statusText: string | undefined;
   durationMs: number | undefined;
+  environment: string | undefined;
 }
 
 export class ApiCollectionNameTakenError extends Error {
@@ -188,6 +191,7 @@ interface RunRow {
   status_text: string | null;
   duration_ms: number | null;
   created_at: Date | string;
+  environment: string | null;
 }
 
 function collectionFromRow(row: CollectionRow): ApiCollection {
@@ -213,11 +217,12 @@ function runFromRow(row: RunRow): ApiRun {
     statusText: row.status_text ?? undefined,
     durationMs: row.duration_ms ?? undefined,
     createdAt: new Date(row.created_at).toISOString(),
+    environment: row.environment ?? undefined,
   };
 }
 
 const COLLECTION_COLUMNS = "id, owner_id, application_id, name, requests, created_at, updated_at";
-const RUN_COLUMNS = "id, owner_id, application_id, method, url, status, status_text, duration_ms, created_at";
+const RUN_COLUMNS = "id, owner_id, application_id, method, url, status, status_text, duration_ms, created_at, environment";
 
 /** `23505` é violação de unicidade; aqui só o índice de nome por aplicação dispara. */
 function isUniqueViolation(error: unknown): boolean {
@@ -280,10 +285,10 @@ export class PostgresApiCollectionRepository implements ApiCollectionRepository 
 
   async recordRun(run: NewApiRun): Promise<ApiRun> {
     const rows = await this.database.query<RunRow>(
-      `insert into api_runs (id, owner_id, application_id, method, url, status, status_text, duration_ms)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)
+      `insert into api_runs (id, owner_id, application_id, method, url, status, status_text, duration_ms, environment)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        returning ${RUN_COLUMNS}`,
-      [randomUUID(), run.ownerId, run.applicationId, run.method, run.url, run.status ?? null, run.statusText ?? null, run.durationMs ?? null],
+      [randomUUID(), run.ownerId, run.applicationId, run.method, run.url, run.status ?? null, run.statusText ?? null, run.durationMs ?? null, run.environment ?? null],
     );
     // O histórico é conveniência, não arquivo legal: a poda vai junto com a
     // escrita porque não há processo de manutenção rodando neste produto, e um

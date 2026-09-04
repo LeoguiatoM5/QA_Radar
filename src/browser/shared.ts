@@ -20,6 +20,7 @@ export interface Activity {
   createdAt?: number;
   href?: string;
   scores?: Partial<Record<"http" | "performance" | "accessibility" | "dom" | "javascript", number | undefined>>;
+  environment?: string;
 }
 
 const escapes: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
@@ -50,15 +51,37 @@ const ACTIVITY_LIMIT = 40;
  * certo.
  */
 export function recordActivity(activity: Activity): void {
+  const environment = activity.environment ?? currentEnvironment();
+  const withEnvironment: Activity = { ...activity, ...(environment ? { environment } : {}) };
   try {
     const current: unknown = JSON.parse(localStorage.getItem(ACTIVITY_KEY) ?? "[]");
     const items = Array.isArray(current) ? (current as Activity[]) : [];
-    items.unshift({ ...activity, createdAt: activity.createdAt ?? Date.now() });
+    items.unshift({ ...withEnvironment, createdAt: withEnvironment.createdAt ?? Date.now() });
     localStorage.setItem(ACTIVITY_KEY, JSON.stringify(items.slice(0, ACTIVITY_LIMIT)));
   } catch {
     // Armazenamento indisponível: a cópia do servidor ainda registra.
   }
-  void fetch("/api/dashboard/activity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(activity) }).catch(() => {});
+  void fetch("/api/dashboard/activity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(withEnvironment) }).catch(() => {});
+}
+
+/**
+ * Ambiente escolhido na barra de contexto (`shell.ts`), compartilhado com as
+ * páginas que filtram ou marcam execuções por ele.
+ *
+ * A chave do `localStorage` é a mesma que `shell.ts` já usa para persistir a
+ * escolha — este módulo só lê. `ENVIRONMENT_CHANGE_EVENT` existe porque o
+ * seletor não recarrega a página: quem depende do ambiente escuta o evento em
+ * vez de reler o `localStorage` a cada interação.
+ */
+export const ENVIRONMENT_STORAGE_KEY = "qa-radar-environment";
+export const ENVIRONMENT_CHANGE_EVENT = "qa-radar:environment-change";
+
+export function currentEnvironment(): string | undefined {
+  try {
+    return localStorage.getItem(ENVIRONMENT_STORAGE_KEY) || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Host e caminho, para o título da execução não virar uma URL inteira. */

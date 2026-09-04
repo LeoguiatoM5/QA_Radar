@@ -33,6 +33,8 @@ export interface ExecutionEntry {
   durationMs: number | undefined;
   applicationId: string | undefined;
   applicationName: string | undefined;
+  /** Slug do ambiente selecionado quando a execução foi criada. Ausente = execução de antes deste filtro existir. */
+  environment: string | undefined;
   /** Para onde a linha leva quando clicada. Vazio quando não há para onde ir. */
   href: string;
 }
@@ -110,7 +112,7 @@ function firstSpecTitle(node: unknown): string | undefined {
  */
 export async function readExecutionHistory(sources: ExecutionHistorySources, ownerId: string, filter: ExecutionHistoryFilter): Promise<ExecutionHistoryPage> {
   const limit = Math.min(Math.max(1, filter.limit), MAX_HISTORY_PAGE);
-  const query: HistoryQuery = { applicationId: filter.applicationId, since: filter.since, before: filter.before, limit };
+  const query: HistoryQuery = { applicationId: filter.applicationId, since: filter.since, before: filter.before, environment: filter.environment, limit };
   const wants = (kind: ExecutionKind): boolean => !filter.kinds?.length || filter.kinds.includes(kind);
 
   const [scans, journeys, apiRuns, applications] = await Promise.all([
@@ -140,6 +142,7 @@ export async function readExecutionHistory(sources: ExecutionHistorySources, own
       durationMs: scan.report?.durationMs,
       applicationId: scan.applicationId,
       applicationName: scan.applicationId ? nameOf.get(scan.applicationId) : undefined,
+      environment: scan.environment,
       href: `/scanner?execucao=${encodeURIComponent(scan.id)}`,
     });
   }
@@ -159,6 +162,7 @@ export async function readExecutionHistory(sources: ExecutionHistorySources, own
       durationMs: typeof stats.duration === "number" ? stats.duration : undefined,
       applicationId: journey.applicationId,
       applicationName: journey.applicationId ? nameOf.get(journey.applicationId) : undefined,
+      environment: journey.environment,
       href: `/api/v1/code-executions/${journey.id}/code-evidence.html`,
     });
   }
@@ -175,6 +179,7 @@ export async function readExecutionHistory(sources: ExecutionHistorySources, own
       durationMs: run.durationMs,
       applicationId: run.applicationId,
       applicationName: run.applicationId ? nameOf.get(run.applicationId) : undefined,
+      environment: run.environment,
       // Os Testes de API não têm relatório guardado: só metadado. Mandar para a
       // página é honesto; inventar um link de resultado que abre vazio não é.
       href: "/api-tests",

@@ -1,4 +1,4 @@
-import { esc, recordActivity } from "./shared.js";
+import { currentEnvironment, esc, recordActivity } from "./shared.js";
 
 /**
  * Cliente do Modo Jornada de Playwright.
@@ -261,7 +261,11 @@ codeExecute?.addEventListener("click", () => {
       const response = await fetch("/api/code-execution", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: codeEditor?.value ?? "", ...(journeyApplicationSelect?.value ? { applicationId: journeyApplicationSelect.value } : {}) }),
+        body: JSON.stringify({
+          code: codeEditor?.value ?? "",
+          ...(journeyApplicationSelect?.value ? { applicationId: journeyApplicationSelect.value } : {}),
+          environment: currentEnvironment(),
+        }),
       });
       const data = (await response.json()) as ExecutionResult;
       if (response.status === 401 || response.status === 403) {

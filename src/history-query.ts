@@ -13,6 +13,12 @@
 export interface HistoryQuery {
   /** Só desta aplicação. Ausente = todas, inclusive execuções avulsas. */
   applicationId?: string | undefined;
+  /**
+   * Só deste ambiente (slug do seletor da barra superior: local, homologacao,
+   * producao). Ausente = todos, inclusive execuções sem ambiente marcado —
+   * o que cobre toda execução anterior a este filtro existir.
+   */
+  environment?: string | undefined;
   /** Início do período, inclusivo, em ISO 8601. */
   since?: string | undefined;
   /**
@@ -57,6 +63,10 @@ export function historyClauses(ownerId: string, query: HistoryQuery): { where: s
     values.push(query.applicationId);
     where += ` and application_id = $${values.length}`;
   }
+  if (query.environment) {
+    values.push(query.environment);
+    where += ` and environment = $${values.length}`;
+  }
   if (query.since) {
     values.push(query.since);
     where += ` and created_at >= $${values.length}`;
@@ -74,9 +84,14 @@ export function historyClauses(ownerId: string, query: HistoryQuery): { where: s
 }
 
 /** O mesmo recorte aplicado a uma lista em memória, para o repositório inerte. */
-export function matchesHistory(row: { ownerId?: string | undefined; applicationId?: string | undefined; createdAt: string; id: string }, ownerId: string, query: HistoryQuery): boolean {
+export function matchesHistory(
+  row: { ownerId?: string | undefined; applicationId?: string | undefined; environment?: string | undefined; createdAt: string; id: string },
+  ownerId: string,
+  query: HistoryQuery,
+): boolean {
   if (row.ownerId !== ownerId) return false;
   if (query.applicationId && row.applicationId !== query.applicationId) return false;
+  if (query.environment && row.environment !== query.environment) return false;
   if (query.since && row.createdAt < query.since) return false;
   // `> 0` significa "vem depois do cursor na ordenação", que é o mesmo que o
   // `(created_at, id) < (...)` do SQL: a lista desce da mais recente.

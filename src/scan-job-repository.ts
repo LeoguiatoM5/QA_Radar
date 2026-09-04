@@ -25,6 +25,13 @@ export interface PersistedScanJob {
   ownerId: string | undefined;
   /** Aplicação a que a análise pertence. Nulo = avulsa, ou aplicação apagada. */
   applicationId: string | undefined;
+  /**
+   * Slug do ambiente selecionado na barra superior (local, homologacao,
+   * producao) no momento em que a análise foi criada. Independente de
+   * `options.environment`, que é do sistema de Projeto/Baseline — ver a
+   * migration 0009_environments.
+   */
+  environment: string | undefined;
 }
 
 export interface ScanJobRepository {
@@ -232,6 +239,7 @@ interface ScanJobRow {
   access_token_hash: string;
   owner_id: string | null;
   application_id: string | null;
+  environment: string | null;
 }
 
 function fromRow(row: ScanJobRow): PersistedScanJob {
@@ -249,18 +257,19 @@ function fromRow(row: ScanJobRow): PersistedScanJob {
     accessTokenHash: row.access_token_hash,
     ownerId: row.owner_id ?? undefined,
     applicationId: row.application_id ?? undefined,
+    environment: row.environment ?? undefined,
   };
 }
 
-const COLUMNS = "id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id, application_id";
+const COLUMNS = "id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id, application_id, environment";
 
 export class PostgresScanJobRepository implements ScanJobRepository {
   constructor(private readonly database: Database) {}
 
   async insert(job: PersistedScanJob): Promise<void> {
     await this.database.query(
-      `insert into scan_jobs (id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id, application_id, queued_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, case when $2 = 'queued' then $3::timestamptz else null end)`,
+      `insert into scan_jobs (id, status, created_at, updated_at, expires_at, options, progress, report, error, cancel_requested, access_token_hash, owner_id, application_id, environment, queued_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, case when $2 = 'queued' then $3::timestamptz else null end)`,
       [
         job.id,
         job.status,
@@ -275,6 +284,7 @@ export class PostgresScanJobRepository implements ScanJobRepository {
         job.accessTokenHash,
         job.ownerId ?? null,
         job.applicationId ?? null,
+        job.environment ?? null,
       ],
     );
   }

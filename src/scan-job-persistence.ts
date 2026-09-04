@@ -73,6 +73,7 @@ export function toPersistedScanJob(job: ScanJob, retentionMs: number): Persisted
     accessTokenHash: job.accessTokenHash,
     ownerId: job.ownerId,
     applicationId: job.applicationId,
+    environment: job.environment,
   };
 }
 
@@ -175,5 +176,6 @@ export function toRuntimeScanJob(stored: PersistedScanJob): ScanJob {
     accessTokenHash: stored.accessTokenHash,
     ownerId: stored.ownerId,
     applicationId: stored.applicationId,
+    environment: stored.environment,
   };
 }

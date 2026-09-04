@@ -32,6 +32,8 @@ export interface PersistedCodeExecution {
   ownerId: string | undefined;
   /** Aplicação a que a execução pertence. Nulo = avulsa, ou aplicação apagada. */
   applicationId: string | undefined;
+  /** Slug do ambiente selecionado na barra superior no momento da criação. */
+  environment: string | undefined;
 }
 
 export interface CodeExecutionRepository {
@@ -107,6 +109,7 @@ interface CodeExecutionRow {
   failure_details: string | null;
   owner_id: string | null;
   application_id: string | null;
+  environment: string | null;
 }
 
 function fromRow(row: CodeExecutionRow): PersistedCodeExecution {
@@ -123,18 +126,19 @@ function fromRow(row: CodeExecutionRow): PersistedCodeExecution {
     failureDetails: row.failure_details ?? undefined,
     ownerId: row.owner_id ?? undefined,
     applicationId: row.application_id ?? undefined,
+    environment: row.environment ?? undefined,
   };
 }
 
-const COLUMNS = "id, status, created_at, expires_at, access_token_hash, report, failure_details, owner_id, application_id";
+const COLUMNS = "id, status, created_at, expires_at, access_token_hash, report, failure_details, owner_id, application_id, environment";
 
 export class PostgresCodeExecutionRepository implements CodeExecutionRepository {
   constructor(private readonly database: Database) {}
 
   async insert(execution: PersistedCodeExecution): Promise<void> {
     await this.database.query(
-      `insert into code_executions (id, status, created_at, expires_at, access_token_hash, report, failure_details, owner_id, application_id)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `insert into code_executions (id, status, created_at, expires_at, access_token_hash, report, failure_details, owner_id, application_id, environment)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        on conflict (id) do nothing`,
       [
         execution.id,
@@ -147,6 +151,7 @@ export class PostgresCodeExecutionRepository implements CodeExecutionRepository 
         execution.failureDetails ?? null,
         execution.ownerId ?? null,
         execution.applicationId ?? null,
+        execution.environment ?? null,
       ],
     );
   }

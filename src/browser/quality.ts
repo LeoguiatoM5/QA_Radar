@@ -1,4 +1,4 @@
-import { esc, signInAndReturn } from "./shared.js";
+import { currentEnvironment, ENVIRONMENT_CHANGE_EVENT, esc, signInAndReturn } from "./shared.js";
 
 /**
  * Central de qualidade: o resumo da conta, não a lista de execuções.
@@ -206,6 +206,8 @@ async function load(): Promise<void> {
   try {
     const params = new URLSearchParams();
     if (applicationSelect?.value) params.set("aplicacao", applicationSelect.value);
+    const environment = currentEnvironment();
+    if (environment) params.set("ambiente", environment);
     const from = since();
     if (from) params.set("de", from);
     const response = await fetch(`/api/v1/quality/summary?${params.toString()}`);
@@ -246,6 +248,7 @@ async function loadApplications(): Promise<void> {
 for (const field of [applicationSelect, periodSelect]) {
   field?.addEventListener("change", () => void load());
 }
+window.addEventListener(ENVIRONMENT_CHANGE_EVENT, () => void load());
 
 void (async () => {
   // A página inteira depende de conta: sem sessão não há o que somar, e mandar

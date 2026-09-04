@@ -1,4 +1,4 @@
-import { esc, signInAndReturn } from "./shared.js";
+import { currentEnvironment, ENVIRONMENT_CHANGE_EVENT, esc, signInAndReturn } from "./shared.js";
 
 /**
  * Relatórios: a linha do tempo consultável das três origens.
@@ -142,6 +142,8 @@ async function load(append: boolean): Promise<void> {
     const params = new URLSearchParams({ limite: String(PAGE_SIZE) });
     if (applicationSelect?.value) params.set("aplicacao", applicationSelect.value);
     if (kindSelect?.value) params.set("tipo", kindSelect.value);
+    const environment = currentEnvironment();
+    if (environment) params.set("ambiente", environment);
     const from = since();
     if (from) params.set("de", from);
     if (append && cursor) params.set("cursor", cursor);
@@ -191,6 +193,7 @@ for (const field of [applicationSelect, kindSelect, periodSelect]) {
 }
 searchField?.addEventListener("input", paint);
 moreButton?.addEventListener("click", () => void load(true));
+window.addEventListener(ENVIRONMENT_CHANGE_EVENT, () => void load(false));
 
 void (async () => {
   // A página inteira depende de conta: sem sessão não há histórico a consultar,

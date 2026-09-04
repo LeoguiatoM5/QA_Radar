@@ -7,6 +7,7 @@
  * controle de conta nascia oculto e nunca aparecia justamente na primeira
  * página que se abre.
  */
+import { ENVIRONMENT_CHANGE_EVENT, ENVIRONMENT_STORAGE_KEY } from "./shared.js";
 const appSidebar = document.querySelector<HTMLElement>(".app-sidebar");
 const mobileNavToggle = document.querySelector<HTMLButtonElement>(".mobile-nav-toggle");
 const contextClock = document.querySelector<HTMLTimeElement>("#context-clock");
@@ -22,8 +23,8 @@ updateContextClock();
 if (contextClock) setInterval(updateContextClock, 30_000);
 
 // O ambiente escolhido na barra de contexto vale para todas as páginas: fica no
-// navegador e alimenta o campo "Ambiente" da Inspeção.
-const environmentKey = "qa-radar-environment";
+// navegador e alimenta o campo "Ambiente" da Inspeção, além de filtrar Relatórios,
+// Central de qualidade e Alertas.
 const environmentSelect = document.querySelector<HTMLSelectElement>("#context-environment");
 const environmentLabel = document.querySelector<HTMLElement>("#context-environment-label");
 
@@ -36,10 +37,14 @@ function applyEnvironment(slug: string, persist: boolean): void {
   environmentSelect.closest(".context-item")?.setAttribute("data-environment", option.value);
   if (persist) {
     try {
-      localStorage.setItem(environmentKey, option.value);
+      localStorage.setItem(ENVIRONMENT_STORAGE_KEY, option.value);
     } catch {
       // Armazenamento indisponível: a escolha vale só nesta aba.
     }
+    // O seletor não recarrega a página: quem filtra por ambiente (Relatórios,
+    // Central de qualidade, Alertas) escuta este evento em vez de reler o
+    // localStorage a cada interação.
+    window.dispatchEvent(new CustomEvent(ENVIRONMENT_CHANGE_EVENT, { detail: option.value }));
   }
   const scanEnvironment = document.querySelector<HTMLInputElement>("#environment");
   if (scanEnvironment && !scanEnvironment.disabled) scanEnvironment.value = option.value;
@@ -48,7 +53,7 @@ function applyEnvironment(slug: string, persist: boolean): void {
 if (environmentSelect) {
   let storedEnvironment = "";
   try {
-    storedEnvironment = localStorage.getItem(environmentKey) ?? "";
+    storedEnvironment = localStorage.getItem(ENVIRONMENT_STORAGE_KEY) ?? "";
   } catch {
     // Sem armazenamento, começa pelo primeiro ambiente da lista.
   }

@@ -2,6 +2,7 @@ import { json, jsonError } from "../http-helpers.js";
 import { ApiError, invalidRequest } from "../api-error.js";
 import { MAX_HISTORY_PAGE, readExecutionHistory, type ExecutionKind } from "../execution-history.js";
 import type { HistoryCursor } from "../history-query.js";
+import { parseEnvironment } from "../environments.js";
 import type { RouteHandler } from "./context.js";
 
 const KINDS: readonly ExecutionKind[] = ["scan", "journey", "api"];
@@ -81,6 +82,7 @@ export const tryHandleExecutions: RouteHandler = async (context, request, respon
 
   const cursor = readCursor(url.searchParams.get("cursor"));
   const since = readInstant(url.searchParams.get("de"), "de");
+  const environment = parseEnvironment(url.searchParams.get("ambiente"));
 
   const page = await readExecutionHistory(
     { scanJobs: context.scanJobs, codeExecutions: context.codeExecutions, apiCollections: context.apiCollections, applications: context.applications },
@@ -89,6 +91,7 @@ export const tryHandleExecutions: RouteHandler = async (context, request, respon
       ...(applicationId ? { applicationId } : {}),
       ...(since ? { since } : {}),
       ...(cursor ? { before: cursor } : {}),
+      ...(environment ? { environment } : {}),
       kinds: readKinds(url.searchParams.get("tipo")),
       limit,
     },

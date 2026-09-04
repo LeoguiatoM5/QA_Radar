@@ -1,4 +1,4 @@
-import { activityTarget, esc, recordActivity, signInAndReturn } from "./shared.js";
+import { activityTarget, currentEnvironment, esc, recordActivity, signInAndReturn } from "./shared.js";
 
 /**
  * Cliente HTTP interativo de /api-tests.
@@ -864,7 +864,14 @@ if (
           signal: activeHttpRequest?.signal ?? null,
           // A aplicação escolhida vai junto para o servidor registrar a
           // execução no histórico dela — só método, URL, status e duração.
-          body: JSON.stringify({ method, url, headers, ...(body !== undefined ? { body } : {}), ...(apiApplicationId ? { applicationId: apiApplicationId } : {}) }),
+          body: JSON.stringify({
+            method,
+            url,
+            headers,
+            ...(body !== undefined ? { body } : {}),
+            ...(apiApplicationId ? { applicationId: apiApplicationId } : {}),
+            environment: currentEnvironment(),
+          }),
         });
         const data = (await response.json()) as { status: number; statusText: string; durationMs: number; headers?: Record<string, string>; body?: string; bodyTruncated?: boolean; error?: string };
         if (response.status === 401) {

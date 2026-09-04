@@ -91,7 +91,16 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
 
     it("registra a execução e lista só as da própria conta", async () => {
       const { repository, owner, other, application } = await create();
-      const registrada = await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://api.exemplo.com/x", status: 200, statusText: "OK", durationMs: 120 });
+      const registrada = await repository.recordRun({
+        ownerId: owner,
+        applicationId: application,
+        method: "GET",
+        url: "https://api.exemplo.com/x",
+        status: 200,
+        statusText: "OK",
+        durationMs: 120,
+        environment: undefined,
+      });
       assert.equal(registrada.status, 200);
       assert.deepEqual(
         (await repository.listRunHistory(owner, { applicationId: application, limit: 50 })).map((run) => run.id),
@@ -103,7 +112,16 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
     it("guarda a execução que nem chegou a receber status", async () => {
       // Falha de conexão é justamente o que se quer ver no histórico depois.
       const { repository, owner, application } = await create();
-      await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://api.exemplo.com/x", status: undefined, statusText: undefined, durationMs: undefined });
+      await repository.recordRun({
+        ownerId: owner,
+        applicationId: application,
+        method: "GET",
+        url: "https://api.exemplo.com/x",
+        status: undefined,
+        statusText: undefined,
+        durationMs: undefined,
+        environment: undefined,
+      });
       const [run] = await repository.listRunHistory(owner, { applicationId: application, limit: 50 });
       assert.equal(run?.status, undefined);
       assert.equal(run?.durationMs, undefined);
@@ -112,7 +130,16 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
     it("poda o histórico no teto por aplicação", async () => {
       const { repository, owner, application } = await create();
       for (let index = 0; index < MAX_API_RUNS_PER_APPLICATION + 5; index += 1) {
-        await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: `https://api.exemplo.com/${index}`, status: 200, statusText: "OK", durationMs: 10 });
+        await repository.recordRun({
+          ownerId: owner,
+          applicationId: application,
+          method: "GET",
+          url: `https://api.exemplo.com/${index}`,
+          status: 200,
+          statusText: "OK",
+          durationMs: 10,
+          environment: undefined,
+        });
       }
       const runs = await repository.listRunHistory(owner, { applicationId: application, limit: MAX_API_RUNS_PER_APPLICATION + 50 });
       assert.equal(runs.length, MAX_API_RUNS_PER_APPLICATION);
@@ -120,8 +147,8 @@ function contractFor(name: string, create: () => Promise<Fixture>, hooks: { setU
 
     it("apaga o histórico de execuções da conta sem tocar no das outras", async () => {
       const { repository, owner, other, application } = await create();
-      await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 10 });
-      await repository.recordRun({ ownerId: other, applicationId: application, method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 10 });
+      await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 10, environment: undefined });
+      await repository.recordRun({ ownerId: other, applicationId: application, method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 10, environment: undefined });
       assert.equal(await repository.removeRunsForOwner(owner), 1);
       assert.deepEqual(await repository.listRunHistory(owner, { applicationId: application, limit: 50 }), []);
       assert.equal((await repository.listRunHistory(other, { applicationId: application, limit: 50 })).length, 1);
@@ -197,7 +224,7 @@ if (TEST_DATABASE_URL) {
       const { owner, application } = await semear();
       const repository = new PostgresApiCollectionRepository(database);
       await repository.create({ ownerId: owner, applicationId: application, name: "Smoke", requests: [] });
-      await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 5 });
+      await repository.recordRun({ ownerId: owner, applicationId: application, method: "GET", url: "https://x", status: 200, statusText: "OK", durationMs: 5, environment: undefined });
 
       await database.query("delete from applications where id = $1", [application]);
 

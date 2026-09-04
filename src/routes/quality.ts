@@ -1,6 +1,7 @@
 import { json, jsonError } from "../http-helpers.js";
 import { ApiError, invalidRequest } from "../api-error.js";
 import { computeQualitySummary } from "../quality-summary.js";
+import { parseEnvironment } from "../environments.js";
 import type { RouteHandler } from "./context.js";
 
 /** Lê uma data do filtro, recusando o que não é data em vez de ignorar. */
@@ -31,11 +32,12 @@ export const tryHandleQuality: RouteHandler = async (context, request, response,
   }
 
   const since = readInstant(url.searchParams.get("de"), "de");
+  const environment = parseEnvironment(url.searchParams.get("ambiente"));
 
   const summary = await computeQualitySummary(
     { scanJobs: context.scanJobs, codeExecutions: context.codeExecutions, apiCollections: context.apiCollections, applications: context.applications },
     viewer.id,
-    { ...(applicationId ? { applicationId } : {}), ...(since ? { since } : {}) },
+    { ...(applicationId ? { applicationId } : {}), ...(since ? { since } : {}), ...(environment ? { environment } : {}) },
   );
 
   json(response, 200, summary);

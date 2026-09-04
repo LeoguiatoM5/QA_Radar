@@ -2,6 +2,7 @@ import { json, jsonError } from "../http-helpers.js";
 import { ApiError } from "../api-error.js";
 import { computeAlerts } from "../alerts.js";
 import { resolveAccountSettings } from "../account-settings.js";
+import { parseEnvironment } from "../environments.js";
 import type { RouteHandler } from "./context.js";
 
 /**
@@ -24,10 +25,13 @@ export const tryHandleAlerts: RouteHandler = async (context, request, response, 
   const stored = await context.accountSettings?.get(viewer.id);
   const { alerts: thresholds } = resolveAccountSettings(stored);
 
+  const environment = parseEnvironment(url.searchParams.get("ambiente"));
+
   const summary = await computeAlerts(
     { scanJobs: context.scanJobs, codeExecutions: context.codeExecutions, apiCollections: context.apiCollections, applications: context.applications },
     viewer.id,
     thresholds,
+    environment,
   );
 
   json(response, 200, summary);

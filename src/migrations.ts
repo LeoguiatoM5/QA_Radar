@@ -251,6 +251,25 @@ export const MIGRATIONS: Migration[] = [
        )`,
     ],
   },
+  {
+    id: "0009_environments",
+    statements: [
+      // O seletor de Ambiente na barra superior (Local/Homologação/Produção)
+      // não alimentava nenhuma consulta — mudar o valor mudava o rótulo e
+      // nada mais, em nenhuma das três origens de execução. É uma coluna
+      // nova, e não `options->>'environment'` de scan_jobs (que já existe,
+      // mas pertence ao sistema separado de Projeto/Baseline, controlado por
+      // `allowHistory`): as duas coisas são conceitos diferentes, e uma
+      // reprovaria a outra por engano se dividissem a mesma coluna.
+      `alter table scan_jobs add column if not exists environment text`,
+      `alter table code_executions add column if not exists environment text`,
+      `alter table api_runs add column if not exists environment text`,
+      // Sem índice dedicado: o filtro sempre acompanha `owner_id` (a consulta
+      // nunca é "todo mundo neste ambiente"), e os índices por dono já
+      // existem — Postgres varre por eles e aplica o filtro de ambiente por
+      // cima, barato o bastante para o volume de uma conta.
+    ],
+  },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `create table if not exists schema_migrations (

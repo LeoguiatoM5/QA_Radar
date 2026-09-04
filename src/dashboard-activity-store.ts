@@ -17,6 +17,8 @@ export interface DashboardActivity {
   createdAt: number;
   href: string;
   scores: Partial<Record<"http" | "performance" | "accessibility" | "dom" | "javascript", number>>;
+  /** Slug do ambiente da barra de contexto no momento da execução. Ausente = atividade de antes deste campo existir. */
+  environment?: string;
 }
 
 function sessionHash(sessionId: string): string {

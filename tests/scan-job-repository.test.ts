@@ -52,6 +52,7 @@ function job(overrides: Partial<PersistedScanJob> = {}): PersistedScanJob {
     accessTokenHash: "a".repeat(64),
     ownerId: undefined,
     applicationId: undefined,
+    environment: undefined,
     ...overrides,
   };
 }

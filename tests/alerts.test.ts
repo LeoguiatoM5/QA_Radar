@@ -32,6 +32,7 @@ function entry(overrides: Partial<ExecutionEntry> = {}): ExecutionEntry {
     durationMs: 1000,
     applicationId: undefined,
     applicationName: undefined,
+    environment: undefined,
     href: "/scanner",
     ...overrides,
   };
@@ -52,6 +53,7 @@ function scanJob(overrides: Partial<PersistedScanJob> = {}): PersistedScanJob {
     accessTokenHash: "a".repeat(64),
     ownerId: undefined,
     applicationId: undefined,
+    environment: undefined,
     ...overrides,
   };
 }

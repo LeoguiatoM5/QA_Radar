@@ -1,4 +1,4 @@
-import { esc, signInAndReturn } from "./shared.js";
+import { currentEnvironment, ENVIRONMENT_CHANGE_EVENT, esc, signInAndReturn } from "./shared.js";
 
 /**
  * Alertas: o que pede atenção agora, para a conta inteira.
@@ -131,7 +131,8 @@ async function load(): Promise<void> {
   loading = true;
   clearError();
   try {
-    const response = await fetch("/api/v1/alerts");
+    const environment = currentEnvironment();
+    const response = await fetch(environment ? `/api/v1/alerts?ambiente=${encodeURIComponent(environment)}` : "/api/v1/alerts");
     if (response.status === 401) {
       signInAndReturn();
       return;
@@ -147,6 +148,8 @@ async function load(): Promise<void> {
     loading = false;
   }
 }
+
+window.addEventListener(ENVIRONMENT_CHANGE_EVENT, () => void load());
 
 void (async () => {
   // A página inteira depende de conta: sem sessão não há o que resumir, e

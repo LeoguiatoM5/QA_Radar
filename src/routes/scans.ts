@@ -13,6 +13,7 @@ import { isTerminalJobStatus } from "../job-state.js";
 import { MAX_IDEMPOTENCY_KEY_LENGTH, idempotencyScope, requestFingerprint } from "../idempotency-store.js";
 import type { PersistedScanJob } from "../scan-job-repository.js";
 import { resolveAccountSettings, type ScanDefaults } from "../account-settings.js";
+import { parseEnvironment } from "../environments.js";
 
 /** Teto do histórico devolvido de uma vez. */
 const MAX_HISTORY_ITEMS = 50;
@@ -181,6 +182,10 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
       if (!context.applications) throw new ApiError("feature_disabled", "Aplicações não estão disponíveis neste servidor.");
       if (!(await context.applications.get(owner.id, applicationId))) throw new ApiError("not_found", "Aplicação não encontrada.");
     }
+    // Slug desconhecido vira "sem ambiente", não erro: o seletor da barra
+    // superior manda o que tem selecionado, e uma versão antiga do cliente
+    // (ou um script direto contra a API) não deve travar por causa disso.
+    const environment = parseEnvironment(body.environment);
     const idempotency = idempotencyRequest(request, context.clientAddress(request), body);
     if (idempotency) {
       const existing = await context.idempotencyKeys.get(idempotency.scope);
@@ -264,6 +269,7 @@ export const tryHandleScans: RouteHandler = async (context, request, response, u
         id,
         ownerId: owner?.id,
         applicationId,
+        environment,
         status: "queued",
         createdAt: new Date().toISOString(),
         options,

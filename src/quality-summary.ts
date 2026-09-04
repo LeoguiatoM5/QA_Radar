@@ -139,6 +139,7 @@ export function aggregateQualitySummary(entries: readonly ExecutionEntry[], curr
 export interface QualitySummaryOptions {
   since?: string | undefined;
   applicationId?: string | undefined;
+  environment?: string | undefined;
 }
 
 export async function computeQualitySummary(sources: ExecutionHistorySources, ownerId: string, options: QualitySummaryOptions): Promise<QualitySummary> {
@@ -154,6 +155,7 @@ export async function computeQualitySummary(sources: ExecutionHistorySources, ow
   for (;;) {
     const page = await readExecutionHistory(sources, ownerId, {
       ...(options.applicationId ? { applicationId: options.applicationId } : {}),
+      ...(options.environment ? { environment: options.environment } : {}),
       ...(fetchSince ? { since: fetchSince } : {}),
       ...(cursor ? { before: cursor } : {}),
       limit: MAX_HISTORY_PAGE,

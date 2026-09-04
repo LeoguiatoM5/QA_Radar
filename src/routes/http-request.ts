@@ -4,6 +4,7 @@ import { ApiError, invalidRequest } from "../api-error.js";
 import { MAX_JSON_BODY_BYTES } from "../code-limits.js";
 import { PublicNetworkGuard, type PublicUrlResolver } from "../security.js";
 import type { RouteHandler } from "./context.js";
+import { parseEnvironment } from "../environments.js";
 
 const ALLOWED_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);
 const MAX_REDIRECTS = 5;
@@ -121,6 +122,7 @@ export const tryHandleHttpRequest: RouteHandler = async (context, request, respo
     // ficam fora de propósito: é neles que moram token, dado pessoal e payload
     // de cliente, e guardar isso seria assumir a guarda de dado de terceiro.
     const applicationId = textField(requestBody, "applicationId");
+    const environment = parseEnvironment(requestBody.environment);
     if (applicationId && context.apiCollections) {
       const owner = await context.currentUser(request);
       // Aplicação conferida contra o dono, como na Inspeção e na Jornada. Aqui
@@ -136,6 +138,7 @@ export const tryHandleHttpRequest: RouteHandler = async (context, request, respo
             status: result.status,
             statusText: result.statusText,
             durationMs: result.durationMs,
+            environment,
           })
           .catch((error: unknown) => {
             console.error(

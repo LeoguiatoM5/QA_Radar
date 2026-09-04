@@ -10,6 +10,7 @@ import { CODE_STEP_FIXTURES_SOURCE } from "../code-step-fixtures.js";
 import { codeArtifactPrefix, type CodeExecutionJob } from "../code-execution-job-store.js";
 import type { PersistedCodeExecution } from "../code-execution-repository.js";
 import type { RouteHandler } from "./context.js";
+import { parseEnvironment } from "../environments.js";
 
 function explainCodeFailure(details: string | undefined): string | undefined {
   if (!details) return undefined;
@@ -156,6 +157,7 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
       if (!context.applications) throw new ApiError("feature_disabled", "Aplicações não estão disponíveis neste servidor.");
       if (!(await context.applications.get(owner.id, applicationId))) throw new ApiError("not_found", "Aplicação não encontrada.");
     }
+    const environment = parseEnvironment(body.environment);
     const id = randomUUID();
     const outputDir = join(config.resultsDir, `code-${id}`);
     const accessToken = randomBytes(32).toString("base64url");
@@ -231,6 +233,7 @@ export const tryHandleCodeExecution: RouteHandler = async (context, request, res
           failureDetails,
           ownerId: owner?.id,
           applicationId,
+          environment,
         })
         .catch((error: unknown) => {
           console.error(

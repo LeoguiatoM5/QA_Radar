@@ -71,13 +71,13 @@ export function evaluateRegression(summary: QualitySummary, thresholds: AlertThr
 }
 
 /** Pagina a linha do tempo da janela e separa as falhas, com o mesmo teto de segurança da Central de qualidade. */
-async function collectFailures(sources: ExecutionHistorySources, ownerId: string, since: string): Promise<{ failures: ExecutionEntry[]; truncated: boolean }> {
+async function collectFailures(sources: ExecutionHistorySources, ownerId: string, since: string, environment: string | undefined): Promise<{ failures: ExecutionEntry[]; truncated: boolean }> {
   const failures: ExecutionEntry[] = [];
   let cursor: HistoryCursor | undefined;
   let scanned = 0;
   let truncated = false;
   for (;;) {
-    const page = await readExecutionHistory(sources, ownerId, { since, before: cursor, limit: MAX_HISTORY_PAGE });
+    const page = await readExecutionHistory(sources, ownerId, { since, before: cursor, environment, limit: MAX_HISTORY_PAGE });
     for (const entry of page.entries) if (entry.outcome === "failed") failures.push(entry);
     scanned += page.entries.length;
     if (!page.nextCursor || failures.length >= MAX_ALERT_FAILURES) break;
@@ -90,9 +90,14 @@ async function collectFailures(sources: ExecutionHistorySources, ownerId: string
   return { failures: failures.slice(0, MAX_ALERT_FAILURES), truncated };
 }
 
-export async function computeAlerts(sources: ExecutionHistorySources, ownerId: string, thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS): Promise<AlertsSummary> {
+export async function computeAlerts(
+  sources: ExecutionHistorySources,
+  ownerId: string,
+  thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS,
+  environment: string | undefined = undefined,
+): Promise<AlertsSummary> {
   const since = new Date(Date.now() - thresholds.windowDays * 24 * 60 * 60 * 1000).toISOString();
-  const [quality, { failures, truncated }] = await Promise.all([computeQualitySummary(sources, ownerId, { since }), collectFailures(sources, ownerId, since)]);
+  const [quality, { failures, truncated }] = await Promise.all([computeQualitySummary(sources, ownerId, { since, environment }), collectFailures(sources, ownerId, since, environment)]);
   return {
     failures,
     regression: evaluateRegression(quality, thresholds),

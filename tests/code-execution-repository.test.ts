@@ -35,6 +35,7 @@ function execution(overrides: Partial<PersistedCodeExecution> = {}): PersistedCo
     failureDetails: undefined,
     ownerId: undefined,
     applicationId: undefined,
+    environment: undefined,
     ...overrides,
   };
 }
