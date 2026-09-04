@@ -696,6 +696,8 @@ const ALERTS_STYLES = `
 .alert-regression{border-color:#f0c869;background:#241c0c}
 .alert-regression strong{display:block;color:#f0c869;font-size:1rem;margin-bottom:4px}
 .alert-regression p{margin:0;color:var(--muted)}
+.alert-regression.ok{border-color:var(--line);background:#07101d}
+.alert-regression.ok strong{color:#e7eef8}
 `;
 
 /**

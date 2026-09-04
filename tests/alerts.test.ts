@@ -163,6 +163,18 @@ describe("computeAlerts", () => {
     assert.deepEqual(summary.failures, []);
     assert.equal(summary.regression, undefined);
   });
+
+  // BUG-13 do relatório de 04/09/2026: sem regressão, a tela simplesmente
+  // omitia a seção, sem dizer que nenhum limiar foi atingido. Para explicar
+  // isso, o limiar configurado precisa vir junto — não só o resultado.
+  it("devolve o limiar configurado junto do resultado, para a tela explicar por que não há alerta", async () => {
+    const { sources, scans } = fixture();
+    const owner = randomUUID();
+    await scans.insert(scanJob({ ownerId: owner, createdAt: ago(0) }));
+    const summary = await computeAlerts(sources, owner, { windowDays: 7, thresholdPoints: 20, minSample: 3 });
+    assert.equal(summary.thresholdPoints, 20);
+    assert.equal(summary.minSample, 3);
+  });
 });
 
 describe("GET /api/v1/alerts", () => {

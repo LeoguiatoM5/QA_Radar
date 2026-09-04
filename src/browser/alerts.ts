@@ -33,6 +33,8 @@ interface AlertsSummary {
   regression?: RegressionAlert;
   windowDays: number;
   truncated: boolean;
+  thresholdPoints: number;
+  minSample: number;
 }
 
 const KIND_LABELS: Record<ExecutionKind, string> = { scan: "Inspeção", journey: "Jornada", api: "Teste de API" };
@@ -88,11 +90,18 @@ function entryHtml(entry: ExecutionEntry): string {
 
 function paintRegression(summary: AlertsSummary): void {
   if (!regressionPanel) return;
+  regressionPanel.hidden = false;
+  // "Sem alerta" e "seção vazia sem explicação" não são a mesma coisa — a
+  // tela dizia a segunda quando queria dizer a primeira (BUG-13). O painel
+  // agora sempre aparece, com o limiar configurado quando não há queda.
+  regressionPanel.classList.toggle("ok", !summary.regression);
   if (!summary.regression) {
-    regressionPanel.hidden = true;
+    if (regressionTitle) regressionTitle.textContent = "Nenhuma queda na taxa de sucesso";
+    if (regressionDetail) {
+      regressionDetail.textContent = `Nenhuma queda de ${summary.thresholdPoints}pp ou mais nos últimos ${summary.windowDays} dias, com pelo menos ${summary.minSample} execuções decididas no período anterior para comparar. Ajustável em Configurações › Alertas.`;
+    }
     return;
   }
-  regressionPanel.hidden = false;
   if (regressionTitle) regressionTitle.textContent = `A taxa de sucesso caiu ${summary.regression.droppedPoints}pp`;
   if (regressionDetail) {
     regressionDetail.textContent = `De ${summary.regression.previousPassRate}% para ${summary.regression.currentPassRate}%, comparado aos ${summary.windowDays} dias anteriores.`;

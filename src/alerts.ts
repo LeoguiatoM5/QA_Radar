@@ -23,6 +23,14 @@ export interface AlertsSummary {
   regression: RegressionAlert | undefined;
   windowDays: number;
   truncated: boolean;
+  /**
+   * Os limiares que decidiram `regression` acima. A tela precisa deles para
+   * explicar por que a seção está vazia — "nenhum alerta" e "nenhum limiar
+   * configurado foi atingido" são coisas diferentes, e omitir a seção sem
+   * dizer qual das duas é o caso foi o próprio BUG-13.
+   */
+  thresholdPoints: number;
+  minSample: number;
 }
 
 /** Janela fixa para os dois gatilhos: falhas recentes e a comparação de taxa de sucesso. */
@@ -85,5 +93,12 @@ async function collectFailures(sources: ExecutionHistorySources, ownerId: string
 export async function computeAlerts(sources: ExecutionHistorySources, ownerId: string, thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS): Promise<AlertsSummary> {
   const since = new Date(Date.now() - thresholds.windowDays * 24 * 60 * 60 * 1000).toISOString();
   const [quality, { failures, truncated }] = await Promise.all([computeQualitySummary(sources, ownerId, { since }), collectFailures(sources, ownerId, since)]);
-  return { failures, regression: evaluateRegression(quality, thresholds), windowDays: thresholds.windowDays, truncated: truncated || quality.truncated };
+  return {
+    failures,
+    regression: evaluateRegression(quality, thresholds),
+    windowDays: thresholds.windowDays,
+    truncated: truncated || quality.truncated,
+    thresholdPoints: thresholds.thresholdPoints,
+    minSample: thresholds.minSample,
+  };
 }
