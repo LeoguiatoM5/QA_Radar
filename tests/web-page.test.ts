@@ -3,6 +3,35 @@ import { describe, it } from "node:test";
 import { renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
 import { createAlertsPage, createApiTestsPage, createApplicationsPage, createAuthPage, createDocsPage, createHomePage, createJourneyPage, createSettingsPage, createWebPage } from "../src/web-page.js";
 
+/**
+ * Contraste WCAG (fórmula em https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio).
+ *
+ * Existe aqui, e não só numa checagem manual, porque o axe-core não avalia
+ * `color-contrast` de forma confiável sobre fundo em gradiente (marca
+ * "incomplete", não "violation") — foi assim que o BUG-18 do relatório de
+ * 04/09/2026 passou pela auditoria automática da própria Inspeção. Sem essa
+ * conta aqui, nada neste repositório barra uma regressão de contraste no
+ * `.execution-card`.
+ */
+function relativeLuminance(hex: string): number {
+  const channel = (value: number): number => {
+    const srgb = value / 255;
+    return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+  };
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrastRatio(hexA: string, hexB: string): number {
+  const a = relativeLuminance(hexA);
+  const b = relativeLuminance(hexB);
+  const lighter = Math.max(a, b);
+  const darker = Math.min(a, b);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 describe("entrada e cadastro", () => {
   it("compõe os quatro formulários de conta numa página só", () => {
     const html = createAuthPage();
@@ -86,6 +115,17 @@ describe("dashboard components", () => {
     assert.match(html, /<h2 class="section-kicker signal-kicker">/);
     assert.equal((html.match(/<h1[ >]/g) ?? []).length, 1);
     assert.equal((html.match(/<h2[ >]/g) ?? []).length, 4);
+
+    // BUG-18: ".execution-action small" (o "Sem execuções recentes" /
+    // "Última execução há X min" de cada card) precisa passar em WCAG AA
+    // (4,5:1) contra o extremo mais escuro do gradiente de fundo do card —
+    // o pior caso, já que o texto pode acabar sobre qualquer ponto dele.
+    const textColor = html.match(/\.execution-action small\{[^}]*color:(#[0-9a-f]{6})/)?.[1];
+    const [, bgStopA, bgStopB] = html.match(/\.execution-card\{[^}]*background:linear-gradient\([^,]+,(#[0-9a-f]{6}),(#[0-9a-f]{6})\)/) ?? [];
+    assert.ok(textColor && bgStopA && bgStopB, "não encontrou as cores do card na folha de estilo");
+    const worstCaseBg = contrastRatio(textColor, bgStopA) < contrastRatio(textColor, bgStopB) ? bgStopA : bgStopB;
+    assert.ok(contrastRatio(textColor, worstCaseBg) >= 4.5, `contraste de ${textColor} sobre ${worstCaseBg} é ${contrastRatio(textColor, worstCaseBg).toFixed(2)}:1, abaixo do mínimo AA (4.5:1)`);
+
     assert.match(html, /Mapa de qualidade/);
     assert.match(html, /Executar inspeção/);
     assert.match(html, /id="dashboard-last-scan"/);
