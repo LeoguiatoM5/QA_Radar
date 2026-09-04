@@ -451,6 +451,16 @@ form?.addEventListener("submit", (event) => {
         status.className = "status fail";
         status.textContent = message.includes("cancelada") ? "CANCELADA" : "FALHA NA EXECUÇÃO";
       }
+      // `running()` já deixou o painel em "Analisando…"/"Preparando análise…";
+      // sem isto o selo de falha convive com três avisos de "está rodando" ao
+      // mesmo tempo, e o usuário fica esperando algo que nunca vai terminar.
+      text("#result-title", "Análise não concluída");
+      text("#comparison", "");
+      for (const id of ["errors", "warnings", "http", "duration", "ttfb", "lcp", "cls", "pages"]) text(`#${id}`, "—");
+      const issues = document.querySelector<HTMLElement>("#issues");
+      if (issues) issues.innerHTML = "";
+      const progress = document.querySelector<HTMLElement>("#progress");
+      if (progress) progress.hidden = true;
     } finally {
       currentJobId = undefined;
       if (cancelButton) {

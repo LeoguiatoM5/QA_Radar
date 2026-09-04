@@ -321,3 +321,65 @@ describe("web scan integration", () => {
     }
   });
 });
+
+describe("estado da tela depois de um erro", () => {
+  // BUG-07 do relatório de 04/09/2026: uma URL bloqueada mostrava o alerta de
+  // erro certo, mas o painel de resultado ficava preso em "Analisando
+  // aplicação" / "Preparando análise…" / "O navegador está carregando…" ao
+  // lado do selo "FALHA NA EXECUÇÃO" — três avisos de "está rodando"
+  // convivendo com um selo de "falhou".
+  it("Inspeção: uma URL bloqueada não deixa o painel preso em 'analisando' ao lado do selo de falha", async () => {
+    const app = createQaRadarServer({ concurrency: 1, allowPrivateTargets: false });
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(`${appUrl}/scanner`);
+      await page.locator("#url").fill("http://localhost:3000");
+      await page.locator("#submit").click();
+      await page.locator("#status.fail").waitFor({ timeout: 20_000 });
+      assert.equal(await page.locator("#status").textContent(), "FALHA NA EXECUÇÃO");
+      assert.notEqual(await page.locator("#result-title").textContent(), "Analisando aplicação");
+      assert.equal(await page.locator("#progress").isHidden(), true);
+      assert.doesNotMatch((await page.locator("#issues").textContent()) ?? "", /carregando e observando/);
+    } finally {
+      await browser?.close();
+      await close(app);
+    }
+  });
+
+  // BUG-08: depois de uma resposta 200 bem-sucedida, uma requisição seguinte
+  // que falha (aqui, conexão recusada) mostrava a faixa de erro com a
+  // resposta "200 OK" anterior ainda visível — como se fossem a mesma coisa.
+  it("Testes de API: a resposta anterior não fica visível depois de a requisição seguinte falhar", async () => {
+    const target = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true }));
+    });
+    const app = createQaRadarServer({ concurrency: 1, allowPrivateTargets: true });
+    const targetUrl = await listen(target);
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(`${appUrl}/api-tests`);
+      await page.locator("#http-url").fill(targetUrl);
+      await page.locator("#http-send").click();
+      await page.locator("#http-response-status").waitFor({ state: "visible", timeout: 20_000 });
+      assert.match((await page.locator("#http-response-status").textContent()) ?? "", /200/);
+
+      // Porta sem nada escutando: conexão recusada, sem depender de rede real
+      // nem de bloqueio de SSRF (aqui desligado de propósito).
+      await page.locator("#http-url").fill("http://127.0.0.1:1/");
+      await page.locator("#http-send").click();
+      await page.locator("#http-error").waitFor({ state: "visible", timeout: 20_000 });
+      assert.equal(await page.locator("#http-response").isHidden(), true);
+    } finally {
+      await browser?.close();
+      await close(app);
+      await close(target);
+    }
+  });
+});

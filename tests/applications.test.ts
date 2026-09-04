@@ -437,12 +437,15 @@ describe("histórico da conta", () => {
       // de lançamento do navegador) em vez de "completed", e essa asserção
       // precisa valer nos dois casos — o que está em jogo aqui é a
       // sobrevivência do registro, não o resultado da análise em si.
+      // Prazo generoso, de propósito: a suíte inteira roda muitos Chromiums
+      // concorrentes, e sob essa carga um scan que termina em ~2s isolado pode
+      // levar bem mais que isso disputando recurso com o resto dos testes.
       let finished: { status: string; error?: string } | undefined;
-      for (let attempt = 0; attempt < 200 && !finished; attempt += 1) {
+      for (let attempt = 0; attempt < 300 && !finished; attempt += 1) {
         const response = await fetch(`${baseUrl}/api/v1/scans/${id}`, { headers: { cookie } });
         const job = (await response.json()) as { status: string; error?: string };
         if (job.status === "completed" || job.status === "failed") finished = job;
-        else await new Promise((resolve) => setTimeout(resolve, 50));
+        else await new Promise((resolve) => setTimeout(resolve, 200));
       }
       if (!finished) throw new Error("A análise não terminou a tempo.");
 

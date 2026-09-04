@@ -845,6 +845,13 @@ if (
         // Body que não é JSON segue sem content-type declarado.
       }
     }
+    // A resposta anterior some assim que o novo envio começa de verdade — não
+    // no catch, só no que falhar. Sem isto, um erro (rede bloqueada, por
+    // exemplo) deixava a tela mostrando "200 OK" da requisição de antes ao
+    // lado da faixa de erro, como se as duas fossem a mesma resposta.
+    httpResponse.hidden = true;
+    httpResponseEmpty.hidden = false;
+    httpCopyResponse.hidden = true;
     activeHttpRequest = new AbortController();
     httpSend.classList.add("cancel-active");
     httpSend.innerHTML = '<i class="loader"></i>Cancelar';
