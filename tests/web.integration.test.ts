@@ -383,6 +383,32 @@ describe("estado da tela depois de um erro", () => {
       await close(target);
     }
   });
+
+  // BUG-30 do relatório de 04/09/2026: uma requisição bloqueada por política
+  // de rede privada (SSRF) virava "Falha de conexão" no histórico — rótulo de
+  // problema de rede para um bloqueio deliberado, que manda quem lê depurar a
+  // rede à toa em vez de saber que o bloqueio era o comportamento esperado.
+  it("Testes de API: uma requisição bloqueada mostra o motivo real, não 'Falha de conexão'", async () => {
+    const app = createQaRadarServer({ concurrency: 1, allowPrivateTargets: false });
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(`${appUrl}/api-tests`);
+      await page.locator("#http-url").fill("http://localhost:3000/");
+      await page.locator("#http-send").click();
+      await page.locator("#http-error").waitFor({ state: "visible", timeout: 20_000 });
+
+      const historyText = (await page.locator("#http-history-list").textContent()) ?? "";
+      assert.match(historyText, /locais ou privados não são permitidos/);
+      assert.doesNotMatch(historyText, /Falha de conexão/);
+      assert.doesNotMatch(historyText, />Erro</);
+    } finally {
+      await browser?.close();
+      await close(app);
+    }
+  });
 });
 
 describe("avatar da conta", () => {

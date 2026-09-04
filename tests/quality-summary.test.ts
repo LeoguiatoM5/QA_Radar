@@ -77,11 +77,18 @@ describe("aggregateQualitySummary", () => {
   });
 
   it("agrupa por aplicação, com um balde 'sem aplicação' e ordenado pela maior contagem", () => {
+    // app-2 e o balde "sem aplicação" empatam em contagem (1 cada); o desempate
+    // é por `lastRunAt` mais recente. `entry()` sem `createdAt` usa "agora" no
+    // instante da chamada — numa máquina rápida, as duas chamadas synchronous
+    // podiam cair no mesmo milissegundo (empate real, teste passava por
+    // acidente) ou a última (o balde) sair claramente depois (o teste falhava
+    // vez ou outra, dependendo da velocidade da máquina). `createdAt` explícito
+    // tira a ambiguidade: sem ele o resultado deste teste dependia do relógio.
     const entries = [
       entry({ applicationId: "app-1", applicationName: "Loja Web" }),
       entry({ applicationId: "app-1", applicationName: "Loja Web" }),
-      entry({ applicationId: "app-2", applicationName: "Portal Admin" }),
-      entry({ applicationId: undefined, applicationName: undefined }),
+      entry({ applicationId: "app-2", applicationName: "Portal Admin", createdAt: ago(0) }),
+      entry({ applicationId: undefined, applicationName: undefined, createdAt: ago(MINUTE) }),
     ];
     const [first, second, third] = aggregateQualitySummary(entries, undefined, undefined).byApplication;
     assert.equal(first?.applicationId, "app-1");

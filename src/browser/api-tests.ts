@@ -556,7 +556,7 @@ if (
         return (
           `<div class="http-history-item"><span class="http-method-badge">${esc(item.method)}</span>` +
           `<button type="button" class="http-history-load" data-index="${index}"><strong>${esc(item.displayUrl ?? item.url)}</strong><span>${esc(date)}</span></button>` +
-          `<div class="http-history-result"><strong class="${failed ? "error" : ""}">${esc(item.status ? `${item.status} ${item.statusText ?? ""}` : "Erro")}</strong><small>${esc(item.durationMs ?? 0)} ms</small></div></div>`
+          `<div class="http-history-result"><strong class="${failed ? "error" : ""}">${esc(item.status ? `${item.status} ${item.statusText ?? ""}` : item.statusText || "Erro")}</strong><small>${esc(item.durationMs ?? 0)} ms</small></div></div>`
         );
       })
       .join("");
@@ -584,7 +584,7 @@ if (
       id: `api-${createdAt}`,
       type: "api",
       title: `${request.method} ${activityTarget(result.displayUrl || request.url)}`,
-      detail: result.status ? `${result.status} ${result.statusText || ""}` : "Falha de conexão",
+      detail: result.status ? `${result.status} ${result.statusText || ""}` : result.statusText || "Falha de conexão",
       status: failed ? "error" : "success",
       errors: failed ? 1 : 0,
       warnings: 0,
@@ -898,8 +898,13 @@ if (
         if (error instanceof Error && error.name === "AbortError") {
           showHttpNotice("Envio cancelado.");
         } else {
-          showHttpError(error instanceof Error ? error.message : "Não foi possível enviar a requisição.");
-          if (!historyRecorded) recordHistory(request, { displayUrl, status: 0, statusText: "Erro", durationMs: 0 });
+          const message = error instanceof Error ? error.message : "Não foi possível enviar a requisição.";
+          showHttpError(message);
+          // BUG-30 do relatório de 04/09/2026: um bloqueio deliberado (SSRF,
+          // endereço privado) virava "Falha de conexão" — rótulo de rede que
+          // manda quem lê depurar a rede à toa. O motivo real do erro já
+          // existe aqui; só faltava chegar ao histórico.
+          if (!historyRecorded) recordHistory(request, { displayUrl, status: 0, statusText: message, durationMs: 0 });
         }
       } finally {
         activeHttpRequest = undefined;

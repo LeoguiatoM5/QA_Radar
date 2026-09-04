@@ -86,7 +86,7 @@ function loadDashboardActivity(): Activity[] {
         id: `legacy-api-${index}`,
         type: "api",
         title: `${item.method ?? "GET"} ${target}`,
-        detail: item.status ? `${item.status} ${item.statusText ?? ""}` : "Falha de conexão",
+        detail: item.status ? `${item.status} ${item.statusText ?? ""}` : (item.statusText ?? "Falha de conexão"),
         status: failed ? "error" : "success",
         errors: failed ? 1 : 0,
         warnings: 0,

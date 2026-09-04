@@ -166,7 +166,7 @@ function apiRunLine(run: PersistedApiRun): string {
   const status = run.status ?? 0;
   const ok = status > 0 && status < 400;
   const quando = run.createdAt ? new Date(run.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
-  const resultado = status ? `${status} ${run.statusText ?? ""}`.trim() : "Falha de conexão";
+  const resultado = status ? `${status} ${run.statusText ?? ""}`.trim() : (run.statusText ?? "Falha de conexão");
   const completo = `Teste de API · ${quando} · ${run.method ?? ""} ${run.url ?? ""} · ${resultado}`;
   return (
     `<div class="application-run"><i class="${ok ? "pass" : ""}"></i>` +
