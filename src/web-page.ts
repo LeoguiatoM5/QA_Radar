@@ -667,6 +667,12 @@ const QUALITY_STYLES = `
 .quality-bar i{display:block;background:#35d495}
 .quality-bar u{display:block;background:#f0c869}
 .quality-bar-empty{background:#16283a}
+.quality-trend-legend{display:flex;gap:16px;margin:10px 0 0;padding:0;list-style:none;color:var(--muted);font-size:.72rem}
+.quality-trend-legend li{display:flex;align-items:center;gap:6px}
+.legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+.legend-dot.legend-pass{background:#35d495}
+.legend-dot.legend-fail{background:#ff625c}
+.legend-dot.legend-running{background:#f0c869}
 .quality-kind-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .quality-kind-card{background:#07101d;border:1px solid var(--line);border-radius:12px;padding:14px 16px}
 .quality-kind-card small{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}

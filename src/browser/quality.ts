@@ -50,6 +50,11 @@ const truncatedHint = document.querySelector<HTMLElement>("#quality-truncated-hi
 const summaryNote = document.querySelector<HTMLElement>("#quality-summary-note");
 const trend = document.querySelector<HTMLElement>("#quality-trend");
 const trendNote = document.querySelector<HTMLElement>("#quality-trend-note");
+const trendLegend = document.querySelector<HTMLElement>("#quality-trend-legend");
+/** Abaixo disto o gráfico é quase todo traço vazio — a barra isolada que o
+ * relatório de 04/09/2026 (BUG-21) descreveu não comunicava tendência
+ * nenhuma. Um aviso explícito diz mais do que 96% de área em branco. */
+const MIN_TREND_EXECUTIONS = 3;
 const kindGrid = document.querySelector<HTMLElement>("#quality-kind-grid");
 const appTable = document.querySelector<HTMLElement>("#quality-app-table");
 
@@ -120,8 +125,17 @@ function paintTrend(summary: QualitySummary): void {
   if (!summary.daily.length) {
     trend.innerHTML = '<p class="hint">Escolha um período para ver a tendência diária.</p>';
     if (trendNote) trendNote.textContent = "";
+    if (trendLegend) trendLegend.hidden = true;
     return;
   }
+  if (summary.current.total < MIN_TREND_EXECUTIONS) {
+    const faltam = MIN_TREND_EXECUTIONS - summary.current.total;
+    trend.innerHTML = `<p class="hint">Dados insuficientes para uma tendência confiável: ${summary.current.total} execução(ões) no período. Rode mais ${faltam} para começar a ver o gráfico.</p>`;
+    if (trendNote) trendNote.textContent = "";
+    if (trendLegend) trendLegend.hidden = true;
+    return;
+  }
+  if (trendLegend) trendLegend.hidden = false;
   const max = Math.max(1, ...summary.daily.map((day) => day.total));
   const scale = 100; // altura máxima da barra, em pixels — bate com a altura do container no CSS
   trend.innerHTML = summary.daily
@@ -241,6 +255,7 @@ void (async () => {
     if (!session.loginAvailable) {
       offline("A Central de qualidade depende de conta, e este servidor está sem banco de dados.");
       if (trend) trend.innerHTML = "";
+      if (trendLegend) trendLegend.hidden = true;
       if (kindGrid) kindGrid.innerHTML = "";
       if (appTable) appTable.innerHTML = "";
       return;

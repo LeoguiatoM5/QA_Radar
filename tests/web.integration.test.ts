@@ -9,6 +9,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import { createQaRadarServer } from "../src/server.js";
 import { InMemoryScanJobRepository } from "../src/scan-job-repository.js";
 import { createScanJobPersistence } from "../src/scan-job-persistence.js";
+import { InMemoryIdentityStore } from "../src/identity.js";
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -380,6 +381,50 @@ describe("estado da tela depois de um erro", () => {
       await browser?.close();
       await close(app);
       await close(target);
+    }
+  });
+});
+
+describe("Central de qualidade · tendência", () => {
+  // BUG-21 do relatório de 04/09/2026: com poucos dados, o gráfico virava uma
+  // única barra colada na borda com ~96% de área vazia — sem comunicar
+  // tendência nenhuma, e sem legenda para as cores. Agora um aviso explícito
+  // substitui o gráfico até haver dado suficiente, e a legenda só aparece
+  // quando o gráfico aparece.
+  it("mostra aviso de dados insuficientes em vez de um gráfico quase vazio, e a legenda só some com ele", async () => {
+    const app = createQaRadarServer({
+      concurrency: 1,
+      allowPrivateTargets: true,
+      sessionSecret: "segredo-de-sessao-com-32-bytes-x",
+      identity: new InMemoryIdentityStore(),
+      scanJobs: createScanJobPersistence({ repository: new InMemoryScanJobRepository(), retentionMs: 3_600_000, onError: () => {} }),
+    });
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.request.post(`${appUrl}/api/v1/auth/register`, {
+        headers: { "content-type": "application/json" },
+        data: { email: "tendencia@exemplo.com", password: "uma-senha-bem-comprida" },
+      });
+
+      const runScan = () => page.request.post(`${appUrl}/api/v1/scans`, { headers: { "content-type": "application/json" }, data: { url: appUrl, screenshot: "never" } });
+      await runScan();
+
+      await page.goto(`${appUrl}/central-de-qualidade`);
+      await page.getByText("Dados insuficientes", { exact: false }).waitFor({ timeout: 10_000 });
+      assert.equal(await page.locator("#quality-trend-legend").isHidden(), true);
+
+      await runScan();
+      await runScan();
+      await page.reload();
+      await page.locator(".quality-bar").first().waitFor({ timeout: 10_000 });
+      assert.doesNotMatch((await page.locator("#quality-trend").textContent()) ?? "", /Dados insuficientes/);
+      assert.equal(await page.locator("#quality-trend-legend").isHidden(), false);
+    } finally {
+      await browser?.close();
+      await close(app);
     }
   });
 });

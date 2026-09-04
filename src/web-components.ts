@@ -514,6 +514,7 @@ export function renderQualityPage(): string {
     <section class="panel quality-trend-panel" aria-label="Tendência diária">
       <div class="quality-list-head"><h2>Tendência</h2><span class="reports-count" id="quality-trend-note"></span></div>
       <div class="quality-trend" id="quality-trend"><p class="hint">Carregando...</p></div>
+      <ul class="quality-trend-legend" id="quality-trend-legend" hidden><li><i class="legend-dot legend-pass"></i>Aprovado</li><li><i class="legend-dot legend-fail"></i>Reprovado</li><li><i class="legend-dot legend-running"></i>Em execução</li></ul>
     </section>
 
     <section class="panel quality-kind-panel" aria-label="Por tipo">
