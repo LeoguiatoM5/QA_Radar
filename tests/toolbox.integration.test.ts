@@ -94,7 +94,7 @@ describe("toolbox integration · rotas", () => {
     assert.match(csp, /script-src 'self';/);
     assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/);
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
-    assert.match(html, /Daily tools for Software Quality/);
+    assert.match(html, /Ferramentas do dia a dia para qualidade de software/);
   });
 
   it("serve a página de cada ferramenta disponível", async () => {
@@ -542,6 +542,16 @@ describe("toolbox integration · navegador", () => {
     assert.match(rows, /FAILED/);
   });
 
+  // BUG-32 do relatório de 04/09/2026: as 4 linhas de parâmetro usavam o
+  // mesmo placeholder, sugerindo que se repetisse o mesmo parâmetro.
+  it("mostra um placeholder diferente em cada linha de parâmetro", async () => {
+    await page.goto(`${appUrl}/toolbox/pairwise`, { waitUntil: "networkidle" });
+    const namePlaceholders = await page.locator(".pairwise-name").evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).placeholder));
+    const valuePlaceholders = await page.locator(".pairwise-values").evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).placeholder));
+    assert.equal(new Set(namePlaceholders).size, namePlaceholders.length, `placeholders de nome repetidos: ${namePlaceholders.join(" | ")}`);
+    assert.equal(new Set(valuePlaceholders).size, valuePlaceholders.length, `placeholders de valores repetidos: ${valuePlaceholders.join(" | ")}`);
+  });
+
   it("gera as combinações de pares e mostra a redução", async () => {
     await page.goto(`${appUrl}/toolbox/pairwise`, { waitUntil: "networkidle" });
     await page.locator(".pairwise-name").nth(0).fill("navegador");
@@ -746,10 +756,17 @@ describe("toolbox integration · navegador", () => {
     await page.locator("#toolbox-favorites").waitFor({ state: "visible" });
     assert.equal(await page.locator('#toolbox-favorites-grid [data-tool-id="jwt-inspector"]').count(), 1);
 
+    // BUG-31 do relatório de 04/09/2026: o card da categoria de origem
+    // continuava visível ao mesmo tempo — 14 cards na tela para "13 de 13
+    // ferramentas". Só uma das duas cópias pode estar visível.
+    assert.equal(await page.locator('.tool-category:not(.tool-category-favorites) [data-tool-id="jwt-inspector"]').isVisible(), false);
+    assert.equal(await page.locator("[data-tool-card]:not([hidden])").count(), QA_TOOLS.length);
+
     // A preferência é do navegador: precisa sobreviver a um recarregamento.
     await page.reload({ waitUntil: "networkidle" });
     await page.locator("#toolbox-favorites").waitFor({ state: "visible" });
     assert.equal(await page.locator('[data-tool-favorite="jwt-inspector"]').first().getAttribute("aria-pressed"), "true");
+    assert.equal(await page.locator('.tool-category:not(.tool-category-favorites) [data-tool-id="jwt-inspector"]').isVisible(), false);
 
     // E o clone não pode inflar a contagem da busca.
     assert.match((await page.locator("#toolbox-search-count").textContent()) ?? "", new RegExp(`de ${QA_TOOLS.length} ferramentas`));

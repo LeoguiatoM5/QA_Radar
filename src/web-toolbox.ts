@@ -95,7 +95,7 @@ function renderFavoritesSection(): string {
 
 export function renderToolboxHome(): string {
   return `${renderWorkspaceStart("toolbox", "QA Toolbox")}
-  ${renderToolHeader("QA Toolbox", "Daily tools for Software Quality", "Ferramentas rápidas para QA, automação, APIs e design de testes. Sem configuração e, quase sempre, sem sair do seu navegador.")}
+  ${renderToolHeader("QA Toolbox", "Ferramentas do dia a dia para qualidade de software", "Ferramentas rápidas para QA, automação, APIs e design de testes. Sem configuração e, quase sempre, sem sair do seu navegador.")}
   <section class="toolbox-layout">
     <div class="toolbox-search">
       <label for="toolbox-search-input">Buscar ferramenta</label>
@@ -304,12 +304,22 @@ function renderApiHealth(tool: QaToolDefinition): string {
   );
 }
 
+// BUG-32 do relatório de 04/09/2026: as 4 linhas usavam o mesmo placeholder
+// ("navegador" / "chromium, firefox, webkit"), sugerindo que se repetisse o
+// mesmo parâmetro em todas. Um exemplo diferente por linha deixa claro que
+// cada uma é uma dimensão própria da combinação.
+const PAIRWISE_PLACEHOLDERS: ReadonlyArray<{ name: string; values: string }> = [
+  { name: "navegador", values: "chromium, firefox, webkit" },
+  { name: "sistema operacional", values: "Windows, macOS, Linux" },
+  { name: "resolução", values: "1366x768, 1920x1080, 375x667" },
+  { name: "idioma", values: "pt-BR, en-US, es-ES" },
+];
+
 function renderPairwise(tool: QaToolDefinition): string {
-  const linhas = Array.from(
-    { length: 4 },
-    (_unused, index) => `<div class="pairwise-row">
-      <div class="tool-field"><label for="pairwise-name-${index}">Parâmetro</label><input id="pairwise-name-${index}" class="pairwise-name" maxlength="40" placeholder="navegador"></div>
-      <div class="tool-field"><label for="pairwise-values-${index}">Valores</label><input id="pairwise-values-${index}" class="pairwise-values" placeholder="chromium, firefox, webkit"></div>
+  const linhas = PAIRWISE_PLACEHOLDERS.map(
+    (placeholder, index) => `<div class="pairwise-row">
+      <div class="tool-field"><label for="pairwise-name-${index}">Parâmetro</label><input id="pairwise-name-${index}" class="pairwise-name" maxlength="40" placeholder="${placeholder.name}"></div>
+      <div class="tool-field"><label for="pairwise-values-${index}">Valores</label><input id="pairwise-values-${index}" class="pairwise-values" placeholder="${placeholder.values}"></div>
       <button type="button" class="secondary pairwise-remove" aria-label="Remover parâmetro">×</button>
     </div>`,
   ).join("");

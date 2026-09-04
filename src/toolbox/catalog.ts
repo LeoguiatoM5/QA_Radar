@@ -50,10 +50,10 @@ export interface ToolCategoryDefinition {
 /** Ordem em que as categorias aparecem na página inicial do Toolbox. */
 export const TOOL_CATEGORIES: readonly ToolCategoryDefinition[] = [
   { id: "api-json", label: "API & JSON", description: "Inspecionar respostas, payloads e tokens." },
-  { id: "test-data", label: "Test Data", description: "Massa de teste sintética, válida e inválida." },
-  { id: "automation", label: "Automation", description: "Transformar o que você já tem em código de teste." },
-  { id: "test-design", label: "Test Design", description: "Derivar casos de teste a partir das regras." },
-  { id: "utilities", label: "Utilities", description: "Apoio do dia a dia de quem testa." },
+  { id: "test-data", label: "Massa de teste", description: "Massa de teste sintética, válida e inválida." },
+  { id: "automation", label: "Automação", description: "Transformar o que você já tem em código de teste." },
+  { id: "test-design", label: "Design de testes", description: "Derivar casos de teste a partir das regras." },
+  { id: "utilities", label: "Utilitários", description: "Apoio do dia a dia de quem testa." },
 ];
 
 export const QA_TOOLS: readonly QaToolDefinition[] = [

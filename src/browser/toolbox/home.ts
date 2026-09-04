@@ -79,9 +79,13 @@ function apply(query: string): void {
     slot.hidden = !matches.has(slot.dataset.toolSlot ?? "");
   }
   for (const card of todos) {
-    const hit = matches.has(card.dataset.toolId ?? "");
-    card.hidden = !hit;
-    // Um card clonado na faixa de favoritas não conta duas vezes no total.
+    const id = card.dataset.toolId ?? "";
+    const hit = matches.has(id);
+    const isFavoriteInOriginalCategory = favorites.includes(id) && !card.closest(".tool-category-favorites");
+    // Uma ferramenta favoritada já aparece na faixa de Favoritas; o card na
+    // categoria de origem fica oculto, senão ela existe duas vezes na tela ao
+    // mesmo tempo — o card duplicado que fazia "13 de 13" mostrar 14 cards.
+    card.hidden = !hit || isFavoriteInOriginalCategory;
     if (hit && !card.closest(".tool-category-favorites")) visible += 1;
   }
   for (const section of sections) {

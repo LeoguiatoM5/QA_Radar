@@ -148,7 +148,9 @@ describe("toolbox · páginas", () => {
 
     assert.match(html, /^<!doctype html>/);
     assert.match(html, /id="toolbox-search-input"/);
-    assert.match(html, /Daily tools for Software Quality/);
+    // BUG-22 do relatório de 04/09/2026: título e grupos do Toolbox em
+    // inglês, com descrições em português na mesma tela.
+    assert.match(html, /Ferramentas do dia a dia para qualidade de software/);
     for (const tool of QA_TOOLS) assert.ok(html.includes(`data-tool-id="${tool.id}"`), `card ausente: ${tool.id}`);
     for (const category of TOOL_CATEGORIES) assert.ok(html.includes(escapeHtml(category.label)), `categoria ausente: ${category.label}`);
   });
