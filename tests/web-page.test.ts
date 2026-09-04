@@ -248,6 +248,10 @@ describe("dashboard components", () => {
     assert.match(html, /id="settings-password-form"/);
     assert.match(html, /id="settings-alerts-form"/);
     assert.match(html, /id="settings-scan-form"/);
+    // BUG-26 do relatório de 04/09/2026: a dica dizia "Pelo menos 10
+    // caracteres", mas o campo não tinha `minlength` — só o servidor
+    // validava, então quem digitasse menos só descobria depois de enviar.
+    assert.match(html, /id="settings-new-password" type="password" autocomplete="new-password" required minlength="10" maxlength="200"/);
   });
 
   it("oferece Produção, Homologação e Local no seletor de ambiente", () => {
@@ -356,7 +360,12 @@ describe("dashboard components", () => {
     assert.match(html, /\.progress-bar\{/);
     assert.match(html, /<script type="module" src="\/assets\/js\/scanner\.js"><\/script>/);
     assert.doesNotMatch(html, /src="\/assets\/js\/(journey|api-tests)\.js"/);
-    assert.match(html, /Histórico desabilitado neste servidor/);
+    // BUG-24 do relatório de 04/09/2026: "Histórico desabilitado neste
+    // servidor" (do campo Projeto) convivia, sem explicação, com "guarde
+    // esta análise no histórico dela" (do seletor Aplicação) — como se a
+    // tela se contradissesse. São dois sistemas de histórico diferentes; o
+    // aviso agora diz qual dos dois está desligado.
+    assert.match(html, /Histórico por projeto desabilitado neste servidor — para guardar a análise no histórico da sua conta, use Aplicação, acima\./);
     assert.doesNotMatch(html, /id="history-button"/);
   });
 

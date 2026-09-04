@@ -385,6 +385,43 @@ describe("estado da tela depois de um erro", () => {
   });
 });
 
+describe("avatar da conta", () => {
+  // BUG-25 do relatório de 04/09/2026: o avatar vem de avatars.githubusercontent.com
+  // (fora do controle do QA Radar) e, quando a imagem falha — 503, extensão
+  // bloqueando, etc. — ficava um ícone de imagem quebrada com alt="" ao lado
+  // do nome. Simula a falha interceptando /api/v1/auth/me, sem depender de
+  // OAuth real nem de uma URL externa genuinamente fora do ar.
+  it("mostra a inicial do nome quando o avatar externo falha ao carregar", async () => {
+    const app = createQaRadarServer();
+    const appUrl = await listen(app);
+    let browser: Browser | undefined;
+    try {
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.route(`${appUrl}/api/v1/auth/me`, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            authenticated: true,
+            loginAvailable: true,
+            user: { name: "Ana Beatriz", avatarUrl: "https://avatar-que-nao-existe.invalid/foto.png", emailVerified: true },
+          }),
+        }),
+      );
+      await page.goto(appUrl);
+      const avatar = page.locator("#account-avatar");
+      const fallback = page.locator("#account-avatar-fallback");
+      await fallback.waitFor({ state: "visible", timeout: 10_000 });
+      assert.equal(await avatar.isHidden(), true);
+      assert.equal(await fallback.textContent(), "A");
+    } finally {
+      await browser?.close();
+      await close(app);
+    }
+  });
+});
+
 describe("Central de qualidade · tendência", () => {
   // BUG-21 do relatório de 04/09/2026: com poucos dados, o gráfico virava uma
   // única barra colada na borda com ~96% de área vazia — sem comunicar

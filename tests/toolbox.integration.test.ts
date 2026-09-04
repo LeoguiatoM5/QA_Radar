@@ -588,6 +588,10 @@ describe("toolbox integration · navegador", () => {
 
     assert.match((await page.locator("#timestamp-summary").textContent()) ?? "", /EPOCH EM SEGUNDOS/);
     assert.match((await page.locator("#timestamp-facts").textContent()) ?? "", /2026-09-01T15:00:00\.000Z/);
+    // BUG-27: "Dia da semana" é calculado no fuso local, não em UTC — o
+    // rótulo precisa dizer isso, já que a mesma tela mostra UTC e local por
+    // extenso lado a lado, e perto da meia-noite eles caem em dias diferentes.
+    assert.match((await page.locator("#timestamp-facts").textContent()) ?? "", /Dia da semana \(fuso local\)/);
 
     await page.locator("#timestamp-input").fill("2026-09-01T15:00:00");
     await page.locator("#timestamp-run").click();

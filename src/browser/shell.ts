@@ -97,14 +97,26 @@ async function refreshAccount(): Promise<void> {
       if (signin) signin.hidden = true;
       if (user) user.hidden = false;
       const avatar = document.querySelector<HTMLImageElement>("#account-avatar");
+      const avatarFallback = document.querySelector<HTMLElement>("#account-avatar-fallback");
       const login = document.querySelector<HTMLElement>("#account-login");
-      if (login) login.textContent = me.user.name || (me.user.login ?? "");
+      const displayName = me.user.name || (me.user.login ?? "");
+      if (login) login.textContent = displayName;
+      if (avatarFallback) avatarFallback.textContent = displayName.trim().charAt(0).toUpperCase();
+      // O avatar vem de um provedor externo (GitHub) que pode responder 503
+      // ou estar bloqueado por extensão do navegador — sem isto, a imagem
+      // quebrada ficava ao lado do nome com alt="" (BUG-25).
       if (avatar) {
         if (me.user.avatarUrl) {
+          avatar.onerror = () => {
+            avatar.hidden = true;
+            if (avatarFallback) avatarFallback.hidden = false;
+          };
           avatar.src = me.user.avatarUrl;
           avatar.hidden = false;
+          if (avatarFallback) avatarFallback.hidden = true;
         } else {
           avatar.hidden = true;
+          if (avatarFallback) avatarFallback.hidden = false;
         }
       }
       // Quem entrou não precisa mais do aviso de login na Jornada.

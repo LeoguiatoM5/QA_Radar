@@ -26,7 +26,12 @@ function run(): void {
       ["ISO 8601 (UTC)", breakdown.iso],
       ["UTC por extenso", breakdown.utc],
       [`Fuso local (${breakdown.timeZone})`, breakdown.local],
-      ["Dia da semana", breakdown.weekday],
+      // BUG-27 do relatório de 04/09/2026: o dia da semana é calculado no
+      // fuso local (mesma fonte de `Fuso local`, na linha de cima), mas o
+      // rótulo não dizia — perto da meia-noite, UTC e local caem em dias
+      // diferentes, e a tela já mostra os dois horários por extenso lado a
+      // lado sem dizer qual deles este dia da semana acompanha.
+      ["Dia da semana (fuso local)", breakdown.weekday],
       ["Relativo a agora", breakdown.relative],
     ];
     summary.innerHTML = `<span class="tool-status tool-status-ok">${TIMESTAMP_SOURCE_LABELS[leitura.source].toUpperCase()}</span><span class="tool-summary-text">${esc(breakdown.relative)}</span>`;

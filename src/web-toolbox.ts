@@ -283,7 +283,7 @@ function renderApiHealth(tool: QaToolDefinition): string {
   return renderToolShell(
     tool,
     `<form class="tool-panel panel" id="health-form" novalidate>
-    <p class="tool-note tool-note-server">Esta é a única ferramenta do Toolbox que usa o servidor: o navegador não consegue medir um endpoint de terceiro por causa do CORS. A chamada sai do QA Radar, só com GET ou HEAD, sem cabeçalhos personalizados e com a mesma política de rede das análises — endereços locais e redes privadas são recusados.</p>
+    <p class="tool-note tool-note-server">Esta ferramenta usa o servidor: o navegador não consegue medir um endpoint de terceiro por causa do CORS. A chamada sai do QA Radar, só com GET ou HEAD, sem cabeçalhos personalizados e com a mesma política de rede das análises — endereços locais e redes privadas são recusados.</p>
     <div class="health-rows" id="health-rows"></div>
     <div class="tool-actions tool-actions-inline"><button class="secondary" id="health-add" type="button">+ Endpoint</button><span class="hint">Até ${MAX_HEALTH_CHECKS} endpoints por verificação.</span></div>
     <div class="tool-grid-fields">

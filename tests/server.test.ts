@@ -81,7 +81,7 @@ describe("web server", () => {
     assert.match(html, /TTFB/);
     assert.match(html, /Cancelar/);
     assert.match(html, /progress-bar/);
-    assert.match(html, /Histórico desabilitado neste servidor/);
+    assert.match(html, /Histórico por projeto desabilitado neste servidor/);
     assert.doesNotMatch(html, /id="journey-form"/);
   });
 
