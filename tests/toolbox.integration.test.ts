@@ -720,6 +720,16 @@ describe("toolbox integration · navegador", () => {
     assert.equal(comProxy.includes("45.227.249.203"), false, "o IP completo não pode aparecer");
     assert.match(comProxy, /45\.227\.x\.x, 172\.68\.x\.x/, "cada endereço da cadeia é reduzido ao prefixo da rede");
 
+    // BUG-16 do relatório de 04/09/2026: "Limpar chamadas" apagava tudo sem
+    // confirmação, numa caixa cujo conteúdo não existe em banco — perdido é
+    // perdido. Cancelar o diálogo precisa deixar as chamadas como estavam...
+    page.once("dialog", (dialog) => void dialog.dismiss());
+    await page.locator("#webhook-clear").click();
+    await chamadaDe("/proxy").waitFor({ state: "visible" });
+
+    // ...e aceitar é o equivalente, no teste, a um clique deliberado no
+    // diálogo que passou a existir.
+    page.once("dialog", (dialog) => void dialog.accept());
     await page.locator("#webhook-clear").click();
     await page.locator("#webhook-empty").waitFor({ state: "visible" });
   });

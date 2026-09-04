@@ -120,6 +120,10 @@ on("webhook-auto", "click", (botao) => {
 on("webhook-clear", "click", () => {
   void (async () => {
     if (!binId) return;
+    // A caixa não grava em banco (ver webhook-bin-store.ts): uma vez limpas,
+    // as chamadas não voltam nem com um reinício. Confirmar aqui é a única
+    // rede de segurança contra o clique ao lado de "Atualizar".
+    if (chamadas.length && !confirm(`Apagar ${chamadas.length} chamada(s) capturada(s) nesta caixa? A ação não tem volta.`)) return;
     await fetch(`/api/v1/toolbox/webhooks/${binId}/clear`, { method: "POST" }).catch(() => {});
     await atualizar();
   })();
