@@ -210,7 +210,10 @@ function renderRun(item: Activity): string {
     `<span class="run-score ${Number.isFinite(accessibility) ? "has-value" : ""}">${dashboardScore(accessibility, "acess.")}</span>` +
     `<time datetime="${createdAt.toISOString()}" title="${dashboardTime(item.createdAt)}">${createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time>` +
     `<span class="run-duration">${dashboardDuration(item.durationMs)}</span>` +
-    `<a class="run-play" href="${href}" aria-label="Executar novamente ${title}">▷</a>` +
+    // Só "Abrir": um botão "Executar novamente" ao lado, com o mesmo href,
+    // prometia reexecução de um clique só e entregava a mesma navegação —
+    // e para um Teste de API isso incluiria repetir um POST ou DELETE sem
+    // revisão, o oposto do que "Requisição recuperada. Revise..." promete.
     `<a class="run-action" href="${href}" aria-label="Abrir ${title}">›</a></div>`
   );
 }
