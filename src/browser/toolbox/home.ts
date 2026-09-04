@@ -34,7 +34,6 @@ function writeFavorites(ids: readonly string[]): void {
 
 let favorites = readFavorites();
 
-const slots = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>("[data-tool-slot]")];
 const cards = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>("[data-tool-card]")];
 
 function paintFavorites(): void {
@@ -75,9 +74,6 @@ function apply(query: string): void {
   const matches = new Set(searchTools(query, QA_TOOLS).map((tool) => tool.id));
   const todos = cards();
   let visible = 0;
-  for (const slot of slots()) {
-    slot.hidden = !matches.has(slot.dataset.toolSlot ?? "");
-  }
   for (const card of todos) {
     const id = card.dataset.toolId ?? "";
     const hit = matches.has(id);
@@ -85,7 +81,13 @@ function apply(query: string): void {
     // Uma ferramenta favoritada já aparece na faixa de Favoritas; o card na
     // categoria de origem fica oculto, senão ela existe duas vezes na tela ao
     // mesmo tempo — o card duplicado que fazia "13 de 13" mostrar 14 cards.
-    card.hidden = !hit || isFavoriteInOriginalCategory;
+    const hidden = !hit || isFavoriteInOriginalCategory;
+    card.hidden = hidden;
+    // O botão de favoritar é irmão do card, não filho — os dois vivem dentro
+    // do slot (".tool-card-slot", o item de verdade da grade). Esconder só o
+    // card deixava a estrela sozinha, flutuando num espaço vazio na grade.
+    const slot = card.closest<HTMLElement>("[data-tool-slot]");
+    if (slot) slot.hidden = hidden;
     if (hit && !card.closest(".tool-category-favorites")) visible += 1;
   }
   for (const section of sections) {
