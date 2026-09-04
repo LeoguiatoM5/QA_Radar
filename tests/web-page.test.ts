@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderDashboard, renderResultsPanel, renderScannerForm } from "../src/web-components.js";
-import { createAlertsPage, createApiTestsPage, createApplicationsPage, createAuthPage, createDocsPage, createHomePage, createJourneyPage, createSettingsPage, createWebPage } from "../src/web-page.js";
+import {
+  createAlertsPage,
+  createApiTestsPage,
+  createApplicationsPage,
+  createAuthPage,
+  createDocsPage,
+  createHomePage,
+  createJourneyPage,
+  createQualityPage,
+  createSettingsPage,
+  createWebPage,
+} from "../src/web-page.js";
 
 /**
  * Contraste WCAG (fórmula em https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio).
@@ -390,5 +401,20 @@ describe("dashboard components", () => {
       /id="scan-form"/,
     );
     assert.match(renderResultsPanel(), /id="results"/);
+  });
+});
+
+describe("central de qualidade", () => {
+  // BUG-17 do relatório de 04/09/2026: os KPIs (Execuções, Taxa de sucesso,
+  // Sem falha, Com falha) usam a mesma classe `.reports-tile` dos cards de
+  // Relatórios, mas essa página nunca incluía REPORTS_STYLES no <style> —
+  // então a classe não tinha regra nenhuma, e rótulo e valor colavam num
+  // texto só, sem quebra de linha nem cara de card.
+  it("inclui a folha de estilo que dá aparência de card aos KPIs (.reports-tile)", () => {
+    const html = createQualityPage();
+    assert.match(html, /\.reports-tile\{[^}]*background:/);
+    assert.match(html, /\.reports-tile small\{[^}]*display:block/);
+    assert.match(html, /\.reports-tile strong\{[^}]*display:block/);
+    assert.match(html, /class="reports-tile quality-tile"/);
   });
 });

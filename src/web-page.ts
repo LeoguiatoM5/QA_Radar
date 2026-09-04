@@ -687,7 +687,7 @@ const QUALITY_STYLES = `
 export function createQualityPage(): string {
   return `<!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - resumo de qualidade da conta"><title>QA Radar · Central de qualidade</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${QUALITY_STYLES}</style></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QA Radar - resumo de qualidade da conta"><title>QA Radar · Central de qualidade</title><style>${WEB_STYLES}${NAV_RESPONSIVE_STYLES}${REPORTS_STYLES}${QUALITY_STYLES}</style></head>
 <body>${renderQualityPage()}<script type="module" src="/assets/js/shell.js"></script><script type="module" src="/assets/js/quality.js"></script></body>
 </html>`;
 }
